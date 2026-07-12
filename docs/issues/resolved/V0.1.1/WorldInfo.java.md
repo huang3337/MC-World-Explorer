@@ -1,9 +1,10 @@
 # 代码审查：WorldInfo.java
 
-- **审查日期**：2026-06-19
-- **审查工具**：Claude Code
+- **审查日期**：2026-07-11
+- **审查工具**：Codex
 - **审查范围**：世界信息数据传输对象（DTO），存储从 level.dat 解析出的所有世界元数据
 - **问题总数**：5 个（🔴 0 / 🟠 0 / 🟡 3 / 🟢 2）
+
 
 ---
 
@@ -13,7 +14,7 @@
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/world/WorldInfo.java`
 - **行号**：第 12 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 游戏模式用裸 `int` 存储，含义靠调用方用 `switch` 硬编码判断，没有类型安全保障。
@@ -76,6 +77,7 @@ gameModeLabel.setText(info.getGameType().getDisplayName());
 - 当前不影响功能，但影响代码可维护性
 - 后续版本如果多处需要判断游戏模式，问题会放大
 
+
 ---
 
 ### ISSUE-WORLDINFO-002：所有 setter 无输入验证
@@ -84,7 +86,7 @@ gameModeLabel.setText(info.getGameType().getDisplayName());
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/world/WorldInfo.java`
 - **行号**：第 26-67 行（所有 setter）
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 所有 setter 方法直接赋值，不检查输入是否合法，可能导致对象处于无效状态。
@@ -118,6 +120,7 @@ public void setGameType(int gameType) {
 - 当前数据来源可信，实际触发概率低
 - 但如果未来支持用户手动编辑存档信息，问题会暴露
 
+
 ---
 
 ### ISSUE-WORLDINFO-003：toString() 遗漏关键字段
@@ -126,7 +129,7 @@ public void setGameType(int gameType) {
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/world/WorldInfo.java`
 - **行号**：第 69-77 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 `toString()` 方法只输出 4 个字段，遗漏了 `folderPath`、`lastPlayed`、`randomSeed`、玩家坐标等关键信息。
@@ -169,6 +172,7 @@ public String toString() {
 **影响范围**：
 - 仅影响调试体验，不影响功能
 
+
 ---
 
 ### ISSUE-WORLDINFO-004：多个变量声明在同一行
@@ -177,7 +181,7 @@ public String toString() {
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/world/WorldInfo.java`
 - **行号**：第 17-18 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 多个字段在同一行声明，降低代码可读性，增加 git diff 时的噪音。
@@ -207,6 +211,7 @@ private double playerZ;
 **影响范围**：
 - 仅影响代码风格和可读性，不影响功能
 
+
 ---
 
 ### ISSUE-WORLDINFO-005：null 值从 LevelDatReader 经 WorldScanner 传播到 MainController 【连带问题】
@@ -215,7 +220,7 @@ private double playerZ;
 - **类别**：模块耦合
 - **文件**：`WorldInfo.java` ← `LevelDatReader.java` → `WorldScanner.java` → `MainController.java`
 - **行号**：第 31 行（WorldInfo）/ 第 55 行（LevelDatReader）/ 第 39 行（WorldScanner）/ 第 125 行（MainController）
-- **状态**：待修复
+- **状态**：已修复
 - **连带方向**：LevelDatReader 设置 → WorldInfo 存储 → WorldScanner 传递 → MainController 消费
 
 **问题描述**：

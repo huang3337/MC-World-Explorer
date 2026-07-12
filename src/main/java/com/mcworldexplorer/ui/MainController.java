@@ -21,9 +21,15 @@ import javafx.event.ActionEvent;
 import javafx.stage.DirectoryChooser;
 
 public class MainController {
+    private static final String UNKNOWN = "Unknown";
+    private static final String NOT_AVAILABLE = "-";
+    private static final String NO_SELECTION = "Select a World";
+    private static final String PARSE_FAILED = "解析失败";
+    private static final String CHOOSE_FOLDER_TITLE = "Select Minecraft Saves Folder";
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     @FXML
-    private TreeView<Object> worldTreeView;
+    private TreeView<WorldTreeNode> worldTreeView;
 
     @FXML
     private Label worldNameLabel;
@@ -53,8 +59,8 @@ public class MainController {
         // Listen for selection changes
         worldTreeView.getSelectionModel().selectedItemProperty().addListener(
                 (observable, oldValue, newValue) -> {
-                    if (newValue != null && newValue.getValue() instanceof WorldInfo) {
-                        showWorldDetails((WorldInfo) newValue.getValue());
+                    if (newValue != null && newValue.getValue().getWorldInfo() != null) {
+                        showWorldDetails(newValue.getValue().getWorldInfo());
                     } else {
                         clearDetails();
                     }
@@ -80,13 +86,13 @@ public class MainController {
             groupedWorlds = WorldScanner.scanGameRoot(rootPath);
         }
 
-        TreeItem<Object> rootItem = new TreeItem<>("Root");
+        TreeItem<WorldTreeNode> rootItem = new TreeItem<>(WorldTreeNode.group("Root"));
         rootItem.setExpanded(true);
         for (Map.Entry<String, List<WorldInfo>> entry : groupedWorlds.entrySet()) {
-            TreeItem<Object> groupItem = new TreeItem<>(entry.getKey());
+            TreeItem<WorldTreeNode> groupItem = new TreeItem<>(WorldTreeNode.group(entry.getKey()));
             groupItem.setExpanded(true);
             for (WorldInfo info : entry.getValue()) {
-                groupItem.getChildren().add(new TreeItem<>(info));
+                groupItem.getChildren().add(new TreeItem<>(WorldTreeNode.world(info)));
             }
             rootItem.getChildren().add(groupItem);
         }
@@ -98,7 +104,7 @@ public class MainController {
     @FXML
     public void handleChooseFolder(ActionEvent event) {
         DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Select Minecraft saves Folder");
+        chooser.setTitle(CHOOSE_FOLDER_TITLE);
         
         Preferences prefs = Preferences.userNodeForPackage(MainController.class);
         String savedPathStr = prefs.get("custom_saves_path", null);
@@ -122,25 +128,18 @@ public class MainController {
             return;
         }
 
-        worldNameLabel.setText(info.getLevelName() != null ? info.getLevelName() : info.getFolderPath().getFileName().toString());
-        versionLabel.setText(info.getVersionName() != null ? info.getVersionName() : "Unknown");
+        worldNameLabel.setText(info.getLevelName());
+        versionLabel.setText(info.getVersionName());
         
-        if ("解析失败".equals(info.getVersionName())) {
-            gameModeLabel.setText("解析失败");
-            lastPlayedLabel.setText("解析失败");
-            seedLabel.setText("解析失败");
-            playerPosLabel.setText("解析失败");
+        if (!info.isParsed()) {
+            gameModeLabel.setText(PARSE_FAILED);
+            lastPlayedLabel.setText(PARSE_FAILED);
+            seedLabel.setText(PARSE_FAILED);
+            playerPosLabel.setText(PARSE_FAILED);
             return;
         }
 
-        // Map GameType
-        String modeStr = "Unknown";
-        switch (info.getGameType()) {
-            case 0: modeStr = "Survival"; break;
-            case 1: modeStr = "Creative"; break;
-            case 2: modeStr = "Adventure"; break;
-            case 3: modeStr = "Spectator"; break;
-        }
+        String modeStr = info.getGameType().getDisplayName();
         if (info.isHardcore()) {
             modeStr += " (Hardcore)";
         }
@@ -148,24 +147,27 @@ public class MainController {
 
         // Format Date
         if (info.getLastPlayed() > 0) {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            lastPlayedLabel.setText(sdf.format(new Date(info.getLastPlayed())));
+            lastPlayedLabel.setText(DATE_FORMAT.format(new Date(info.getLastPlayed())));
         } else {
-            lastPlayedLabel.setText("Unknown");
+            lastPlayedLabel.setText(UNKNOWN);
         }
 
-        seedLabel.setText(info.getRandomSeed() != 0 ? String.valueOf(info.getRandomSeed()) : "Unknown");
+        seedLabel.setText(info.isSeedAvailable() ? String.valueOf(info.getRandomSeed()) : UNKNOWN);
 
-        String pos = String.format("%.1f, %.1f, %.1f", info.getPlayerX(), info.getPlayerY(), info.getPlayerZ());
-        playerPosLabel.setText(pos);
+        if (info.isPlayerPositionAvailable()) {
+            String pos = String.format("%.1f, %.1f, %.1f", info.getPlayerX(), info.getPlayerY(), info.getPlayerZ());
+            playerPosLabel.setText(pos);
+        } else {
+            playerPosLabel.setText(UNKNOWN);
+        }
     }
 
     private void clearDetails() {
-        worldNameLabel.setText("Select a World");
-        versionLabel.setText("-");
-        gameModeLabel.setText("-");
-        lastPlayedLabel.setText("-");
-        seedLabel.setText("-");
-        playerPosLabel.setText("-");
+        worldNameLabel.setText(NO_SELECTION);
+        versionLabel.setText(NOT_AVAILABLE);
+        gameModeLabel.setText(NOT_AVAILABLE);
+        lastPlayedLabel.setText(NOT_AVAILABLE);
+        seedLabel.setText(NOT_AVAILABLE);
+        playerPosLabel.setText(NOT_AVAILABLE);
     }
 }

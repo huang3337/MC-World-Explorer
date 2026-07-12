@@ -1,0 +1,29 @@
+.toolbar {
+    -fx-background-color: #f4f4f4;
+    -fx-border-color: #dddddd;
+    -fx-border-width: 0 0 1 0;
+}
+
+.world-name {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+}
+
+.detail-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: #555555;
+}
+
+.detail-value {
+    -fx-font-size: 14px;
+}
+
+.tree-cell-group {
+    -fx-font-weight: bold;
+    -fx-padding: 5 0 5 0;
+}
+
+.tree-cell-world {
+    -fx-font-weight: normal;
+    -fx-padding: 2 0 2 0;
+}

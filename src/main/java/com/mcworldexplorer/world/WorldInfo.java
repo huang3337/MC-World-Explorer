@@ -3,22 +3,34 @@ package com.mcworldexplorer.world;
 import java.nio.file.Path;
 
 public class WorldInfo {
-    private Path folderPath;
+    private final Path folderPath;
     private Path iconPath;
-    
     private String levelName;
     private String versionName;
-    private int gameType;
+    private GameType gameType = GameType.SURVIVAL;
     private boolean hardcore;
     private long lastPlayed;
     private long gameTime;
-    
+    private boolean parsed;
     private long randomSeed;
-    private int spawnX, spawnY, spawnZ;
-    private double playerX, playerY, playerZ;
-    
+    private boolean seedAvailable;
+    private int spawnX;
+    private int spawnY;
+    private int spawnZ;
+    private double playerX;
+    private double playerY;
+    private double playerZ;
+    private boolean playerPositionAvailable;
+
     public WorldInfo(Path folderPath) {
+        if (folderPath == null) {
+            throw new IllegalArgumentException("folderPath must not be null");
+        }
         this.folderPath = folderPath;
+        this.levelName = folderPath.getFileName() != null
+                ? folderPath.getFileName().toString()
+                : folderPath.toString();
+        this.versionName = "Unknown";
     }
 
     // Getters and Setters
@@ -28,25 +40,40 @@ public class WorldInfo {
     public void setIconPath(Path iconPath) { this.iconPath = iconPath; }
 
     public String getLevelName() { return levelName; }
-    public void setLevelName(String levelName) { this.levelName = levelName; }
+    public void setLevelName(String levelName) {
+        if (levelName != null && !levelName.isBlank()) {
+            this.levelName = levelName;
+        }
+    }
 
     public String getVersionName() { return versionName; }
-    public void setVersionName(String versionName) { this.versionName = versionName; }
+    public void setVersionName(String versionName) {
+        this.versionName = versionName == null || versionName.isBlank() ? "Unknown" : versionName;
+    }
 
-    public int getGameType() { return gameType; }
-    public void setGameType(int gameType) { this.gameType = gameType; }
+    public GameType getGameType() { return gameType; }
+    public void setGameType(GameType gameType) {
+        this.gameType = gameType == null ? GameType.SURVIVAL : gameType;
+    }
 
     public boolean isHardcore() { return hardcore; }
     public void setHardcore(boolean hardcore) { this.hardcore = hardcore; }
 
     public long getLastPlayed() { return lastPlayed; }
-    public void setLastPlayed(long lastPlayed) { this.lastPlayed = lastPlayed; }
+    public void setLastPlayed(long lastPlayed) { this.lastPlayed = Math.max(0, lastPlayed); }
 
     public long getGameTime() { return gameTime; }
-    public void setGameTime(long gameTime) { this.gameTime = gameTime; }
+    public void setGameTime(long gameTime) { this.gameTime = Math.max(0, gameTime); }
+
+    public boolean isParsed() { return parsed; }
+    public void setParsed(boolean parsed) { this.parsed = parsed; }
 
     public long getRandomSeed() { return randomSeed; }
-    public void setRandomSeed(long randomSeed) { this.randomSeed = randomSeed; }
+    public void setRandomSeed(long randomSeed) {
+        this.randomSeed = randomSeed;
+        this.seedAvailable = true;
+    }
+    public boolean isSeedAvailable() { return seedAvailable; }
 
     public int getSpawnX() { return spawnX; }
     public void setSpawnX(int spawnX) { this.spawnX = spawnX; }
@@ -66,13 +93,27 @@ public class WorldInfo {
     public double getPlayerZ() { return playerZ; }
     public void setPlayerZ(double playerZ) { this.playerZ = playerZ; }
 
+    public void setPlayerPosition(double playerX, double playerY, double playerZ) {
+        this.playerX = playerX;
+        this.playerY = playerY;
+        this.playerZ = playerZ;
+        this.playerPositionAvailable = true;
+    }
+
+    public boolean isPlayerPositionAvailable() { return playerPositionAvailable; }
+
     @Override
     public String toString() {
         return "WorldInfo{" +
-                "levelName='" + levelName + '\'' +
+                "folderPath=" + folderPath +
+                ", levelName='" + levelName + '\'' +
                 ", versionName='" + versionName + '\'' +
                 ", gameType=" + gameType +
                 ", hardcore=" + hardcore +
+                ", parsed=" + parsed +
+                ", lastPlayed=" + lastPlayed +
+                ", randomSeed=" + randomSeed +
+                ", playerPos=(" + playerX + ", " + playerY + ", " + playerZ + ")" +
                 '}';
     }
 }

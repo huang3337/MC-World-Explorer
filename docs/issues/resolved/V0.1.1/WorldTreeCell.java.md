@@ -1,9 +1,10 @@
 # 代码审查：WorldTreeCell.java
 
-- **审查日期**：2026-06-19
-- **审查工具**：Claude Code
+- **审查日期**：2026-07-11
+- **审查工具**：Codex
 - **审查范围**：TreeView 的自定义单元格，用于显示分组名称和世界图标+名称
 - **问题总数**：4 个（🔴 0 / 🟠 0 / 🟡 2 / 🟢 2）
+
 
 ---
 
@@ -13,7 +14,7 @@
 - **类别**：错误处理
 - **文件**：`src/main/java/com/mcworldexplorer/ui/WorldTreeCell.java`
 - **行号**：第 39-41 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 图片加载失败时，异常被 `catch (Exception e)` 捕获后静默丢弃，不记录任何信息。
@@ -51,6 +52,7 @@ try {
 - 打包后无法追踪图标加载失败的原因
 - 与 ISSUE-APP-001 同源
 
+
 ---
 
 ### ISSUE-TREECELL-002：图标路径每次都重新解析，未缓存
@@ -59,7 +61,7 @@ try {
 - **类别**：性能
 - **文件**：`src/main/java/com/mcworldexplorer/ui/WorldTreeCell.java`
 - **行号**：第 31-33 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 每次 `updateItem()` 被调用时，都重新解析图标路径并加载图片，没有缓存机制。
@@ -109,6 +111,7 @@ public Image getIcon() { ... }
 - 存档数量多时，滚动列表可能出现卡顿
 - 严重程度不高，但优化成本低
 
+
 ---
 
 ### ISSUE-TREECELL-003：CSS 样式硬编码在 Java 代码中
@@ -117,7 +120,7 @@ public Image getIcon() { ... }
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/ui/WorldTreeCell.java`
 - **行号**：第 23 行、第 29 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 CSS 样式直接写在 Java 代码中，未使用外部 CSS 文件。
@@ -150,6 +153,7 @@ getStyleClass().add("tree-cell-group");
 - 仅影响代码可维护性，不影响功能
 - MVP 阶段问题不大
 
+
 ---
 
 ### ISSUE-TREECELL-004：instanceof 类型检查 【连带问题】
@@ -158,7 +162,7 @@ getStyleClass().add("tree-cell-group");
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/ui/WorldTreeCell.java` ← → `MainController.java`
 - **行号**：第 20 行、第 25 行
-- **状态**：待修复
+- **状态**：已修复
 - **连带来源**：ISSUE-CONTROLLER-001
 
 **问题描述**：

@@ -1,16 +1,27 @@
 package com.mcworldexplorer.nbt;
 
 import com.mcworldexplorer.world.WorldInfo;
+import com.mcworldexplorer.world.GameType;
 import net.kyori.adventure.nbt.BinaryTagIO;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.kyori.adventure.nbt.ListBinaryTag;
 import net.kyori.adventure.nbt.BinaryTagTypes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class LevelDatReader {
+    private static final Logger LOGGER = LoggerFactory.getLogger(LevelDatReader.class);
+    static final long MAX_LEVEL_DAT_BYTES = 16L * 1024 * 1024;
+    private static final BinaryTagIO.Reader LEVEL_DAT_READER = BinaryTagIO.reader(MAX_LEVEL_DAT_BYTES);
+    private static final BinaryTagIO.Compression[] SUPPORTED_COMPRESSIONS = {
+            BinaryTagIO.Compression.GZIP,
+            BinaryTagIO.Compression.NONE,
+            BinaryTagIO.Compression.ZLIB
+    };
 
     public static WorldInfo readLevelDat(Path worldFolder) throws IOException {
         Path levelDatPath = worldFolder.resolve("level.dat");
@@ -19,49 +30,58 @@ public class LevelDatReader {
         }
 
         CompoundBinaryTag root = null;
-        try {
-            root = BinaryTagIO.reader().read(levelDatPath, BinaryTagIO.Compression.GZIP);
-        } catch (Exception e) {
+        Exception lastFailure = null;
+        for (BinaryTagIO.Compression compression : SUPPORTED_COMPRESSIONS) {
             try {
-                root = BinaryTagIO.reader().read(levelDatPath, BinaryTagIO.Compression.NONE);
-            } catch (Exception e2) {
-                try {
-                    root = BinaryTagIO.reader().read(levelDatPath, BinaryTagIO.Compression.ZLIB);
-                } catch (Exception e3) {
-                    System.err.println("Failed to read level.dat for " + worldFolder + " with any compression.");
-                    // Graceful Degradation
-                    WorldInfo fallback = new WorldInfo(worldFolder);
-                    fallback.setLevelName(worldFolder.getFileName().toString());
-                    fallback.setVersionName("解析失败");
-                    
-                    Path iconPath = worldFolder.resolve("icon.png");
-                    if (Files.exists(iconPath)) {
-                        fallback.setIconPath(iconPath);
-                    }
-                    return fallback;
-                }
+                root = LEVEL_DAT_READER.read(levelDatPath, compression);
+                break;
+            } catch (Exception e) {
+                lastFailure = e;
+                LOGGER.debug("Failed to read {} using {} compression", levelDatPath, compression, e);
             }
+        }
+
+        if (root == null) {
+            LOGGER.warn("Failed to read level.dat for {} with supported compression formats", worldFolder, lastFailure);
+            return createUnparsedWorld(worldFolder);
         }
 
         CompoundBinaryTag data = root.getCompound("Data");
         
         if (data == null || data.keySet().isEmpty()) {
-            throw new IOException("Invalid level.dat format (missing 'Data' tag)");
+            LOGGER.warn("Invalid level.dat format for {}: missing Data tag", worldFolder);
+            return createUnparsedWorld(worldFolder);
         }
 
         WorldInfo info = new WorldInfo(worldFolder);
         
         // Basic Info
-        info.setLevelName(data.getString("LevelName"));
-        info.setGameType(data.getInt("GameType"));
-        info.setHardcore(data.getBoolean("hardcore"));
-        info.setLastPlayed(data.getLong("LastPlayed"));
-        info.setGameTime(data.getLong("Time"));
+        if (data.keySet().contains("LevelName")) {
+            info.setLevelName(data.getString("LevelName"));
+        }
+        if (data.keySet().contains("GameType")) {
+            info.setGameType(GameType.fromId(data.getInt("GameType")));
+        }
+        if (data.keySet().contains("hardcore")) {
+            info.setHardcore(data.getBoolean("hardcore"));
+        }
+        if (data.keySet().contains("LastPlayed")) {
+            info.setLastPlayed(data.getLong("LastPlayed"));
+        }
+        if (data.keySet().contains("Time")) {
+            info.setGameTime(data.getLong("Time"));
+        }
         
         // Spawn
-        info.setSpawnX(data.getInt("SpawnX"));
-        info.setSpawnY(data.getInt("SpawnY"));
-        info.setSpawnZ(data.getInt("SpawnZ"));
+        if (data.keySet().contains("SpawnX")) {
+            info.setSpawnX(data.getInt("SpawnX"));
+        }
+        if (data.keySet().contains("SpawnY")) {
+            info.setSpawnY(data.getInt("SpawnY"));
+        }
+        if (data.keySet().contains("SpawnZ")) {
+            info.setSpawnZ(data.getInt("SpawnZ"));
+        }
 
         // Version (1.9+)
         CompoundBinaryTag versionTag = data.getCompound("Version");
@@ -86,9 +106,7 @@ public class LevelDatReader {
         if (player != null && !player.keySet().isEmpty()) {
             ListBinaryTag pos = player.getList("Pos", BinaryTagTypes.DOUBLE);
             if (pos != null && pos.size() >= 3) {
-                info.setPlayerX(pos.getDouble(0));
-                info.setPlayerY(pos.getDouble(1));
-                info.setPlayerZ(pos.getDouble(2));
+                info.setPlayerPosition(pos.getDouble(0), pos.getDouble(1), pos.getDouble(2));
             }
         }
 
@@ -98,6 +116,16 @@ public class LevelDatReader {
             info.setIconPath(iconPath);
         }
 
+        info.setParsed(true);
         return info;
+    }
+
+    private static WorldInfo createUnparsedWorld(Path worldFolder) {
+        WorldInfo fallback = new WorldInfo(worldFolder);
+        Path iconPath = worldFolder.resolve("icon.png");
+        if (Files.exists(iconPath)) {
+            fallback.setIconPath(iconPath);
+        }
+        return fallback;
     }
 }
