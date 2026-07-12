@@ -325,3 +325,18 @@ private TreeView<TreeNodeData> worldTreeView;
 - 如果后续增加新的节点类型，`instanceof` 判断会越来越多
 
 **解决记录（2026-07-11）**：原题目中的“原始类型”术语不准确，`TreeView<Object>` 是使用过宽泛的类型参数，并非 Java raw type。现已新增 `WorldTreeNode`，将控制器和单元格统一为 `TreeView<WorldTreeNode>`，消除 `Object` 混装和 `instanceof`。
+
+## 归档解决记录
+
+- **解决日期**：2026-07-11
+- **验证证据**：Gradle `clean test` 通过；`GameTypeTest`、`WorldInfoTest` 和 `WorldTreeNodeTest` 通过；控制器与 FXML 绑定复核通过。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-CONTROLLER-001 | 新增类型化 `WorldTreeNode`，同步修改 TreeView 和 TreeCell。 |
+| ISSUE-CONTROLLER-002 | 使用 `GameType` 的显示名称替代控制器内 switch。 |
+| ISSUE-CONTROLLER-003 | 使用 `isParsed()` 判断解析结果，删除字符串耦合。 |
+| ISSUE-CONTROLLER-004 | 复用日期格式化器，避免每次刷新重复创建。 |
+| ISSUE-CONTROLLER-005 | 通过显式 seed 可用状态区分合法的 0 与缺失值。 |
+| ISSUE-CONTROLLER-006 | 增加玩家坐标可用状态，无数据时显示统一占位文本。 |
+| ISSUE-CONTROLLER-007 | 提取和复用界面状态文本常量。 |

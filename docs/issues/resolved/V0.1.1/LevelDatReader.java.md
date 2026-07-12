@@ -338,3 +338,17 @@ private static final BinaryTagIO.Reader LEVEL_DAT_READER =
 - 默认 `clean test` 通过。
 - 对 `D:\\MC\\.minecraft\\versions` 下 24 个真实 `level.dat` 完成只读集成验收，解析成功 24/24。
 - 验收测试比较了解析前后的文件大小与最后写入时间，结果完全一致。
+
+## 归档解决记录
+
+- **解决日期**：ISSUE-LEVELDAT-001 至 005 于 2026-07-11 完成；ISSUE-LEVELDAT-006 于 2026-07-12 完成。
+- **验证证据**：解析器单元测试通过；512 KiB 级大型 NBT 成功；超过 16 MiB 的输入被拒绝；真实目录测试 24/24 通过且文件元数据未变化。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-LEVELDAT-001 | 将压缩格式读取改为循环尝试，并逐次保留失败原因。 |
+| ISSUE-LEVELDAT-002 | 统一格式解析失败的降级对象语义，保留文件前置 I/O 错误为 `IOException`。 |
+| ISSUE-LEVELDAT-003 | 使用日志框架记录解析失败信息。 |
+| ISSUE-LEVELDAT-004 | 读取关键 NBT 字段前显式检查键是否存在，避免混淆缺失值与合法默认值。 |
+| ISSUE-LEVELDAT-005 | 使用 `parsed` 状态表达解析结果，删除跨模块硬编码字符串判断。 |
+| ISSUE-LEVELDAT-006 | 使用 16 MiB 有界 Reader 覆盖大型整合包 NBT，同时保留内存安全上限。 |

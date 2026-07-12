@@ -226,6 +226,15 @@ private double playerZ;
 **问题描述**：
 `LevelDatReader` 读取 NBT 字段时可能获得 null，通过无验证的 setter 存入 WorldInfo，经 WorldScanner 传递到 MainController。整个链条中 null 值无人拦截，最终由 UI 层做防御性检查。
 
+**当前代码**：
+
+以下为审查时的数据流快照：
+```java
+worldInfo.setLevelName(data.getString("LevelName"));
+worlds.add(worldInfo);
+nameLabel.setText(info.getLevelName() != null ? info.getLevelName() : "Unknown");
+```
+
 **null 值传播链**：
 ```
 LevelDatReader.java:55
@@ -259,3 +268,16 @@ public void setLevelName(String levelName) {
 **影响范围**：
 - 影响 LevelDatReader → WorldInfo → WorldScanner → MainController 整条链路
 - 修复 WorldInfo 的 setter 即可切断传播链
+
+## 归档解决记录
+
+- **解决日期**：2026-07-11
+- **验证证据**：`WorldInfoTest` 和 `GameTypeTest` 通过；缺失字段、seed 为 0 和无玩家坐标场景均有回归覆盖。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-WORLDINFO-001 | 新增 `GameType` 枚举并以类型安全字段保存游戏模式。 |
+| ISSUE-WORLDINFO-002 | 为关键字段增加空值和输入合法性防御。 |
+| ISSUE-WORLDINFO-003 | 补全 `toString()` 中遗漏的诊断字段。 |
+| ISSUE-WORLDINFO-004 | 拆分同一行中的多变量声明。 |
+| ISSUE-WORLDINFO-005 | 由模型保存安全默认状态和字段可用状态，阻断无效值向 UI 传播。 |

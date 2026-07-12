@@ -166,7 +166,7 @@ getStyleClass().add("tree-cell-group");
 - **连带来源**：ISSUE-CONTROLLER-001
 
 **问题描述**：
-与 ISSUE-CONTROLLER-001 同源，`TreeView<Object>` 使用原始类型，导致 `WorldTreeCell` 中必须用 `instanceof` 判断节点类型。
+与 ISSUE-CONTROLLER-001 同源，`TreeView<Object>` 使用了过宽泛的 `Object` 类型参数，导致 `WorldTreeCell` 中必须用 `instanceof` 判断节点类型。
 
 **当前代码**：
 ```java
@@ -197,3 +197,15 @@ if (item.isGroup()) {
 
 **影响范围**：
 - 与 ISSUE-CONTROLLER-001 联动，需同步修改
+
+## 归档解决记录
+
+- **解决日期**：2026-07-11
+- **验证证据**：`WorldTreeNodeTest`、Gradle `clean test` 和 JavaFX 启动验证通过；图标缓存与 CSS 类切换完成代码复核。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-TREECELL-001 | 图标加载异常改为日志记录并安全清空图形。 |
+| ISSUE-TREECELL-002 | 按图标路径缓存已加载图片，避免单元格刷新时重复读取。 |
+| ISSUE-TREECELL-003 | 将内联样式迁移到外部 CSS 类。 |
+| ISSUE-TREECELL-004 | 使用类型化 `WorldTreeNode` 取代字符串和世界对象混装，移除节点类型分支。 |
