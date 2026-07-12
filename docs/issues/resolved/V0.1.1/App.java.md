@@ -144,3 +144,14 @@ Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
 **影响范围**：
 - 仅影响代码可读性和可维护性
 - 不影响功能和用户体验
+
+## 归档解决记录
+
+- **解决日期**：2026-07-11
+- **验证证据**：Gradle `clean test` 通过；JavaFX 启动验证通过；日志与窗口初始化代码复核通过。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-APP-001 | 引入 SLF4J + Logback，用结构化日志替代标准错误输出。 |
+| ISSUE-APP-002 | 注册全局未捕获异常处理器并记录异常堆栈。 |
+| ISSUE-APP-003 | 将窗口宽高提取为应用常量并统一使用。 |

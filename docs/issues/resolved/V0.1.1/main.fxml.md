@@ -171,3 +171,15 @@ scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalF
 
 **影响范围**：
 - 仅影响国际化支持，MVP 阶段问题不大
+
+## 归档解决记录
+
+- **解决日期**：2026-07-11
+- **验证证据**：FXML 加载和 JavaFX 启动验证通过；资源路径、控制器字段和样式表绑定复核通过。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-FXML-001 | 删除未使用的 `ListView` 导入。 |
+| ISSUE-FXML-002 | 移除 FXML 中与应用入口重复的窗口尺寸配置。 |
+| ISSUE-FXML-003 | 将可复用样式迁移至 `styles.css`。 |
+| ISSUE-FXML-004 | 将目录选择按钮文本迁移至资源文件。 |

@@ -100,6 +100,15 @@ try {
 **问题描述**：
 通过全局搜索，`WorldListCell` 类只在自身文件中被引用，没有被任何其他文件使用。
 
+**当前代码**：
+
+以下为审查时快照：
+```java
+public class WorldListCell extends ListCell<WorldInfo> {
+    // 项目中没有注册或实例化该单元格的调用方。
+}
+```
+
 **搜索结果**：
 ```
 $ grep -r "WorldListCell" src/
@@ -126,3 +135,14 @@ src/main/java/com/mcworldexplorer/ui/WorldListCell.java:15: public WorldListCell
 **影响范围**：
 - 死代码会增加维护成本和理解难度
 - 不影响功能
+
+## 归档解决记录
+
+- **解决日期**：2026-07-11
+- **验证证据**：全局引用搜索确认该类没有调用方；删除后 Gradle `clean test` 和 JavaFX 启动验证通过。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-LISTCELL-001 | 该实现属于未使用代码，随整个类删除，不再保留错误图片路径逻辑。 |
+| ISSUE-LISTCELL-002 | 随未使用类删除静默异常分支；实际使用的 TreeCell 改为日志记录。 |
+| ISSUE-LISTCELL-003 | 删除没有调用方的 `WorldListCell`。 |

@@ -33,6 +33,11 @@ System.err.println("Error while scanning directory " + savesDir + ": " + e.getMe
 System.err.println("Failed to scan versions dir: " + e.getMessage());
 ```
 
+**问题分析**：
+- 图形应用打包运行时不保证用户能够看到标准错误输出。
+- 直接打印字符串没有日志级别、时间和异常上下文，不利于定位具体存档或扫描目录。
+- 该问题与应用入口和解析器中的直接标准错误输出属于同一类基础设施缺失。
+
 **建议修改**：
 ```java
 logger.warn("Failed to read world at {}: {}", entry, e.getMessage());
@@ -119,6 +124,14 @@ if (info.isParsed()) {
 
 **问题描述**：
 `LevelDatReader` 对同一类错误（解析失败）使用了两种不同的处理方式（抛异常和返回降级对象），导致 `WorldScanner` 的 `catch` 块无法统一处理。
+
+**当前代码**：
+
+以下为审查时流程快照：
+```java
+WorldInfo info = levelDatReader.readWorldInfo(entry);
+worlds.add(info); // 未判断返回对象是否完成解析
+```
 
 **错误处理流程对比**：
 ```
@@ -265,3 +278,16 @@ public static Path getDefaultGameRoot() {
 - 但方法契约不清晰，未来调用方可能遗漏检查
 
 **解决记录（2026-07-11）**：复核确认当前调用方已有存在性检查，实际问题是方法契约不清晰，而不是现有功能错误。现已补充 Javadoc，明确返回的是可能不存在的候选路径，调用方必须验证后再扫描。
+
+## 归档解决记录
+
+- **解决日期**：2026-07-11
+- **验证证据**：`WorldScannerTest` 和最终 `clean test` 通过；默认目录、无效目录和解析失败过滤路径完成复核。
+
+| 问题 | 实际修改 |
+|---|---|
+| ISSUE-SCANNER-001 | 将世界读取失败捕获范围收窄为预期的 `IOException`。 |
+| ISSUE-SCANNER-002 | 保持候选路径返回行为，并在 Javadoc 中明确调用方必须检查路径。 |
+| ISSUE-SCANNER-003 | 使用分级日志替代 `System.err.println`。 |
+| ISSUE-SCANNER-004 | 只把 `parsed == true` 的世界加入扫描结果。 |
+| ISSUE-SCANNER-005 | 与解析器统一失败对象契约，避免降级对象混入正常列表。 |
