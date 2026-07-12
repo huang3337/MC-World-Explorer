@@ -1,9 +1,10 @@
 # 代码审查：App.java
 
-- **审查日期**：2026-06-19
-- **审查工具**：Claude Code
+- **审查日期**：2026-07-11
+- **审查工具**：Codex
 - **审查范围**：应用程序入口，负责初始化 JavaFX 窗口并加载主界面
-- **问题总数**：3 个（🔴 1 / 🟠 1 / 🟢 1）
+- **问题总数**：3 个（🔴 1 / 🟠 1 / 🟡 0 / 🟢 1）
+
 
 ---
 
@@ -13,7 +14,7 @@
 - **类别**：错误处理
 - **文件**：`src/main/java/com/mcworldexplorer/App.java`
 - **行号**：全局（影响所有使用 `System.err.println` 的文件）
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 项目中所有错误信息通过 `System.err.println()` 输出到标准错误流。当程序打包成可执行文件后，控制台不可见，所有错误信息将丢失，用户和开发者均无法获取任何错误反馈。
@@ -57,6 +58,7 @@ logger.error("Failed to read level.dat for {}", worldFolder, e);
 - 打包后程序的可调试性为零
 - 用户遇到问题时无法提供有效反馈
 
+
 ---
 
 ### ISSUE-APP-002：缺少全局异常捕获机制
@@ -65,7 +67,7 @@ logger.error("Failed to read level.dat for {}", worldFolder, e);
 - **类别**：错误处理
 - **文件**：`src/main/java/com/mcworldexplorer/App.java`
 - **行号**：第 13-24 行（`start()` 方法）
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 未捕获的异常会导致程序直接崩溃，没有记录日志，也没有友好的用户提示。
@@ -105,6 +107,7 @@ public static void main(String[] args) {
 - 启动失败时用户看到原始堆栈信息，体验差
 - 无法追踪程序崩溃的根本原因
 
+
 ---
 
 ### ISSUE-APP-003：窗口尺寸 900×600 硬编码
@@ -113,7 +116,7 @@ public static void main(String[] args) {
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/App.java`
 - **行号**：第 20 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 窗口宽度和高度直接以魔法数字写死在代码中，修改时需要找到这一行并改源码。

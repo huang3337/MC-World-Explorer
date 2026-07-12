@@ -1,10 +1,10 @@
 # ==================== 构建输出 ====================
 build/
 out/
+bin/
 
 # ==================== Gradle 缓存 ====================
 .gradle/
-!gradle/wrapper/gradle-wrapper.jar
 
 # ==================== Minecraft 测试数据 ====================
 MC/
@@ -40,6 +40,7 @@ logs/
 # ==================== 编译产物 ====================
 *.class
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 *.nar

@@ -11,8 +11,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class WorldScanner {
+    private static final Logger LOGGER = LoggerFactory.getLogger(WorldScanner.class);
 
     /**
      * Scans the specified directory for Minecraft worlds.
@@ -36,16 +39,17 @@ public class WorldScanner {
                     if (Files.exists(levelDat)) {
                         try {
                             WorldInfo info = LevelDatReader.readLevelDat(entry);
-                            worlds.add(info);
-                        } catch (Exception e) {
-                            // Skip corrupted or unreadable worlds but log to console
-                            System.err.println("Failed to read world at " + entry + ": " + e.getMessage());
+                            if (info.isParsed()) {
+                                worlds.add(info);
+                            }
+                        } catch (IOException e) {
+                            LOGGER.warn("Failed to read world at {}", entry, e);
                         }
                     }
                 }
             }
         } catch (IOException e) {
-            System.err.println("Error while scanning directory " + savesDir + ": " + e.getMessage());
+            LOGGER.error("Error while scanning directory {}", savesDir, e);
         }
 
         return worlds;
@@ -82,7 +86,7 @@ public class WorldScanner {
                     }
                 }
             } catch (IOException e) {
-                System.err.println("Failed to scan versions dir: " + e.getMessage());
+                LOGGER.error("Failed to scan versions directory {}", versionsDir, e);
             }
         }
         
@@ -90,8 +94,11 @@ public class WorldScanner {
     }
 
     /**
-     * Attempts to find the default Minecraft game root directory based on OS.
-     * @return The path to the root directory, or null if not found.
+     * Returns the default Minecraft game root candidate for the current OS.
+     * The returned path may not exist when Minecraft is not installed, so callers
+     * must check that it exists and is a directory before scanning it.
+     *
+     * @return the default game root candidate, or the local MC directory when present
      */
     public static Path getDefaultGameRoot() {
         // 先检查当前项目根目录下是否有一个名为 "MC" 的自定义游戏目录
@@ -118,4 +125,3 @@ public class WorldScanner {
         }
     }
 }
-

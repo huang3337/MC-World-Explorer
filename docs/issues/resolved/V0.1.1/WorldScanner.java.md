@@ -1,111 +1,11 @@
 # 代码审查：WorldScanner.java
 
-- **审查日期**：2026-06-19
-- **审查工具**：Claude Code
+- **审查日期**：2026-07-11
+- **审查工具**：Codex
 - **审查范围**：扫描 Minecraft 存档目录，支持默认存档和版本隔离存档的发现
-- **问题总数**：5 个（🔴 0 / 🟠 1 / 🟡 4）
+- **问题总数**：5 个（🔴 0 / 🟠 1 / 🟡 4 / 🟢 0）
 
----
 
-### ISSUE-SCANNER-001：catch (Exception e) 捕获范围过宽
-
-- **严重程度**：🟡 中
-- **类别**：错误处理
-- **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java`
-- **行号**：第 40 行
-- **状态**：待修复
-
-**问题描述**：
-使用 `catch (Exception e)` 捕获所有异常，包括本不应被捕获的运行时异常（如 NullPointerException、ArrayIndexOutOfBoundsException）。
-
-**当前代码**：
-```java
-try {
-    WorldInfo info = LevelDatReader.readLevelDat(entry);
-    worlds.add(info);
-} catch (Exception e) {
-    // 跳过损坏存档，但也跳过了程序 bug 导致的异常
-    System.err.println("Failed to read world at " + entry + ": " + e.getMessage());
-}
-```
-
-**问题分析**：
-- `LevelDatReader.readLevelDat()` 声明抛出 `IOException`
-- 但 `catch (Exception e)` 会捕获所有异常，包括 `NullPointerException`、`ArrayIndexOutOfBoundsException` 等
-- 如果 `LevelDatReader` 内部有 bug 导致 NPE，这里会静默跳过，开发者完全不知道
-- 应该只捕获预期的异常类型
-
-**建议修改**：
-```java
-try {
-    WorldInfo info = LevelDatReader.readLevelDat(entry);
-    worlds.add(info);
-} catch (IOException e) {
-    // 只捕获预期的 IO 异常
-    logger.warn("Failed to read world at {}: {}", entry, e.getMessage());
-}
-// 其他异常（如 NPE）会自然抛出，暴露 bug
-```
-
-**影响范围**：
-- 可能掩盖 LevelDatReader 中的程序 bug
-- 导致损坏存档"无声消失"，用户不知道为什么少了一个世界
-
----
-
-### ISSUE-SCANNER-002：getDefaultGameRoot() 返回的路径可能不存在
-
-- **严重程度**：🟡 中
-- **类别**：代码质量
-- **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java`
-- **行号**：第 96-119 行
-- **状态**：待修复
-
-**问题描述**：
-方法返回一个 Path 对象，但不检查该路径是否真实存在。调用方拿到一个不存在的路径，需要自行处理。
-
-**当前代码**：
-```java
-public static Path getDefaultGameRoot() {
-    // ...
-    if (os.contains("win")) {
-        String appdata = System.getenv("APPDATA");
-        if (appdata != null) {
-            return Paths.get(appdata, ".minecraft");  // 不检查是否存在
-        }
-    }
-    // ...
-}
-```
-
-**问题分析**：
-- 用户可能没有安装 Minecraft，`.minecraft` 目录不存在
-- 方法返回一个不存在的 Path，调用方 `MainController.loadWorlds()` 需要检查
-- 当前 `MainController` 第 79 行做了 `Files.exists(rootPath)` 检查，所以不会崩溃
-- 但方法的语义不清晰：返回 Path 是"推荐路径"还是"确认存在的路径"？
-
-**建议修改**：
-```java
-// 方案一：在方法内部检查，不存在返回 null
-public static Path getDefaultGameRoot() {
-    Path candidate = findCandidatePath();
-    if (candidate != null && Files.exists(candidate) && Files.isDirectory(candidate)) {
-        return candidate;
-    }
-    return null;
-}
-
-// 方案二：保持现状，但在 Javadoc 中明确说明
-/**
- * Returns the default Minecraft game root directory path.
- * Note: The returned path may not exist if Minecraft is not installed.
- * Callers must check Files.exists() before using.
- */
-```
-
-**影响范围**：
-- 当前调用方已做检查，不会崩溃
-- 但方法契约不清晰，未来调用方可能遗漏检查
 
 ---
 
@@ -115,7 +15,7 @@ public static Path getDefaultGameRoot() {
 - **类别**：错误处理
 - **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java`
 - **行号**：第 42、48、85 行
-- **状态**：待修复
+- **状态**：已修复
 - **连带问题**：与 ISSUE-APP-001、ISSUE-LEVELDAT-003 同源
 
 **问题描述**：
@@ -143,6 +43,8 @@ logger.error("Failed to scan versions dir: {}", e.getMessage());
 **影响范围**：
 - 与 ISSUE-APP-001 相同，打包后错误信息丢失
 
+
+
 ---
 
 ### ISSUE-SCANNER-004：与 LevelDatReader 的降级对象混入正常列表 【连带问题】
@@ -151,7 +53,7 @@ logger.error("Failed to scan versions dir: {}", e.getMessage());
 - **类别**：错误处理
 - **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java` ← → `LevelDatReader.java`
 - **行号**：第 37-43 行
-- **状态**：待修复
+- **状态**：已修复
 - **连带来源**：ISSUE-LEVELDAT-002
 
 **问题描述**：
@@ -202,6 +104,8 @@ if (info.isParsed()) {
 - 用户在存档列表中看到"解析失败"的世界，体验困惑
 - 这是 LevelDatReader 和 WorldScanner 两个模块之间的接口契约不清晰导致的
 
+
+
 ---
 
 ### ISSUE-SCANNER-005：与 LevelDatReader 的错误处理策略冲突 【连带问题】
@@ -210,7 +114,7 @@ if (info.isParsed()) {
 - **类别**：模块耦合
 - **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java` ← → `LevelDatReader.java`
 - **行号**：第 37-43 行
-- **状态**：待修复
+- **状态**：已修复
 - **连带来源**：ISSUE-LEVELDAT-002
 
 **问题描述**：
@@ -254,3 +158,110 @@ if (root == null) {
 **影响范围**：
 - 影响 LevelDatReader 和 WorldScanner 两个模块的接口设计
 - 需要同步修改两个文件
+
+
+---
+
+### ISSUE-SCANNER-001：catch (Exception e) 捕获范围过宽
+
+- **严重程度**：🟡 中
+- **类别**：错误处理
+- **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java`
+- **行号**：第 40 行
+- **状态**：已修复
+
+**问题描述**：
+使用 `catch (Exception e)` 捕获所有异常，包括本不应被捕获的运行时异常（如 NullPointerException、ArrayIndexOutOfBoundsException）。
+
+**当前代码**：
+```java
+try {
+    WorldInfo info = LevelDatReader.readLevelDat(entry);
+    worlds.add(info);
+} catch (Exception e) {
+    // 跳过损坏存档，但也跳过了程序 bug 导致的异常
+    System.err.println("Failed to read world at " + entry + ": " + e.getMessage());
+}
+```
+
+**问题分析**：
+- `LevelDatReader.readLevelDat()` 声明抛出 `IOException`
+- 但 `catch (Exception e)` 会捕获所有异常，包括 `NullPointerException`、`ArrayIndexOutOfBoundsException` 等
+- 如果 `LevelDatReader` 内部有 bug 导致 NPE，这里会静默跳过，开发者完全不知道
+- 应该只捕获预期的异常类型
+
+**建议修改**：
+```java
+try {
+    WorldInfo info = LevelDatReader.readLevelDat(entry);
+    worlds.add(info);
+} catch (IOException e) {
+    // 只捕获预期的 IO 异常
+    logger.warn("Failed to read world at {}: {}", entry, e.getMessage());
+}
+// 其他异常（如 NPE）会自然抛出，暴露 bug
+```
+
+**影响范围**：
+- 可能掩盖 LevelDatReader 中的程序 bug
+- 导致损坏存档"无声消失"，用户不知道为什么少了一个世界
+
+**解决记录（2026-07-11）**：原记录中的代码片段是首次审查快照；复核时日志和 parsed 过滤已经存在，但宽泛捕获仍未解决。现已仅捕获 `IOException`，运行时编程错误将交由全局异常处理器记录。
+
+---
+
+### ISSUE-SCANNER-002：getDefaultGameRoot() 返回的路径可能不存在
+
+- **严重程度**：🟡 中
+- **类别**：代码质量
+- **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java`
+- **行号**：第 96-119 行
+- **状态**：已修复
+
+**问题描述**：
+方法返回一个 Path 对象，但不检查该路径是否真实存在。调用方拿到一个不存在的路径，需要自行处理。
+
+**当前代码**：
+```java
+public static Path getDefaultGameRoot() {
+    // ...
+    if (os.contains("win")) {
+        String appdata = System.getenv("APPDATA");
+        if (appdata != null) {
+            return Paths.get(appdata, ".minecraft");  // 不检查是否存在
+        }
+    }
+    // ...
+}
+```
+
+**问题分析**：
+- 用户可能没有安装 Minecraft，`.minecraft` 目录不存在
+- 方法返回一个不存在的 Path，调用方 `MainController.loadWorlds()` 需要检查
+- 当前 `MainController` 第 79 行做了 `Files.exists(rootPath)` 检查，所以不会崩溃
+- 但方法的语义不清晰：返回 Path 是"推荐路径"还是"确认存在的路径"？
+
+**建议修改**：
+```java
+// 方案一：在方法内部检查，不存在返回 null
+public static Path getDefaultGameRoot() {
+    Path candidate = findCandidatePath();
+    if (candidate != null && Files.exists(candidate) && Files.isDirectory(candidate)) {
+        return candidate;
+    }
+    return null;
+}
+
+// 方案二：保持现状，但在 Javadoc 中明确说明
+/**
+ * Returns the default Minecraft game root directory path.
+ * Note: The returned path may not exist if Minecraft is not installed.
+ * Callers must check Files.exists() before using.
+ */
+```
+
+**影响范围**：
+- 当前调用方已做检查，不会崩溃
+- 但方法契约不清晰，未来调用方可能遗漏检查
+
+**解决记录（2026-07-11）**：复核确认当前调用方已有存在性检查，实际问题是方法契约不清晰，而不是现有功能错误。现已补充 Javadoc，明确返回的是可能不存在的候选路径，调用方必须验证后再扫描。

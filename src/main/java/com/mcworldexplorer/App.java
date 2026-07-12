@@ -5,10 +5,16 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URL;
+import java.util.ResourceBundle;
 
 public class App extends Application {
+    private static final Logger LOGGER = LoggerFactory.getLogger(App.class);
+    private static final int DEFAULT_WIDTH = 900;
+    private static final int DEFAULT_HEIGHT = 600;
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -16,15 +22,22 @@ public class App extends Application {
         if (fxmlLocation == null) {
             throw new IllegalStateException("Cannot find /fxml/main.fxml");
         }
-        Parent root = FXMLLoader.load(fxmlLocation);
-        Scene scene = new Scene(root, 900, 600);
+        FXMLLoader loader = new FXMLLoader(fxmlLocation, ResourceBundle.getBundle("messages"));
+        Parent root = loader.load();
+        Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+        URL stylesheet = getClass().getResource("/css/styles.css");
+        if (stylesheet == null) {
+            throw new IllegalStateException("Cannot find /css/styles.css");
+        }
+        scene.getStylesheets().add(stylesheet.toExternalForm());
         stage.setScene(scene);
         stage.setTitle("MC World Explorer");
         stage.show();
     }
 
     public static void main(String[] args) {
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) ->
+                LOGGER.error("Uncaught exception in thread {}", thread.getName(), throwable));
         launch(args);
     }
 }
-

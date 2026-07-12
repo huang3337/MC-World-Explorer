@@ -1,9 +1,10 @@
 # 代码审查：WorldListCell.java
 
-- **审查日期**：2026-06-19
-- **审查工具**：Claude Code
+- **审查日期**：2026-07-11
+- **审查工具**：Codex
 - **审查范围**：ListView 的自定义单元格，用于显示世界图标和名称
 - **问题总数**：3 个（🔴 0 / 🟠 1 / 🟡 2 / 🟢 0）
+
 
 ---
 
@@ -13,7 +14,7 @@
 - **类别**：错误处理
 - **文件**：`src/main/java/com/mcworldexplorer/ui/WorldListCell.java`
 - **行号**：第 42 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 通过字符串拼接 `"file:" + path` 构造文件 URI，当路径包含空格或中文等特殊字符时，图片加载会失败。
@@ -41,6 +42,7 @@ Image image = new Image(item.getIconPath().toUri().toString(), 32, 32, true, tru
 - 影响存档路径包含空格、中文、日文等特殊字符的用户的图标显示
 - 中国用户的 Windows 用户名通常是中文，触发概率较高
 
+
 ---
 
 ### ISSUE-LISTCELL-002：异常被静默吞掉
@@ -49,7 +51,7 @@ Image image = new Image(item.getIconPath().toUri().toString(), 32, 32, true, tru
 - **类别**：错误处理
 - **文件**：`src/main/java/com/mcworldexplorer/ui/WorldListCell.java`
 - **行号**：第 44-46 行
-- **状态**：待修复
+- **状态**：已修复
 
 **问题描述**：
 图片加载失败时，异常被 `catch (Exception e)` 捕获后静默丢弃，不记录任何信息。
@@ -84,6 +86,7 @@ try {
 - 打包后无法追踪图标加载失败的原因
 - 与 ISSUE-APP-001 同源
 
+
 ---
 
 ### ISSUE-LISTCELL-003：该类可能未被使用（疑似死代码）
@@ -92,7 +95,7 @@ try {
 - **类别**：代码质量
 - **文件**：`src/main/java/com/mcworldexplorer/ui/WorldListCell.java`
 - **行号**：全文
-- **状态**：待确认
+- **状态**：已修复
 
 **问题描述**：
 通过全局搜索，`WorldListCell` 类只在自身文件中被引用，没有被任何其他文件使用。
