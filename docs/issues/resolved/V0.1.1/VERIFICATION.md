@@ -4,7 +4,7 @@
 - **验算工具**：Codex
 - **验算范围**：V0.1.1 原始 36 条代码审查问题及对应源码
 - **原始验算结果**：36 条已修复，活动问题 0 条
-- **最终版本结果**：开发过程中新增 `ISSUE-LEVELDAT-006`，发布后新增 `ISSUE-CONTROLLER-008`、`ISSUE-SCANNER-006`、`ISSUE-CONTROLLER-009` 和 `ISSUE-APP-004`；V0.1.1 最终共 41 条问题，全部已修复
+- **最终版本结果**：开发过程中新增 `ISSUE-LEVELDAT-006`，发布后新增 `ISSUE-CONTROLLER-008`、`ISSUE-SCANNER-006`、`ISSUE-CONTROLLER-009`、`ISSUE-APP-004` 和 `ISSUE-APP-005`；V0.1.1 最终共 42 条问题，全部已修复
 
 ## 发现的记录偏差
 
@@ -81,8 +81,10 @@
 
 首次 jpackage app-image 的 EXE 启动后立即退出，直接诊断得到“缺少 JavaFX 运行时组件”。问题不是缺少依赖，而是 Java 启动器无法在当前 classpath 打包方式下直接以 `Application` 子类作为主类，因此新增并修复 `ISSUE-APP-004`。
 
-新增普通 Java `Launcher` 后重新执行测试、`installDist` 和 jpackage。最终便携版包含 Java 21 运行时、JavaFX Windows 依赖、像素风图标、README 和 LICENSE。实际启动时主进程和窗口进程均持续运行并保持响应。
+新增普通 Java `Launcher` 后，早期验收仅依据进程持续运行和响应，错误地将错误对话框视为成功窗口。收到实际双击截图后重新进行桌面可视化复验，确认软件包仍然无法正常启动，并新增 `ISSUE-APP-005`。
 
-本地 ZIP 为 `MC-World-Explorer-0.1.1-windows-x64.zip`，大小约 33.7 MiB，SHA-256 为 `2876962f4f61b3155dcdce49f5312f24866dc3bcbe2aaf481969bf162aae9c8a`。软件包目录受 `.gitignore` 保护，未纳入 Git。
+控制台诊断版依次暴露 `java.naming` 和 `java.scripting` 缺失。最终将 jpackage 运行时模块改为 `java.se,jdk.unsupported`，重新执行 26 个测试、`installDist`、jpackage、控制台诊断和正式 EXE 可视化启动。正式主窗口完整显示并只读发现 25 个世界。
 
-截至本次验算，归档目录包含 41 个唯一问题编号，状态均为“已修复”，活动问题为 0。
+本地 ZIP 为 `MC-World-Explorer-0.1.1-windows-x64.zip`，大小约 36.0 MiB，内置运行时约 81.4 MiB，SHA-256 为 `7e4f587984ce99c2aa7e90cfb878dfb7f85662724ad1d1f690c2054d1de934c9`。软件包目录受 `.gitignore` 保护，未纳入 Git。
+
+截至本次验算，归档目录包含 42 个唯一问题编号，状态均为“已修复”，活动问题为 0。

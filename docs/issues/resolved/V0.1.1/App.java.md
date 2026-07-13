@@ -3,7 +3,7 @@
 - **审查日期**：2026-07-11
 - **审查工具**：Codex
 - **审查范围**：应用程序入口，负责初始化 JavaFX 窗口并加载主界面
-- **问题总数**：4 个（🔴 1 / 🟠 2 / 🟡 0 / 🟢 1）
+- **问题总数**：5 个（🔴 1 / 🟠 3 / 🟡 0 / 🟢 1）
 
 
 ---
@@ -183,12 +183,37 @@ public final class Launcher {
 - Windows x64 便携版 EXE
 - Gradle application 主入口
 
-**解决记录（2026-07-13）**：新增普通 Java `Launcher` 主类并将 Gradle、jpackage 入口统一指向该类。重建后的便携版主进程和 JavaFX 窗口进程均持续运行并保持响应。
+**解决记录（2026-07-13）**：新增普通 Java `Launcher` 主类并将 Gradle、jpackage 入口统一指向该类。该修改使 jpackage 能进入应用主类；后续可视化复验又暴露并解决了独立的精简运行时模块问题 `ISSUE-APP-005`。
+
+### ISSUE-APP-005：jpackage 精简运行时遗漏应用启动所需的标准模块
+
+- **严重程度**：🟠 高
+- **类别**：构建与发布
+- **文件**：`packaging/build-portable.ps1`
+- **行号**：jpackage `--add-modules` 参数
+- **状态**：已修复
+
+**问题描述**：
+便携版最初只加入了直接判断所需的少量 JDK 模块。实际双击 EXE 后先后出现 `javax/naming/NamingException` 和 `javax/script/Bindings` 缺失，GUI 启动器只显示笼统的“Failed to launch JVM”。
+
+**问题分析**：
+Logback 会在初始化时使用 `java.naming`，JavaFX FXML 会在加载主界面时使用 `java.scripting`。这些依赖通过框架内部和反射路径触发，普通编译与单元测试不会验证 jlink 精简运行时是否完整。早期验收只检查进程是否存活，而错误对话框本身也会保持进程响应，因此曾被错误判断为启动成功。
+
+**建议修改**：
+```powershell
+--add-modules "java.se,jdk.unsupported"
+```
+
+**影响范围**：
+- Windows x64 便携版内置运行时
+- EXE 启动、日志初始化和 FXML 主界面加载
+
+**解决记录（2026-07-13）**：将精简模块列表改为标准 `java.se` 模块集合并保留 `jdk.unsupported`，重新生成 app-image 和 ZIP。控制台诊断版持续运行且无启动异常；正式 EXE 可视化验收显示完整主界面，并只读发现 25 个世界。
 
 ## 归档解决记录
 
-- **解决日期**：ISSUE-APP-001 至 003 于 2026-07-11 完成；ISSUE-APP-004 于 2026-07-13 完成。
-- **验证证据**：Gradle `clean test` 通过；源码与 jpackage 便携版均完成实际启动验证；便携版进程保持响应。
+- **解决日期**：ISSUE-APP-001 至 003 于 2026-07-11 完成；ISSUE-APP-004 至 005 于 2026-07-13 完成。
+- **验证证据**：Gradle `clean test` 通过；控制台诊断版无启动异常；正式便携版可视化确认主界面正常显示并发现 25 个世界。
 
 | 问题 | 实际修改 |
 |---|---|
@@ -196,3 +221,4 @@ public final class Launcher {
 | ISSUE-APP-002 | 注册全局未捕获异常处理器并记录异常堆栈。 |
 | ISSUE-APP-003 | 将窗口宽高提取为应用常量并统一使用。 |
 | ISSUE-APP-004 | 使用普通 Java Launcher 转交 JavaFX 启动，修复 jpackage EXE 立即退出。 |
+| ISSUE-APP-005 | 使用 `java.se` 补齐框架隐式依赖，并以主窗口可见作为便携版启动验收标准。 |
