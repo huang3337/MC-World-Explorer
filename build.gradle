@@ -24,7 +24,7 @@ javafx {
 }
 
 application {
-    mainClass = 'com.mcworldexplorer.App'
+    mainClass = 'com.mcworldexplorer.Launcher'
 }
 
 dependencies {

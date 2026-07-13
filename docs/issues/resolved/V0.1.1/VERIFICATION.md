@@ -4,7 +4,7 @@
 - **验算工具**：Codex
 - **验算范围**：V0.1.1 原始 36 条代码审查问题及对应源码
 - **原始验算结果**：36 条已修复，活动问题 0 条
-- **最终版本结果**：开发过程中新增 `ISSUE-LEVELDAT-006`，发布后整体审查新增 `ISSUE-CONTROLLER-008`、`ISSUE-SCANNER-006` 和 `ISSUE-CONTROLLER-009`；V0.1.1 最终共 40 条问题，全部已修复
+- **最终版本结果**：开发过程中新增 `ISSUE-LEVELDAT-006`，发布后新增 `ISSUE-CONTROLLER-008`、`ISSUE-SCANNER-006`、`ISSUE-CONTROLLER-009` 和 `ISSUE-APP-004`；V0.1.1 最终共 41 条问题，全部已修复
 
 ## 发现的记录偏差
 
@@ -76,3 +76,13 @@
 默认完整测试共 26 个：24 个通过，2 个真实目录集成测试按设计跳过。显式启用后，真实 `versions` 目录中的 25 个世界全部被发现并解析，文件元数据未变化。实际启动验收确认窗口标题正确、窗口保持响应、标准错误为空；测试结束时人工终止进程，因此 Gradle `run` 最终记录退出码 `-1`，不代表启动失败。
 
 截至本次验算，归档目录包含 40 个唯一问题编号，状态均为“已修复”，活动问题为 0。
+
+## 2026-07-13 Windows 便携版验算
+
+首次 jpackage app-image 的 EXE 启动后立即退出，直接诊断得到“缺少 JavaFX 运行时组件”。问题不是缺少依赖，而是 Java 启动器无法在当前 classpath 打包方式下直接以 `Application` 子类作为主类，因此新增并修复 `ISSUE-APP-004`。
+
+新增普通 Java `Launcher` 后重新执行测试、`installDist` 和 jpackage。最终便携版包含 Java 21 运行时、JavaFX Windows 依赖、像素风图标、README 和 LICENSE。实际启动时主进程和窗口进程均持续运行并保持响应。
+
+本地 ZIP 为 `MC-World-Explorer-0.1.1-windows-x64.zip`，大小约 33.7 MiB，SHA-256 为 `2876962f4f61b3155dcdce49f5312f24866dc3bcbe2aaf481969bf162aae9c8a`。软件包目录受 `.gitignore` 保护，未纳入 Git。
+
+截至本次验算，归档目录包含 41 个唯一问题编号，状态均为“已修复”，活动问题为 0。
