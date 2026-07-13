@@ -3,7 +3,7 @@
 - **审查日期**：2026-07-11
 - **审查工具**：Codex
 - **审查范围**：主界面控制器，负责存档列表加载、选中事件处理、详情面板显示
-- **问题总数**：7 个（🔴 0 / 🟠 0 / 🟡 5 / 🟢 2）
+- **问题总数**：9 个（🔴 0 / 🟠 2 / 🟡 5 / 🟢 2）
 
 
 
@@ -326,10 +326,85 @@ private TreeView<TreeNodeData> worldTreeView;
 
 **解决记录（2026-07-11）**：原题目中的“原始类型”术语不准确，`TreeView<Object>` 是使用过宽泛的类型参数，并非 Java raw type。现已新增 `WorldTreeNode`，将控制器和单元格统一为 `TreeView<WorldTreeNode>`，消除 `Object` 混装和 `instanceof`。
 
+### ISSUE-CONTROLLER-008：V0.1 承诺的三个存档详情字段未展示
+
+- **严重程度**：🟠 高
+- **类别**：UI 健壮性
+- **文件**：`src/main/java/com/mcworldexplorer/ui/MainController.java`、`src/main/resources/fxml/main.fxml`
+- **行号**：`MainController.java` 第 125-198 行；`main.fxml` 第 38-80 行
+- **状态**：已修复
+
+**问题描述**：
+V0.1 路线图要求显示创建时间、游戏时间和出生点坐标，但原详情面板没有对应控件。游戏时间和出生点已经由解析器读取却未消费，创建时间也没有明确的数据来源。
+
+**当前代码**：
+
+以下为审查时快照：
+```java
+lastPlayedLabel.setText(DATE_FORMAT.format(new Date(info.getLastPlayed())));
+seedLabel.setText(info.isSeedAvailable() ? String.valueOf(info.getRandomSeed()) : UNKNOWN);
+```
+
+**问题分析**：
+项目将 V0.1 标记为完成，但用户界面没有交付路线图明确列出的三个字段。出生点缺失时还需要与合法的 `(0, 0, 0)` 区分；`level.dat` 没有可靠的世界绝对创建时间，不能伪造精确语义。
+
+**建议修改**：
+```java
+// 读取存档目录的文件系统创建时间，并明确标注为 Folder Created。
+// 将 Time 标签按 20 ticks/秒格式化。
+// 仅在 SpawnX、SpawnY、SpawnZ 全部存在时显示出生点。
+```
+
+**影响范围**：
+- V0.1 存档详情完整性
+- `WorldInfo` 字段可用状态
+- `LevelDatReader` 文件属性与 NBT 字段读取
+- `MainController` 和 FXML 详情展示
+
+**解决记录（2026-07-13）**：开发者确认创建时间采用文件系统目录创建时间，并在界面中明确显示为 `Folder Created`。新增游戏时间和出生点行；游戏时间按 20 ticks/秒换算；出生点仅在三个坐标字段都存在时显示。
+
+### ISSUE-CONTROLLER-009：存档扫描阻塞 JavaFX 主线程
+
+- **严重程度**：🟠 高
+- **类别**：UI 健壮性
+- **文件**：`src/main/java/com/mcworldexplorer/ui/MainController.java`
+- **行号**：第 74-152 行
+- **状态**：已修复
+
+**问题描述**：
+控制器在初始化和选择目录后同步读取全部 `level.dat`，存档较多或磁盘较慢时会阻塞 JavaFX 主线程。
+
+**当前代码**：
+
+以下为审查时快照：
+```java
+groupedWorlds = WorldScanner.scanGameRoot(rootPath);
+worldTreeView.setRoot(rootItem);
+```
+
+**问题分析**：
+文件遍历、解压和 NBT 解析属于阻塞 I/O。原界面也没有加载、空结果或失败状态，用户无法判断程序是否仍在工作。
+
+**建议修改**：
+```java
+Task<Map<String, List<WorldInfo>>> task = new Task<>() {
+    protected Map<String, List<WorldInfo>> call() {
+        return WorldScanner.scanSelectedPath(rootPath);
+    }
+};
+```
+
+**影响范围**：
+- 应用首次启动
+- 选择新目录后的重新扫描
+- 大量整合包存档场景
+
+**解决记录（2026-07-13）**：使用 JavaFX `Task` 和 daemon 工作线程执行扫描；扫描期间禁用目录按钮并显示进度，完成后显示世界数量、空结果或失败状态，TreeView 更新仍在 JavaFX 线程执行。
+
 ## 归档解决记录
 
-- **解决日期**：2026-07-11
-- **验证证据**：Gradle `clean test` 通过；`GameTypeTest`、`WorldInfoTest` 和 `WorldTreeNodeTest` 通过；控制器与 FXML 绑定复核通过。
+- **解决日期**：ISSUE-CONTROLLER-001 至 007 于 2026-07-11 完成；ISSUE-CONTROLLER-008 至 009 于 2026-07-13 完成。
+- **验证证据**：Gradle `clean test` 通过；控制器、模型、解析器和 FXML 绑定复核通过；实际启动窗口保持响应且标准错误为空；25 个真实 `level.dat` 只读验收通过。
 
 | 问题 | 实际修改 |
 |---|---|
@@ -340,3 +415,5 @@ private TreeView<TreeNodeData> worldTreeView;
 | ISSUE-CONTROLLER-005 | 通过显式 seed 可用状态区分合法的 0 与缺失值。 |
 | ISSUE-CONTROLLER-006 | 增加玩家坐标可用状态，无数据时显示统一占位文本。 |
 | ISSUE-CONTROLLER-007 | 提取和复用界面状态文本常量。 |
+| ISSUE-CONTROLLER-008 | 显示文件夹创建时间、游戏时间和出生点坐标，并为缺失数据保留明确状态。 |
+| ISSUE-CONTROLLER-009 | 使用 JavaFX Task 后台扫描并增加加载、空结果和失败状态。 |

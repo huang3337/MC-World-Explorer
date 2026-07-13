@@ -9,6 +9,8 @@ public class WorldInfo {
     private String versionName;
     private GameType gameType = GameType.SURVIVAL;
     private boolean hardcore;
+    private long folderCreationTime;
+    private boolean folderCreationTimeAvailable;
     private long lastPlayed;
     private long gameTime;
     private boolean parsed;
@@ -17,6 +19,7 @@ public class WorldInfo {
     private int spawnX;
     private int spawnY;
     private int spawnZ;
+    private boolean spawnPositionAvailable;
     private double playerX;
     private double playerY;
     private double playerZ;
@@ -59,6 +62,15 @@ public class WorldInfo {
     public boolean isHardcore() { return hardcore; }
     public void setHardcore(boolean hardcore) { this.hardcore = hardcore; }
 
+    public long getFolderCreationTime() { return folderCreationTime; }
+    public void setFolderCreationTime(long folderCreationTime) {
+        if (folderCreationTime > 0) {
+            this.folderCreationTime = folderCreationTime;
+            this.folderCreationTimeAvailable = true;
+        }
+    }
+    public boolean isFolderCreationTimeAvailable() { return folderCreationTimeAvailable; }
+
     public long getLastPlayed() { return lastPlayed; }
     public void setLastPlayed(long lastPlayed) { this.lastPlayed = Math.max(0, lastPlayed); }
 
@@ -83,6 +95,15 @@ public class WorldInfo {
 
     public int getSpawnZ() { return spawnZ; }
     public void setSpawnZ(int spawnZ) { this.spawnZ = spawnZ; }
+
+    public void setSpawnPosition(int spawnX, int spawnY, int spawnZ) {
+        this.spawnX = spawnX;
+        this.spawnY = spawnY;
+        this.spawnZ = spawnZ;
+        this.spawnPositionAvailable = true;
+    }
+
+    public boolean isSpawnPositionAvailable() { return spawnPositionAvailable; }
 
     public double getPlayerX() { return playerX; }
     public void setPlayerX(double playerX) { this.playerX = playerX; }
@@ -111,8 +132,11 @@ public class WorldInfo {
                 ", gameType=" + gameType +
                 ", hardcore=" + hardcore +
                 ", parsed=" + parsed +
+                ", folderCreationTime=" + folderCreationTime +
                 ", lastPlayed=" + lastPlayed +
+                ", gameTime=" + gameTime +
                 ", randomSeed=" + randomSeed +
+                ", spawnPos=(" + spawnX + ", " + spawnY + ", " + spawnZ + ")" +
                 ", playerPos=(" + playerX + ", " + playerY + ", " + playerZ + ")" +
                 '}';
     }

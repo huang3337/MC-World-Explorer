@@ -3,7 +3,7 @@
 - **审查日期**：2026-07-11
 - **审查工具**：Codex
 - **审查范围**：扫描 Minecraft 存档目录，支持默认存档和版本隔离存档的发现
-- **问题总数**：5 个（🔴 0 / 🟠 1 / 🟡 4 / 🟢 0）
+- **问题总数**：6 个（🔴 0 / 🟠 2 / 🟡 4 / 🟢 0）
 
 
 
@@ -279,10 +279,43 @@ public static Path getDefaultGameRoot() {
 
 **解决记录（2026-07-11）**：复核确认当前调用方已有存在性检查，实际问题是方法契约不清晰，而不是现有功能错误。现已补充 Javadoc，明确返回的是可能不存在的候选路径，调用方必须验证后再扫描。
 
+### ISSUE-SCANNER-006：选择目录类型与扫描入口契约不一致
+
+- **严重程度**：🟠 高
+- **类别**：错误处理
+- **文件**：`src/main/java/com/mcworldexplorer/world/WorldScanner.java`、`src/main/java/com/mcworldexplorer/ui/MainController.java`
+- **行号**：`WorldScanner.java` 第 61-183 行；`MainController.java` 第 90-136 行
+- **状态**：已修复
+
+**问题描述**：
+界面允许用户选择 Minecraft 目录，原控制器却始终将该路径当作游戏根目录。直接选择 `saves`、`versions`、单个实例或世界目录时会返回空结果。
+
+**当前代码**：
+
+以下为审查时快照：
+```java
+groupedWorlds = WorldScanner.scanGameRoot(rootPath);
+```
+
+**问题分析**：
+入口契约与用户操作不一致，会让结构合法的原版或整合包存档表现为“无法识别”。
+
+**建议修改**：
+```java
+Map<String, List<WorldInfo>> worlds = WorldScanner.scanSelectedPath(selectedPath);
+```
+
+**影响范围**：
+- 原版游戏根目录与直接 `saves` 目录
+- `versions` 目录和单个整合包实例
+- 单个世界目录
+
+**解决记录（2026-07-13）**：新增统一的 `scanSelectedPath()` 入口，按实际目录结构识别单个世界、直接 saves、游戏根目录、versions 集合和实例根目录，并复用原有只读解析逻辑。
+
 ## 归档解决记录
 
-- **解决日期**：2026-07-11
-- **验证证据**：`WorldScannerTest` 和最终 `clean test` 通过；默认目录、无效目录和解析失败过滤路径完成复核。
+- **解决日期**：ISSUE-SCANNER-001 至 005 于 2026-07-11 完成；ISSUE-SCANNER-006 于 2026-07-13 完成。
+- **验证证据**：`WorldScannerTest` 覆盖五种目录结构；真实 `versions` 集成测试发现全部 25 个世界；最终 `clean test` 通过。
 
 | 问题 | 实际修改 |
 |---|---|
@@ -291,3 +324,4 @@ public static Path getDefaultGameRoot() {
 | ISSUE-SCANNER-003 | 使用分级日志替代 `System.err.println`。 |
 | ISSUE-SCANNER-004 | 只把 `parsed == true` 的世界加入扫描结果。 |
 | ISSUE-SCANNER-005 | 与解析器统一失败对象契约，避免降级对象混入正常列表。 |
+| ISSUE-SCANNER-006 | 新增统一路径识别入口，支持游戏根目录、saves、versions、实例和单个世界。 |
