@@ -3,7 +3,7 @@
 - **审查日期**：2026-07-11
 - **审查工具**：Codex
 - **审查范围**：应用程序入口，负责初始化 JavaFX 窗口并加载主界面
-- **问题总数**：3 个（🔴 1 / 🟠 1 / 🟡 0 / 🟢 1）
+- **问题总数**：4 个（🔴 1 / 🟠 2 / 🟡 0 / 🟢 1）
 
 
 ---
@@ -145,13 +145,54 @@ Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
 - 仅影响代码可读性和可维护性
 - 不影响功能和用户体验
 
+### ISSUE-APP-004：jpackage classpath 启动器无法直接启动 JavaFX Application 主类
+
+- **严重程度**：🟠 高
+- **类别**：错误处理
+- **文件**：`src/main/java/com/mcworldexplorer/App.java`、`src/main/java/com/mcworldexplorer/Launcher.java`、`build.gradle`
+- **行号**：`App.java` 第 14 行；`Launcher.java` 第 1-10 行；`build.gradle` 第 26-28 行
+- **状态**：已修复
+
+**问题描述**：
+jpackage 首次生成的 EXE 启动后立即退出。直接使用 classpath 启动时报告“缺少 JavaFX 运行时组件”，尽管 JavaFX 依赖已经包含在应用目录中。
+
+**当前代码**：
+
+以下为审查时快照：
+```java
+public class App extends Application {
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+```
+
+**问题分析**：
+Java 启动器会对直接继承 `Application` 的主类进行特殊检测，classpath 形式的 jpackage 启动会在应用代码执行前失败。
+
+**建议修改**：
+```java
+public final class Launcher {
+    public static void main(String[] args) {
+        App.main(args);
+    }
+}
+```
+
+**影响范围**：
+- Windows x64 便携版 EXE
+- Gradle application 主入口
+
+**解决记录（2026-07-13）**：新增普通 Java `Launcher` 主类并将 Gradle、jpackage 入口统一指向该类。重建后的便携版主进程和 JavaFX 窗口进程均持续运行并保持响应。
+
 ## 归档解决记录
 
-- **解决日期**：2026-07-11
-- **验证证据**：Gradle `clean test` 通过；JavaFX 启动验证通过；日志与窗口初始化代码复核通过。
+- **解决日期**：ISSUE-APP-001 至 003 于 2026-07-11 完成；ISSUE-APP-004 于 2026-07-13 完成。
+- **验证证据**：Gradle `clean test` 通过；源码与 jpackage 便携版均完成实际启动验证；便携版进程保持响应。
 
 | 问题 | 实际修改 |
 |---|---|
 | ISSUE-APP-001 | 引入 SLF4J + Logback，用结构化日志替代标准错误输出。 |
 | ISSUE-APP-002 | 注册全局未捕获异常处理器并记录异常堆栈。 |
 | ISSUE-APP-003 | 将窗口宽高提取为应用常量并统一使用。 |
+| ISSUE-APP-004 | 使用普通 Java Launcher 转交 JavaFX 启动，修复 jpackage EXE 立即退出。 |

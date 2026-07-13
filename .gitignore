@@ -2,6 +2,7 @@
 build/
 out/
 bin/
+packaging/
 bin/
 
 # ==================== Gradle 缓存 ====================
