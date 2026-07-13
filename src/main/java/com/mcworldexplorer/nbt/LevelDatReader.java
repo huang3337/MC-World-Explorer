@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 
 public class LevelDatReader {
     private static final Logger LOGGER = LoggerFactory.getLogger(LevelDatReader.class);
@@ -54,6 +55,13 @@ public class LevelDatReader {
         }
 
         WorldInfo info = new WorldInfo(worldFolder);
+
+        try {
+            BasicFileAttributes attributes = Files.readAttributes(worldFolder, BasicFileAttributes.class);
+            info.setFolderCreationTime(attributes.creationTime().toMillis());
+        } catch (IOException e) {
+            LOGGER.debug("Failed to read folder creation time for {}", worldFolder, e);
+        }
         
         // Basic Info
         if (data.keySet().contains("LevelName")) {
@@ -73,14 +81,13 @@ public class LevelDatReader {
         }
         
         // Spawn
-        if (data.keySet().contains("SpawnX")) {
-            info.setSpawnX(data.getInt("SpawnX"));
-        }
-        if (data.keySet().contains("SpawnY")) {
-            info.setSpawnY(data.getInt("SpawnY"));
-        }
-        if (data.keySet().contains("SpawnZ")) {
-            info.setSpawnZ(data.getInt("SpawnZ"));
+        if (data.keySet().contains("SpawnX")
+                && data.keySet().contains("SpawnY")
+                && data.keySet().contains("SpawnZ")) {
+            info.setSpawnPosition(
+                    data.getInt("SpawnX"),
+                    data.getInt("SpawnY"),
+                    data.getInt("SpawnZ"));
         }
 
         // Version (1.9+)

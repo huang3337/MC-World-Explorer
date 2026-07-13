@@ -71,6 +71,45 @@ public class LevelDatReaderTest {
     }
 
     @Test
+    void readsFolderCreationGameTimeAndCompleteSpawnPosition() throws IOException {
+        Path worldFolder = Files.createDirectory(tempDir.resolve("detail-world"));
+        CompoundBinaryTag data = CompoundBinaryTag.builder()
+                .putString("LevelName", "Detail World")
+                .putLong("Time", 72_000L)
+                .putInt("SpawnX", 0)
+                .putInt("SpawnY", 64)
+                .putInt("SpawnZ", -12)
+                .build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder().put("Data", data).build();
+        BinaryTagIO.writer().write(root, worldFolder.resolve("level.dat"), BinaryTagIO.Compression.GZIP);
+
+        WorldInfo info = LevelDatReader.readLevelDat(worldFolder);
+
+        assertTrue(info.isFolderCreationTimeAvailable());
+        assertTrue(info.getFolderCreationTime() > 0);
+        assertEquals(72_000L, info.getGameTime());
+        assertTrue(info.isSpawnPositionAvailable());
+        assertEquals(0, info.getSpawnX());
+        assertEquals(64, info.getSpawnY());
+        assertEquals(-12, info.getSpawnZ());
+    }
+
+    @Test
+    void keepsSpawnPositionUnavailableWhenAnyCoordinateIsMissing() throws IOException {
+        Path worldFolder = Files.createDirectory(tempDir.resolve("partial-spawn-world"));
+        CompoundBinaryTag data = CompoundBinaryTag.builder()
+                .putInt("SpawnX", 1)
+                .putInt("SpawnY", 2)
+                .build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder().put("Data", data).build();
+        BinaryTagIO.writer().write(root, worldFolder.resolve("level.dat"), BinaryTagIO.Compression.GZIP);
+
+        WorldInfo info = LevelDatReader.readLevelDat(worldFolder);
+
+        assertFalse(info.isSpawnPositionAvailable());
+    }
+
+    @Test
     void readsLevelDatLargerThanTheLibraryDefaultLimit() throws IOException {
         Path worldFolder = Files.createDirectory(tempDir.resolve("large-world"));
         CompoundBinaryTag data = CompoundBinaryTag.builder()

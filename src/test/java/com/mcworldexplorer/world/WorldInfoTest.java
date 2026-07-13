@@ -38,13 +38,34 @@ class WorldInfoTest {
     }
 
     @Test
+    void distinguishesAvailableFolderTimeAndZeroSpawnPosition() {
+        WorldInfo info = new WorldInfo(Path.of("world-folder"));
+
+        assertFalse(info.isFolderCreationTimeAvailable());
+        assertFalse(info.isSpawnPositionAvailable());
+
+        info.setFolderCreationTime(1_700_000_000_000L);
+        info.setSpawnPosition(0, 0, 0);
+
+        assertTrue(info.isFolderCreationTimeAvailable());
+        assertEquals(1_700_000_000_000L, info.getFolderCreationTime());
+        assertTrue(info.isSpawnPositionAvailable());
+        assertEquals(0, info.getSpawnX());
+        assertEquals(0, info.getSpawnY());
+        assertEquals(0, info.getSpawnZ());
+    }
+
+    @Test
     void toStringContainsDiagnosticFields() {
         WorldInfo info = new WorldInfo(Path.of("world-folder"));
         String value = info.toString();
 
         assertTrue(value.contains("folderPath="));
         assertTrue(value.contains("lastPlayed="));
+        assertTrue(value.contains("folderCreationTime="));
+        assertTrue(value.contains("gameTime="));
         assertTrue(value.contains("randomSeed="));
+        assertTrue(value.contains("spawnPos="));
         assertTrue(value.contains("playerPos="));
     }
 }
