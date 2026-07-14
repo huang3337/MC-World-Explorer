@@ -56,7 +56,7 @@ MC World Explorer 用于在不启动 Minecraft 的情况下，快速查看本地
 
 ## 开发状态
 
-MC World Explorer **仍在持续开发中**。V0.1.1 是当前稳定版本，V0.2 尚未开始；地图、Region 解析和三维浏览等后续能力不属于当前版本。
+MC World Explorer **仍在持续开发中**。V0.1.1 是当前稳定版本，V0.2 已进入开发但尚未发布；地图、Region 解析和三维浏览等后续能力不属于当前稳定版本。
 
 - [查看完整项目路线图](PROJECT_ROADMAP.md)
 - [查看 V0.1.1 开发与验收记录](docs/progress/V0.1.1.md)
