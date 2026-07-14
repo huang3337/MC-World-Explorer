@@ -9,7 +9,13 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ProgressIndicator?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.geometry.Insets?>
 
 <SplitPane dividerPositions="0.3" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.mcworldexplorer.ui.MainController">
@@ -35,50 +41,81 @@
       </AnchorPane>
     <AnchorPane minHeight="0.0" minWidth="0.0" prefHeight="160.0" prefWidth="100.0">
          <children>
-            <VBox spacing="20.0" AnchorPane.bottomAnchor="20.0" AnchorPane.leftAnchor="20.0" AnchorPane.rightAnchor="20.0" AnchorPane.topAnchor="20.0">
+            <VBox spacing="12.0" AnchorPane.bottomAnchor="16.0" AnchorPane.leftAnchor="16.0" AnchorPane.rightAnchor="16.0" AnchorPane.topAnchor="16.0">
                <children>
                   <Label fx:id="worldNameLabel" styleClass="world-name" text="Select a World" />
-                  <GridPane hgap="15.0" vgap="15.0">
-                    <columnConstraints>
-                      <ColumnConstraints hgrow="NEVER" minWidth="10.0" prefWidth="120.0" />
-                      <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" />
-                    </columnConstraints>
-                    <rowConstraints>
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                    </rowConstraints>
-                     <children>
-                        <Label styleClass="detail-label" text="Version:" GridPane.rowIndex="0" />
-                        <Label fx:id="versionLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="0" />
-                        
-                        <Label styleClass="detail-label" text="Game Mode:" GridPane.rowIndex="1" />
-                        <Label fx:id="gameModeLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="1" />
-                        
-                        <Label styleClass="detail-label" text="Folder Created:" GridPane.rowIndex="2" />
-                        <Label fx:id="folderCreationTimeLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="2" />
-
-                        <Label styleClass="detail-label" text="Last Played:" GridPane.rowIndex="3" />
-                        <Label fx:id="lastPlayedLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="3" />
-
-                        <Label styleClass="detail-label" text="Game Time:" GridPane.rowIndex="4" />
-                        <Label fx:id="gameTimeLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="4" />
-
-                        <Label styleClass="detail-label" text="Seed:" GridPane.rowIndex="5" />
-                        <Label fx:id="seedLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="5" />
-
-                        <Label styleClass="detail-label" text="Spawn Pos:" GridPane.rowIndex="6" />
-                        <Label fx:id="spawnPosLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="6" />
-
-                        <Label styleClass="detail-label" text="Player Pos:" GridPane.rowIndex="7" />
-                        <Label fx:id="playerPosLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="7" />
-                     </children>
-                  </GridPane>
+                  <TabPane fx:id="detailTabPane" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+                     <tabs>
+                        <Tab text="%tab.worldInfo">
+                           <content>
+                              <ScrollPane fitToHeight="true" fitToWidth="true" pannable="true">
+                                 <content>
+                                    <GridPane hgap="15.0" vgap="15.0">
+                                       <padding>
+                                          <Insets bottom="16.0" left="16.0" right="16.0" top="16.0" />
+                                       </padding>
+                                       <columnConstraints>
+                                          <ColumnConstraints hgrow="NEVER" minWidth="10.0" prefWidth="120.0" />
+                                          <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" />
+                                       </columnConstraints>
+                                       <rowConstraints>
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                          <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                                       </rowConstraints>
+                                       <children>
+                                          <Label styleClass="detail-label" text="Version:" GridPane.rowIndex="0" />
+                                          <Label fx:id="versionLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                                          <Label styleClass="detail-label" text="Game Mode:" GridPane.rowIndex="1" />
+                                          <Label fx:id="gameModeLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                          <Label styleClass="detail-label" text="Folder Created:" GridPane.rowIndex="2" />
+                                          <Label fx:id="folderCreationTimeLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                                          <Label styleClass="detail-label" text="Last Played:" GridPane.rowIndex="3" />
+                                          <Label fx:id="lastPlayedLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                                          <Label styleClass="detail-label" text="Game Time:" GridPane.rowIndex="4" />
+                                          <Label fx:id="gameTimeLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                                          <Label styleClass="detail-label" text="Seed:" GridPane.rowIndex="5" />
+                                          <Label fx:id="seedLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                                          <Label styleClass="detail-label" text="Spawn Pos:" GridPane.rowIndex="6" />
+                                          <Label fx:id="spawnPosLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="6" />
+                                          <Label styleClass="detail-label" text="Player Pos:" GridPane.rowIndex="7" />
+                                          <Label fx:id="playerPosLabel" styleClass="detail-value" text="-" GridPane.columnIndex="1" GridPane.rowIndex="7" />
+                                       </children>
+                                    </GridPane>
+                                 </content>
+                              </ScrollPane>
+                           </content>
+                        </Tab>
+                        <Tab fx:id="previewTab" text="%tab.worldPreview">
+                           <content>
+                              <VBox alignment="TOP_CENTER" spacing="10.0">
+                                 <padding>
+                                    <Insets bottom="12.0" left="12.0" right="12.0" top="12.0" />
+                                 </padding>
+                                 <children>
+                                    <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                       <children>
+                                          <ProgressBar fx:id="previewProgressBar" managed="false" prefWidth="220.0" progress="0.0" visible="false" />
+                                          <Label fx:id="previewStatusLabel" text="选择存档后生成缩略图" wrapText="true" />
+                                       </children>
+                                    </HBox>
+                                    <StackPane fx:id="previewSurfacePane" styleClass="preview-surface" VBox.vgrow="ALWAYS">
+                                       <children>
+                                          <ImageView fx:id="previewImageView" preserveRatio="true" smooth="false" />
+                                          <Label fx:id="previewPlaceholderLabel" styleClass="preview-placeholder" text="选择存档后生成缩略图" wrapText="true" />
+                                       </children>
+                                    </StackPane>
+                                 </children>
+                              </VBox>
+                           </content>
+                        </Tab>
+                     </tabs>
+                  </TabPane>
                </children>
             </VBox>
          </children>

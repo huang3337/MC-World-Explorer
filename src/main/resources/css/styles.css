@@ -27,3 +27,17 @@
     -fx-font-weight: normal;
     -fx-padding: 2 0 2 0;
 }
+
+.preview-surface {
+    -fx-background-color: #20262b;
+    -fx-border-color: #c9ced3;
+    -fx-border-width: 1;
+    -fx-min-width: 0;
+    -fx-min-height: 0;
+}
+
+.preview-placeholder {
+    -fx-text-fill: #d8dde1;
+    -fx-font-size: 14px;
+    -fx-padding: 20px;
+}
