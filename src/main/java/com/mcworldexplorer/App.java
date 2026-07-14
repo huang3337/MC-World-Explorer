@@ -14,8 +14,8 @@ import java.util.ResourceBundle;
 
 public class App extends Application {
     private static final Logger LOGGER = LoggerFactory.getLogger(App.class);
-    private static final int DEFAULT_WIDTH = 900;
-    private static final int DEFAULT_HEIGHT = 600;
+    private static final int DEFAULT_WIDTH = 1100;
+    private static final int DEFAULT_HEIGHT = 720;
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -33,6 +33,8 @@ public class App extends Application {
         scene.getStylesheets().add(stylesheet.toExternalForm());
         stage.setScene(scene);
         stage.setTitle("MC World Explorer");
+        stage.setMinWidth(900);
+        stage.setMinHeight(600);
         stage.show();
     }
 
