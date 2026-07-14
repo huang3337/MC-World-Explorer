@@ -37,6 +37,7 @@ class PortablePathsTest {
         assertTrue(Files.isDirectory(configuredRoot.resolve("logs")));
         assertEquals(configuredRoot.toAbsolutePath(), PortablePaths.applicationRoot());
         assertEquals(configuredRoot.toAbsolutePath().resolve("logs"), PortablePaths.logsDirectory());
+        assertEquals(configuredRoot.toAbsolutePath().resolve("cache"), PortablePaths.cacheDirectory());
     }
 
     @Test
