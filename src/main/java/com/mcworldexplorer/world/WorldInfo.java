@@ -24,6 +24,11 @@ public class WorldInfo {
     private double playerY;
     private double playerZ;
     private boolean playerPositionAvailable;
+    private int playerRespawnX;
+    private int playerRespawnY;
+    private int playerRespawnZ;
+    private String playerRespawnDimension;
+    private boolean playerRespawnPositionAvailable;
 
     public WorldInfo(Path folderPath) {
         if (folderPath == null) {
@@ -38,7 +43,7 @@ public class WorldInfo {
 
     // Getters and Setters
     public Path getFolderPath() { return folderPath; }
-    
+
     public Path getIconPath() { return iconPath; }
     public void setIconPath(Path iconPath) { this.iconPath = iconPath; }
 
@@ -123,6 +128,25 @@ public class WorldInfo {
 
     public boolean isPlayerPositionAvailable() { return playerPositionAvailable; }
 
+    public int getPlayerRespawnX() { return playerRespawnX; }
+    public int getPlayerRespawnY() { return playerRespawnY; }
+    public int getPlayerRespawnZ() { return playerRespawnZ; }
+    public String getPlayerRespawnDimension() { return playerRespawnDimension; }
+
+    public void setPlayerRespawnPosition(
+            int playerRespawnX,
+            int playerRespawnY,
+            int playerRespawnZ,
+            String playerRespawnDimension) {
+        this.playerRespawnX = playerRespawnX;
+        this.playerRespawnY = playerRespawnY;
+        this.playerRespawnZ = playerRespawnZ;
+        this.playerRespawnDimension = playerRespawnDimension;
+        this.playerRespawnPositionAvailable = true;
+    }
+
+    public boolean isPlayerRespawnPositionAvailable() { return playerRespawnPositionAvailable; }
+
     @Override
     public String toString() {
         return "WorldInfo{" +
@@ -137,6 +161,8 @@ public class WorldInfo {
                 ", gameTime=" + gameTime +
                 ", randomSeed=" + randomSeed +
                 ", spawnPos=(" + spawnX + ", " + spawnY + ", " + spawnZ + ")" +
+                ", playerRespawnPos=(" + playerRespawnX + ", " + playerRespawnY + ", " + playerRespawnZ + ")" +
+                ", playerRespawnDimension='" + playerRespawnDimension + '\'' +
                 ", playerPos=(" + playerX + ", " + playerY + ", " + playerZ + ")" +
                 '}';
     }

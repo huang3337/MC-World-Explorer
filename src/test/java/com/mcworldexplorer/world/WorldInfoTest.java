@@ -56,6 +56,21 @@ class WorldInfoTest {
     }
 
     @Test
+    void distinguishesMissingAndAvailablePlayerRespawnPosition() {
+        WorldInfo info = new WorldInfo(Path.of("world-folder"));
+
+        assertFalse(info.isPlayerRespawnPositionAvailable());
+
+        info.setPlayerRespawnPosition(0, 64, -8, "minecraft:overworld");
+
+        assertTrue(info.isPlayerRespawnPositionAvailable());
+        assertEquals(0, info.getPlayerRespawnX());
+        assertEquals(64, info.getPlayerRespawnY());
+        assertEquals(-8, info.getPlayerRespawnZ());
+        assertEquals("minecraft:overworld", info.getPlayerRespawnDimension());
+    }
+
+    @Test
     void toStringContainsDiagnosticFields() {
         WorldInfo info = new WorldInfo(Path.of("world-folder"));
         String value = info.toString();
@@ -66,6 +81,7 @@ class WorldInfoTest {
         assertTrue(value.contains("gameTime="));
         assertTrue(value.contains("randomSeed="));
         assertTrue(value.contains("spawnPos="));
+        assertTrue(value.contains("playerRespawnPos="));
         assertTrue(value.contains("playerPos="));
     }
 }
