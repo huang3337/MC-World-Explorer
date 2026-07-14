@@ -10,6 +10,7 @@ import java.util.Locale;
 public final class PortablePaths {
     static final String APPLICATION_HOME_PROPERTY = "mcworldexplorer.home";
     private static final String LOGS_DIRECTORY_NAME = "logs";
+    private static final String CACHE_DIRECTORY_NAME = "cache";
 
     private PortablePaths() {
     }
@@ -35,6 +36,10 @@ public final class PortablePaths {
 
     public static Path logsDirectory() {
         return applicationRoot().resolve(LOGS_DIRECTORY_NAME);
+    }
+
+    public static Path cacheDirectory() {
+        return applicationRoot().resolve(CACHE_DIRECTORY_NAME);
     }
 
     private static Path detectedApplicationRoot() {
