@@ -4,7 +4,7 @@
 MC-World-Explorer/
 ├─ PROJECT_CONTEXT.md             项目背景、愿景和用户场景
 ├─ PROJECT_ROADMAP.md             版本范围、当前阶段和后续路线
-├─ DEVELOPMENT_RULES.md           AI 开发与代码审查规则
+├─ DEVELOPMENT_RULES.md           本地 AI 开发与代码审查规则，不进入 Git
 ├─ PROJECT_STRUCTURE.md           当前项目结构说明
 ├─ build.gradle                   Gradle 构建配置
 ├─ settings.gradle                Gradle 项目配置
@@ -15,7 +15,8 @@ MC-World-Explorer/
 │  ├─ progress/                   各版本开发进度与验收记录
 │  ├─ issues/                     活动问题和问题记录规范
 │  │  └─ resolved/V0.1.1/         V0.1.1 已解决问题与验算记录
-│  └─ decisions/                  已确认的重大技术决策；无记录时目录可不存在
+│  ├─ decisions/                  已确认的重大技术决策
+│  └─ superpowers/specs/          已确认或待确认的功能设计规范
 └─ src/
    ├─ main/
    │  ├─ java/com/mcworldexplorer/
@@ -30,4 +31,6 @@ MC-World-Explorer/
       └─ world/                   模型和扫描测试
 ```
 
-`docs/decisions/` 当前不存在，表示尚无经过开发者确认的重大技术决策记录，不是项目结构缺失。
+`docs/decisions/DECISION-001.md` 已记录严格便携的本地数据存储决策。V0.2 计划使用的
+`cache/`、`logs/`、`exports/` 和未来的 `config/` 均属于程序运行数据，受 `.gitignore`
+保护，不属于源码目录，也不得写入 Minecraft 存档目录。
