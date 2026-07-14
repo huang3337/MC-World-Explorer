@@ -22,15 +22,18 @@ MC-World-Explorer/
    │  ├─ java/com/mcworldexplorer/
    │  │  ├─ App.java              JavaFX 应用入口
    │  │  ├─ nbt/                  level.dat 解析
+   │  │  ├─ storage/              严格便携的程序根目录和运行数据路径
    │  │  ├─ ui/                   控制器和存档树 UI
    │  │  └─ world/                存档模型、扫描和游戏模式
    │  └─ resources/               FXML、CSS、日志和界面文本
    └─ test/java/com/mcworldexplorer/
       ├─ nbt/                     NBT 单元测试与只读集成测试
+      ├─ storage/                 便携路径、目录写入和布局识别测试
       ├─ ui/                      树节点测试
       └─ world/                   模型和扫描测试
 ```
 
-`docs/decisions/DECISION-001.md` 已记录严格便携的本地数据存储决策。V0.2 计划使用的
-`cache/`、`logs/`、`exports/` 和未来的 `config/` 均属于程序运行数据，受 `.gitignore`
-保护，不属于源码目录，也不得写入 Minecraft 存档目录。
+`docs/decisions/DECISION-001.md` 已记录严格便携的本地数据存储决策。V0.2 已使用
+`storage/PortablePaths.java` 将日志定位到程序根目录的 `logs/`；计划使用的 `cache/`、
+`exports/` 和未来的 `config/` 同样属于程序运行数据，受 `.gitignore` 保护，不属于
+源码目录，也不得写入 Minecraft 存档目录。

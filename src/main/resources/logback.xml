@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <property name="LOG_DIR" value="${APPDATA:-${user.home}}/MC World Explorer/logs" />
+    <property name="LOG_DIR" value="${mcworldexplorer.home:-.}/logs" />
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

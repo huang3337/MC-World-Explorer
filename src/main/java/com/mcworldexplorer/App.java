@@ -1,5 +1,6 @@
 package com.mcworldexplorer;
 
+import com.mcworldexplorer.storage.PortablePaths;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -38,6 +39,7 @@ public class App extends Application {
     public static void main(String[] args) {
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) ->
                 LOGGER.error("Uncaught exception in thread {}", thread.getName(), throwable));
+        LOGGER.info("Using application root {}", PortablePaths.applicationRoot());
         launch(args);
     }
 }
