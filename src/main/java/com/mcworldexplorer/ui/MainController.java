@@ -315,7 +315,7 @@ public class MainController {
         try {
             Optional<PreviewCacheResult> reusable = previewCache.findReusable(world, center);
             if (reusable.isPresent() && showPreviewImage(reusable.orElseThrow().imagePath())) {
-                setPreviewIdle(String.format(
+                setPreviewReady(String.format(
                         "已加载缓存 · 中心 %d, %d",
                         center.x(),
                         center.z()));
@@ -339,10 +339,9 @@ public class MainController {
             if (!isCurrentPreview(task, requestId)) {
                 return;
             }
-            finishPreviewProgress();
             PreviewDisplay display = task.getValue();
             if (showPreviewImage(display.cache().imagePath())) {
-                previewStatusLabel.setText(formatPreviewStatus(display.generation()));
+                setPreviewReady(formatPreviewStatus(display.generation()));
             } else {
                 showPreviewFailure("缓存图片无法读取");
             }
@@ -400,6 +399,17 @@ public class MainController {
         previewStatusLabel.setText(status);
         previewPlaceholderLabel.setText(status);
         previewPlaceholderLabel.setVisible(true);
+    }
+
+    private void setPreviewReady(String status) {
+        finishPreviewProgress();
+        previewStatusLabel.setText(status);
+        previewPlaceholderLabel.setVisible(
+                shouldShowPreviewPlaceholder(previewImageView.getImage() != null));
+    }
+
+    static boolean shouldShowPreviewPlaceholder(boolean imagePresent) {
+        return !imagePresent;
     }
 
     private void cancelPreviewTask() {
