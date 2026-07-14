@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MainControllerTest {
     @Test
@@ -53,5 +55,11 @@ class MainControllerTest {
         assertEquals(
                 "已生成，2 个区块失败 · 中心 12, -34 · 3000 个区块",
                 MainController.formatPreviewStatus(result));
+    }
+
+    @Test
+    void hidesPreviewPlaceholderWhenImageIsPresent() {
+        assertFalse(MainController.shouldShowPreviewPlaceholder(true));
+        assertTrue(MainController.shouldShowPreviewPlaceholder(false));
     }
 }
