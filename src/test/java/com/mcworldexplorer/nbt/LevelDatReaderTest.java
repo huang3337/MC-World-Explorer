@@ -110,6 +110,64 @@ public class LevelDatReaderTest {
     }
 
     @Test
+    void readsPlayerRespawnPositionAndStringDimension() throws IOException {
+        Path worldFolder = Files.createDirectory(tempDir.resolve("player-respawn-world"));
+        CompoundBinaryTag player = CompoundBinaryTag.builder()
+                .putInt("SpawnX", -120)
+                .putInt("SpawnY", 70)
+                .putInt("SpawnZ", 320)
+                .putString("SpawnDimension", "minecraft:overworld")
+                .build();
+        CompoundBinaryTag data = CompoundBinaryTag.builder().put("Player", player).build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder().put("Data", data).build();
+        BinaryTagIO.writer().write(root, worldFolder.resolve("level.dat"), BinaryTagIO.Compression.GZIP);
+
+        WorldInfo info = LevelDatReader.readLevelDat(worldFolder);
+
+        assertTrue(info.isPlayerRespawnPositionAvailable());
+        assertEquals(-120, info.getPlayerRespawnX());
+        assertEquals(70, info.getPlayerRespawnY());
+        assertEquals(320, info.getPlayerRespawnZ());
+        assertEquals("minecraft:overworld", info.getPlayerRespawnDimension());
+    }
+
+    @Test
+    void readsLegacyNumericPlayerRespawnDimension() throws IOException {
+        Path worldFolder = Files.createDirectory(tempDir.resolve("legacy-respawn-world"));
+        CompoundBinaryTag player = CompoundBinaryTag.builder()
+                .putInt("SpawnX", 10)
+                .putInt("SpawnY", 64)
+                .putInt("SpawnZ", 20)
+                .putInt("SpawnDimension", 0)
+                .build();
+        CompoundBinaryTag data = CompoundBinaryTag.builder().put("Player", player).build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder().put("Data", data).build();
+        BinaryTagIO.writer().write(root, worldFolder.resolve("level.dat"), BinaryTagIO.Compression.GZIP);
+
+        WorldInfo info = LevelDatReader.readLevelDat(worldFolder);
+
+        assertTrue(info.isPlayerRespawnPositionAvailable());
+        assertEquals("0", info.getPlayerRespawnDimension());
+    }
+
+    @Test
+    void ignoresIncompletePlayerRespawnPosition() throws IOException {
+        Path worldFolder = Files.createDirectory(tempDir.resolve("partial-player-respawn-world"));
+        CompoundBinaryTag player = CompoundBinaryTag.builder()
+                .putInt("SpawnX", 10)
+                .putInt("SpawnZ", 20)
+                .putString("SpawnDimension", "minecraft:overworld")
+                .build();
+        CompoundBinaryTag data = CompoundBinaryTag.builder().put("Player", player).build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder().put("Data", data).build();
+        BinaryTagIO.writer().write(root, worldFolder.resolve("level.dat"), BinaryTagIO.Compression.GZIP);
+
+        WorldInfo info = LevelDatReader.readLevelDat(worldFolder);
+
+        assertFalse(info.isPlayerRespawnPositionAvailable());
+    }
+
+    @Test
     void readsLevelDatLargerThanTheLibraryDefaultLimit() throws IOException {
         Path worldFolder = Files.createDirectory(tempDir.resolve("large-world"));
         CompoundBinaryTag data = CompoundBinaryTag.builder()

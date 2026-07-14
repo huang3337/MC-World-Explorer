@@ -22,12 +22,14 @@ MC-World-Explorer/
    │  ├─ java/com/mcworldexplorer/
    │  │  ├─ App.java              JavaFX 应用入口
    │  │  ├─ nbt/                  level.dat 解析
+   │  │  ├─ preview/              缩略图中心点模型与决策逻辑
    │  │  ├─ storage/              严格便携的程序根目录和运行数据路径
    │  │  ├─ ui/                   控制器和存档树 UI
    │  │  └─ world/                存档模型、扫描和游戏模式
    │  └─ resources/               FXML、CSS、日志和界面文本
    └─ test/java/com/mcworldexplorer/
       ├─ nbt/                     NBT 单元测试与只读集成测试
+      ├─ preview/                 中心点规则和真实存档只读验收
       ├─ storage/                 便携路径、目录写入和布局识别测试
       ├─ ui/                      树节点测试
       └─ world/                   模型和扫描测试

@@ -2,10 +2,13 @@ package com.mcworldexplorer.nbt;
 
 import com.mcworldexplorer.world.WorldInfo;
 import com.mcworldexplorer.world.GameType;
+import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.BinaryTagIO;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.kyori.adventure.nbt.ListBinaryTag;
 import net.kyori.adventure.nbt.BinaryTagTypes;
+import net.kyori.adventure.nbt.NumberBinaryTag;
+import net.kyori.adventure.nbt.StringBinaryTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +51,7 @@ public class LevelDatReader {
         }
 
         CompoundBinaryTag data = root.getCompound("Data");
-        
+
         if (data == null || data.keySet().isEmpty()) {
             LOGGER.warn("Invalid level.dat format for {}: missing Data tag", worldFolder);
             return createUnparsedWorld(worldFolder);
@@ -62,7 +65,7 @@ public class LevelDatReader {
         } catch (IOException e) {
             LOGGER.debug("Failed to read folder creation time for {}", worldFolder, e);
         }
-        
+
         // Basic Info
         if (data.keySet().contains("LevelName")) {
             info.setLevelName(data.getString("LevelName"));
@@ -115,6 +118,15 @@ public class LevelDatReader {
             if (pos != null && pos.size() >= 3) {
                 info.setPlayerPosition(pos.getDouble(0), pos.getDouble(1), pos.getDouble(2));
             }
+            if (player.keySet().contains("SpawnX")
+                    && player.keySet().contains("SpawnY")
+                    && player.keySet().contains("SpawnZ")) {
+                info.setPlayerRespawnPosition(
+                        player.getInt("SpawnX"),
+                        player.getInt("SpawnY"),
+                        player.getInt("SpawnZ"),
+                        readDimension(player.get("SpawnDimension")));
+            }
         }
 
         // Check for icon
@@ -125,6 +137,16 @@ public class LevelDatReader {
 
         info.setParsed(true);
         return info;
+    }
+
+    private static String readDimension(BinaryTag dimensionTag) {
+        if (dimensionTag instanceof StringBinaryTag stringTag) {
+            return stringTag.value();
+        }
+        if (dimensionTag instanceof NumberBinaryTag numberTag) {
+            return Integer.toString(numberTag.intValue());
+        }
+        return dimensionTag == null ? null : "";
     }
 
     private static WorldInfo createUnparsedWorld(Path worldFolder) {
