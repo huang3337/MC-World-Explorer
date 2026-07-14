@@ -1,29 +1,45 @@
 package com.mcworldexplorer.ui;
 
+import com.mcworldexplorer.preview.PreviewCache;
+import com.mcworldexplorer.preview.PreviewCacheResult;
+import com.mcworldexplorer.preview.PreviewCenter;
+import com.mcworldexplorer.preview.PreviewCenterResolver;
+import com.mcworldexplorer.preview.PreviewGenerationMonitor;
+import com.mcworldexplorer.preview.PreviewGenerationResult;
+import com.mcworldexplorer.preview.PreviewGenerator;
 import com.mcworldexplorer.world.WorldInfo;
 import com.mcworldexplorer.world.WorldScanner;
 import javafx.concurrent.Task;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.prefs.Preferences;
-import java.util.Map;
-import java.util.LinkedHashMap;
-import javafx.event.ActionEvent;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.StackPane;
 import javafx.stage.DirectoryChooser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CancellationException;
+import java.util.prefs.Preferences;
 
 public class MainController {
     private static final Logger LOGGER = LoggerFactory.getLogger(MainController.class);
@@ -36,7 +52,15 @@ public class MainController {
     private static final String NO_WORLDS = "No worlds found";
     private static final String SCAN_FAILED = "Scan failed";
     private static final String FOLDER_NOT_FOUND = "Folder not found";
+    private static final String PREVIEW_NO_SELECTION = "选择存档后生成缩略图";
+    private static final String PREVIEW_UNAVAILABLE = "该存档无法生成缩略图";
+    private static final String PREVIEW_GENERATING = "正在生成缩略图...";
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+    private final PreviewGenerator previewGenerator = new PreviewGenerator();
+    private final PreviewCache previewCache = new PreviewCache();
+    private Task<PreviewDisplay> previewTask;
+    private long previewRequestId;
 
     @FXML
     private TreeView<WorldTreeNode> worldTreeView;
@@ -78,7 +102,30 @@ public class MainController {
     private Label playerPosLabel;
 
     @FXML
+    private TabPane detailTabPane;
+
+    @FXML
+    private Tab previewTab;
+
+    @FXML
+    private ImageView previewImageView;
+
+    @FXML
+    private StackPane previewSurfacePane;
+
+    @FXML
+    private Label previewPlaceholderLabel;
+
+    @FXML
+    private Label previewStatusLabel;
+
+    @FXML
+    private ProgressBar previewProgressBar;
+
+    @FXML
     public void initialize() {
+        previewSurfacePane.widthProperty().addListener((observable, oldValue, newValue) -> updatePreviewImageSize());
+        previewSurfacePane.heightProperty().addListener((observable, oldValue, newValue) -> updatePreviewImageSize());
         clearDetails();
 
         // Setup custom cell factory for icons and names
@@ -88,7 +135,9 @@ public class MainController {
         worldTreeView.getSelectionModel().selectedItemProperty().addListener(
                 (observable, oldValue, newValue) -> {
                     if (newValue != null && newValue.getValue().getWorldInfo() != null) {
-                        showWorldDetails(newValue.getValue().getWorldInfo());
+                        WorldInfo world = newValue.getValue().getWorldInfo();
+                        showWorldDetails(world);
+                        startPreview(world);
                     } else {
                         clearDetails();
                     }
@@ -251,6 +300,154 @@ public class MainController {
         }
     }
 
+    private void startPreview(WorldInfo world) {
+        cancelPreviewTask();
+        previewImageView.setImage(null);
+        previewPlaceholderLabel.setVisible(true);
+        detailTabPane.getSelectionModel().select(previewTab);
+
+        if (!world.isParsed()) {
+            setPreviewIdle(PREVIEW_UNAVAILABLE);
+            return;
+        }
+
+        PreviewCenter center = PreviewCenterResolver.resolve(world);
+        try {
+            Optional<PreviewCacheResult> reusable = previewCache.findReusable(world, center);
+            if (reusable.isPresent() && showPreviewImage(reusable.orElseThrow().imagePath())) {
+                setPreviewIdle(String.format(
+                        "已加载缓存 · 中心 %d, %d",
+                        center.x(),
+                        center.z()));
+                return;
+            }
+        } catch (IOException e) {
+            LOGGER.debug("Failed to read preview cache for {}", world.getFolderPath(), e);
+        }
+
+        long requestId = previewRequestId;
+        PreviewTask task = new PreviewTask(world);
+        previewTask = task;
+        previewStatusLabel.setText(PREVIEW_GENERATING);
+        previewPlaceholderLabel.setText(PREVIEW_GENERATING);
+        previewProgressBar.progressProperty().unbind();
+        previewProgressBar.progressProperty().bind(task.progressProperty());
+        previewProgressBar.setManaged(true);
+        previewProgressBar.setVisible(true);
+
+        task.setOnSucceeded(event -> {
+            if (!isCurrentPreview(task, requestId)) {
+                return;
+            }
+            finishPreviewProgress();
+            PreviewDisplay display = task.getValue();
+            if (showPreviewImage(display.cache().imagePath())) {
+                previewStatusLabel.setText(formatPreviewStatus(display.generation()));
+            } else {
+                showPreviewFailure("缓存图片无法读取");
+            }
+        });
+        task.setOnFailed(event -> {
+            if (!isCurrentPreview(task, requestId)) {
+                return;
+            }
+            finishPreviewProgress();
+            Throwable failure = task.getException();
+            LOGGER.error("Failed to generate preview for {}", world.getFolderPath(), failure);
+            showPreviewFailure(shortMessage(failure));
+        });
+        task.setOnCancelled(event -> {
+            if (isCurrentPreview(task, requestId)) {
+                finishPreviewProgress();
+            }
+        });
+
+        Thread thread = new Thread(task, "world-preview-" + requestId);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private boolean showPreviewImage(Path imagePath) {
+        Image image = new Image(imagePath.toUri().toString(), false);
+        if (image.isError()) {
+            LOGGER.warn("Failed to load preview image {}", imagePath, image.getException());
+            return false;
+        }
+        previewImageView.setImage(image);
+        previewPlaceholderLabel.setVisible(false);
+        return true;
+    }
+
+    private void updatePreviewImageSize() {
+        double available = Math.max(0, Math.min(
+                PreviewGenerator.OUTPUT_SIZE,
+                Math.min(previewSurfacePane.getWidth() - 2, previewSurfacePane.getHeight() - 2)));
+        previewImageView.setFitWidth(available);
+        previewImageView.setFitHeight(available);
+    }
+
+    private void showPreviewFailure(String detail) {
+        previewImageView.setImage(null);
+        previewPlaceholderLabel.setText("缩略图生成失败");
+        previewPlaceholderLabel.setVisible(true);
+        previewStatusLabel.setText(detail == null || detail.isBlank()
+                ? "生成失败，请查看日志"
+                : "生成失败：" + detail);
+    }
+
+    private void setPreviewIdle(String status) {
+        finishPreviewProgress();
+        previewStatusLabel.setText(status);
+        previewPlaceholderLabel.setText(status);
+        previewPlaceholderLabel.setVisible(true);
+    }
+
+    private void cancelPreviewTask() {
+        previewRequestId++;
+        if (previewTask != null) {
+            previewTask.cancel();
+            previewTask = null;
+        }
+        finishPreviewProgress();
+    }
+
+    private boolean isCurrentPreview(Task<PreviewDisplay> task, long requestId) {
+        return previewTask == task && previewRequestId == requestId;
+    }
+
+    private void finishPreviewProgress() {
+        previewProgressBar.progressProperty().unbind();
+        previewProgressBar.setManaged(false);
+        previewProgressBar.setVisible(false);
+    }
+
+    static String formatPreviewStatus(PreviewGenerationResult result) {
+        String quality = result.failedChunks() == 0
+                ? "已生成"
+                : "已生成，" + result.failedChunks() + " 个区块失败";
+        return String.format(
+                "%s · 中心 %d, %d · %d 个区块",
+                quality,
+                result.center().x(),
+                result.center().z(),
+                result.sampledChunks());
+    }
+
+    private static String shortMessage(Throwable failure) {
+        if (failure == null) {
+            return "请查看日志";
+        }
+        Throwable cause = failure;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        if (message == null || message.isBlank()) {
+            return cause.getClass().getSimpleName();
+        }
+        return message.length() <= 120 ? message : message.substring(0, 117) + "...";
+    }
+
     static String formatGameTime(long ticks) {
         long totalMinutes = Math.max(0, ticks) / 20 / 60;
         long days = totalMinutes / (24 * 60);
@@ -266,6 +463,7 @@ public class MainController {
     }
 
     private void clearDetails() {
+        cancelPreviewTask();
         worldNameLabel.setText(NO_SELECTION);
         versionLabel.setText(NOT_AVAILABLE);
         gameModeLabel.setText(NOT_AVAILABLE);
@@ -275,5 +473,41 @@ public class MainController {
         seedLabel.setText(NOT_AVAILABLE);
         spawnPosLabel.setText(NOT_AVAILABLE);
         playerPosLabel.setText(NOT_AVAILABLE);
+        previewImageView.setImage(null);
+        setPreviewIdle(PREVIEW_NO_SELECTION);
+    }
+
+    private final class PreviewTask extends Task<PreviewDisplay> {
+        private final WorldInfo world;
+
+        private PreviewTask(WorldInfo world) {
+            this.world = world;
+        }
+
+        @Override
+        protected PreviewDisplay call() throws IOException {
+            PreviewGenerationResult generation = previewGenerator.generate(
+                    world,
+                    new PreviewGenerationMonitor() {
+                        @Override
+                        public boolean isCancelled() {
+                            return PreviewTask.this.isCancelled();
+                        }
+
+                        @Override
+                        public void onProgress(int completedChunks, int totalChunks) {
+                            updateProgress(completedChunks, totalChunks);
+                        }
+                    });
+            if (isCancelled()) {
+                throw new CancellationException("preview generation cancelled");
+            }
+            return new PreviewDisplay(previewCache.store(world, generation), generation);
+        }
+    }
+
+    private record PreviewDisplay(
+            PreviewCacheResult cache,
+            PreviewGenerationResult generation) {
     }
 }

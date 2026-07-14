@@ -1,9 +1,13 @@
 package com.mcworldexplorer.ui;
 
+import com.mcworldexplorer.preview.PreviewCenter;
+import com.mcworldexplorer.preview.PreviewCenterSource;
+import com.mcworldexplorer.preview.PreviewGenerationResult;
 import com.mcworldexplorer.world.WorldInfo;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.Map;
 
@@ -32,5 +36,22 @@ class MainControllerTest {
                 "Default", List.of(first),
                 "Modpack", List.of(second))));
         assertEquals(0, MainController.countWorlds(Map.of()));
+    }
+
+    @Test
+    void formatsPreviewCompletionStatus() {
+        PreviewGenerationResult result = new PreviewGenerationResult(
+                new BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB),
+                new PreviewCenter(12, -34, PreviewCenterSource.WORLD_SPAWN),
+                4096,
+                3000,
+                1094,
+                2,
+                500_000,
+                100);
+
+        assertEquals(
+                "已生成，2 个区块失败 · 中心 12, -34 · 3000 个区块",
+                MainController.formatPreviewStatus(result));
     }
 }
