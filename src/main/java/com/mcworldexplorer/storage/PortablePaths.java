@@ -11,6 +11,8 @@ public final class PortablePaths {
     static final String APPLICATION_HOME_PROPERTY = "mcworldexplorer.home";
     private static final String LOGS_DIRECTORY_NAME = "logs";
     private static final String CACHE_DIRECTORY_NAME = "cache";
+    private static final String EXPORTS_DIRECTORY_NAME = "exports";
+    private static final String CONFIG_DIRECTORY_NAME = "config";
 
     private PortablePaths() {
     }
@@ -40,6 +42,14 @@ public final class PortablePaths {
 
     public static Path cacheDirectory() {
         return applicationRoot().resolve(CACHE_DIRECTORY_NAME);
+    }
+
+    public static Path exportsDirectory() {
+        return applicationRoot().resolve(EXPORTS_DIRECTORY_NAME);
+    }
+
+    public static Path configDirectory() {
+        return applicationRoot().resolve(CONFIG_DIRECTORY_NAME);
     }
 
     private static Path detectedApplicationRoot() {

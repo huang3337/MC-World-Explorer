@@ -101,7 +101,8 @@
                                     <HBox alignment="CENTER_LEFT" spacing="10.0">
                                        <children>
                                           <ProgressBar fx:id="previewProgressBar" managed="false" prefWidth="220.0" progress="0.0" visible="false" />
-                                          <Label fx:id="previewStatusLabel" text="选择存档后生成缩略图" wrapText="true" />
+                                          <Label fx:id="previewStatusLabel" text="选择存档后生成缩略图" wrapText="true" HBox.hgrow="ALWAYS" />
+                                          <Button fx:id="exportPreviewButton" disable="true" mnemonicParsing="false" onAction="#handleExportPreview" text="%button.exportPreview" />
                                        </children>
                                     </HBox>
                                     <StackPane fx:id="previewSurfacePane" styleClass="preview-surface" VBox.vgrow="ALWAYS">

@@ -38,6 +38,10 @@ class PortablePathsTest {
         assertEquals(configuredRoot.toAbsolutePath(), PortablePaths.applicationRoot());
         assertEquals(configuredRoot.toAbsolutePath().resolve("logs"), PortablePaths.logsDirectory());
         assertEquals(configuredRoot.toAbsolutePath().resolve("cache"), PortablePaths.cacheDirectory());
+        assertEquals(configuredRoot.toAbsolutePath().resolve("exports"), PortablePaths.exportsDirectory());
+        assertEquals(configuredRoot.toAbsolutePath().resolve("config"), PortablePaths.configDirectory());
+        assertTrue(Files.notExists(configuredRoot.resolve("exports")));
+        assertTrue(Files.notExists(configuredRoot.resolve("config")));
     }
 
     @Test
