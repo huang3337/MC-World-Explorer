@@ -7,12 +7,19 @@ import com.mcworldexplorer.preview.PreviewCenterResolver;
 import com.mcworldexplorer.preview.PreviewGenerationMonitor;
 import com.mcworldexplorer.preview.PreviewGenerationResult;
 import com.mcworldexplorer.preview.PreviewGenerator;
+import com.mcworldexplorer.preview.PreviewExporter;
+import com.mcworldexplorer.preview.PreviewExporter.ExportException;
+import com.mcworldexplorer.preview.PreviewExporter.FailureReason;
+import com.mcworldexplorer.storage.PortableSettings;
 import com.mcworldexplorer.world.WorldInfo;
 import com.mcworldexplorer.world.WorldScanner;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ProgressIndicator;
@@ -24,6 +31,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.StackPane;
 import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,14 +40,12 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CancellationException;
-import java.util.prefs.Preferences;
 
 public class MainController {
     private static final Logger LOGGER = LoggerFactory.getLogger(MainController.class);
@@ -55,11 +61,17 @@ public class MainController {
     private static final String PREVIEW_NO_SELECTION = "选择存档后生成缩略图";
     private static final String PREVIEW_UNAVAILABLE = "该存档无法生成缩略图";
     private static final String PREVIEW_GENERATING = "正在生成缩略图...";
+    private static final String EXPORT_NO_PREVIEW = "当前没有可导出的缩略图";
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     private final PreviewGenerator previewGenerator = new PreviewGenerator();
     private final PreviewCache previewCache = new PreviewCache();
+    private final PreviewExporter previewExporter = new PreviewExporter();
+    private final PortableSettings portableSettings = new PortableSettings();
     private Task<PreviewDisplay> previewTask;
+    private PreviewExportSource previewExportSource;
+    private Path selectedRootPath;
+    private String pendingScanWarning;
     private long previewRequestId;
 
     @FXML
@@ -123,6 +135,9 @@ public class MainController {
     private ProgressBar previewProgressBar;
 
     @FXML
+    private Button exportPreviewButton;
+
+    @FXML
     public void initialize() {
         previewSurfacePane.widthProperty().addListener((observable, oldValue, newValue) -> updatePreviewImageSize());
         previewSurfacePane.heightProperty().addListener((observable, oldValue, newValue) -> updatePreviewImageSize());
@@ -148,19 +163,20 @@ public class MainController {
     }
 
     private void loadWorlds() {
-        Preferences prefs = Preferences.userNodeForPackage(MainController.class);
-        String savedPathStr = prefs.get("custom_saves_path", null);
-
         Path rootPath;
-        if (savedPathStr != null) {
-            rootPath = Paths.get(savedPathStr);
-        } else {
+        try {
+            rootPath = portableSettings.loadCustomSavesPath()
+                    .orElseGet(WorldScanner::getDefaultGameRoot);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read portable settings", e);
+            pendingScanWarning = "本地配置读取失败，已使用默认目录";
             rootPath = WorldScanner.getDefaultGameRoot();
         }
+        selectedRootPath = rootPath;
 
         if (rootPath == null || !Files.isDirectory(rootPath)) {
             showWorlds(new LinkedHashMap<>());
-            setScanState(false, FOLDER_NOT_FOUND);
+            setScanState(false, withScanWarning(FOLDER_NOT_FOUND));
             return;
         }
 
@@ -182,12 +198,12 @@ public class MainController {
             Map<String, List<WorldInfo>> groupedWorlds = scanTask.getValue();
             showWorlds(groupedWorlds);
             int worldCount = countWorlds(groupedWorlds);
-            setScanState(false, worldCount == 0 ? NO_WORLDS : worldCount + " worlds");
+            setScanState(false, withScanWarning(worldCount == 0 ? NO_WORLDS : worldCount + " worlds"));
         });
         scanTask.setOnFailed(event -> {
             LOGGER.error("Failed to scan selected Minecraft folder {}", rootPath, scanTask.getException());
             showWorlds(new LinkedHashMap<>());
-            setScanState(false, SCAN_FAILED);
+            setScanState(false, withScanWarning(SCAN_FAILED));
         });
 
         Thread scanThread = new Thread(scanTask, "world-scanner");
@@ -218,6 +234,15 @@ public class MainController {
         scanStatusLabel.setText(status);
     }
 
+    private String withScanWarning(String status) {
+        if (pendingScanWarning == null) {
+            return status;
+        }
+        String combined = status + " · " + pendingScanWarning;
+        pendingScanWarning = null;
+        return combined;
+    }
+
     static int countWorlds(Map<String, List<WorldInfo>> groupedWorlds) {
         return groupedWorlds.values().stream().mapToInt(List::size).sum();
     }
@@ -226,11 +251,9 @@ public class MainController {
     public void handleChooseFolder(ActionEvent event) {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle(CHOOSE_FOLDER_TITLE);
-        
-        Preferences prefs = Preferences.userNodeForPackage(MainController.class);
-        String savedPathStr = prefs.get("custom_saves_path", null);
-        if (savedPathStr != null) {
-            File currentDir = new File(savedPathStr);
+
+        if (selectedRootPath != null) {
+            File currentDir = selectedRootPath.toFile();
             if (currentDir.exists() && currentDir.isDirectory()) {
                 chooser.setInitialDirectory(currentDir);
             }
@@ -238,8 +261,14 @@ public class MainController {
         
         File selectedDir = chooser.showDialog(worldTreeView.getScene().getWindow());
         if (selectedDir != null) {
-            prefs.put("custom_saves_path", selectedDir.getAbsolutePath());
-            loadWorlds();
+            selectedRootPath = selectedDir.toPath().toAbsolutePath().normalize();
+            try {
+                portableSettings.saveCustomSavesPath(selectedRootPath);
+            } catch (IOException e) {
+                LOGGER.error("Failed to save portable settings", e);
+                pendingScanWarning = "目录可用，但无法保存到本地配置";
+            }
+            startWorldScan(selectedRootPath);
         }
     }
 
@@ -302,6 +331,7 @@ public class MainController {
 
     private void startPreview(WorldInfo world) {
         cancelPreviewTask();
+        clearExportState();
         previewImageView.setImage(null);
         previewPlaceholderLabel.setVisible(true);
         detailTabPane.getSelectionModel().select(previewTab);
@@ -315,6 +345,7 @@ public class MainController {
         try {
             Optional<PreviewCacheResult> reusable = previewCache.findReusable(world, center);
             if (reusable.isPresent() && showPreviewImage(reusable.orElseThrow().imagePath())) {
+                setExportSource(reusable.orElseThrow().imagePath(), world);
                 setPreviewReady(String.format(
                         "已加载缓存 · 中心 %d, %d",
                         center.x(),
@@ -341,6 +372,7 @@ public class MainController {
             }
             PreviewDisplay display = task.getValue();
             if (showPreviewImage(display.cache().imagePath())) {
+                setExportSource(display.cache().imagePath(), world);
                 setPreviewReady(formatPreviewStatus(display.generation()));
             } else {
                 showPreviewFailure("缓存图片无法读取");
@@ -386,6 +418,7 @@ public class MainController {
     }
 
     private void showPreviewFailure(String detail) {
+        clearExportState();
         previewImageView.setImage(null);
         previewPlaceholderLabel.setText("缩略图生成失败");
         previewPlaceholderLabel.setVisible(true);
@@ -395,6 +428,7 @@ public class MainController {
     }
 
     private void setPreviewIdle(String status) {
+        clearExportState();
         finishPreviewProgress();
         previewStatusLabel.setText(status);
         previewPlaceholderLabel.setText(status);
@@ -474,6 +508,7 @@ public class MainController {
 
     private void clearDetails() {
         cancelPreviewTask();
+        clearExportState();
         worldNameLabel.setText(NO_SELECTION);
         versionLabel.setText(NOT_AVAILABLE);
         gameModeLabel.setText(NOT_AVAILABLE);
@@ -485,6 +520,121 @@ public class MainController {
         playerPosLabel.setText(NOT_AVAILABLE);
         previewImageView.setImage(null);
         setPreviewIdle(PREVIEW_NO_SELECTION);
+    }
+
+    @FXML
+    public void handleExportPreview(ActionEvent event) {
+        PreviewExportSource source = previewExportSource;
+        if (source == null) {
+            previewStatusLabel.setText(EXPORT_NO_PREVIEW);
+            exportPreviewButton.setDisable(true);
+            return;
+        }
+
+        try {
+            Path exported = previewExporter.exportToDefault(
+                    source.imagePath(),
+                    source.worldName(),
+                    source.worldDirectory());
+            showExportSuccess(source, exported);
+        } catch (ExportException e) {
+            LOGGER.error("Failed to export preview {}", source.imagePath(), e);
+            if (e.reason() == FailureReason.TARGET_DIRECTORY_UNAVAILABLE
+                    || e.reason() == FailureReason.TARGET_INSIDE_WORLD) {
+                offerAlternateExportLocation(source, e);
+            } else {
+                showExportFailure(source, e);
+            }
+        }
+    }
+
+    private void offerAlternateExportLocation(PreviewExportSource source, ExportException failure) {
+        ButtonType chooseLocation = new ButtonType("选择其他位置", ButtonBar.ButtonData.OK_DONE);
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.initOwner(worldTreeView.getScene().getWindow());
+        alert.setTitle("默认导出目录不可用");
+        alert.setHeaderText("无法导出到程序根目录的 exports 文件夹");
+        alert.setContentText(failure.getMessage());
+        alert.getButtonTypes().setAll(chooseLocation, ButtonType.CANCEL);
+        if (alert.showAndWait().filter(chooseLocation::equals).isPresent()) {
+            chooseAlternateExportLocation(source);
+        }
+    }
+
+    private void chooseAlternateExportLocation(PreviewExportSource source) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("选择 PNG 导出位置");
+        chooser.setInitialFileName(previewExporter.suggestedFileName(source.worldName()));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG 图片", "*.png"));
+
+        while (isCurrentExportSource(source)) {
+            File selectedFile = chooser.showSaveDialog(worldTreeView.getScene().getWindow());
+            if (selectedFile == null) {
+                return;
+            }
+            try {
+                Path exported = previewExporter.exportToFile(
+                        source.imagePath(),
+                        selectedFile.toPath(),
+                        source.worldDirectory());
+                showExportSuccess(source, exported);
+                return;
+            } catch (ExportException e) {
+                LOGGER.error("Failed to export preview {} to {}", source.imagePath(), selectedFile, e);
+                if (e.reason() == FailureReason.TARGET_EXISTS
+                        || e.reason() == FailureReason.TARGET_INSIDE_WORLD) {
+                    showAlternateTargetWarning(e);
+                    continue;
+                }
+                showExportFailure(source, e);
+                return;
+            }
+        }
+    }
+
+    private void showAlternateTargetWarning(ExportException failure) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.initOwner(worldTreeView.getScene().getWindow());
+        alert.setTitle("无法使用所选位置");
+        alert.setHeaderText(failure.reason() == FailureReason.TARGET_EXISTS
+                ? "不会覆盖已有文件"
+                : "不会向 Minecraft 存档写入文件");
+        alert.setContentText(failure.getMessage() + "\n请重新选择或取消。");
+        alert.showAndWait();
+    }
+
+    private void setExportSource(Path imagePath, WorldInfo world) {
+        previewExportSource = new PreviewExportSource(
+                imagePath.toAbsolutePath().normalize(),
+                world.getFolderPath().toAbsolutePath().normalize(),
+                world.getLevelName());
+        exportPreviewButton.setDisable(false);
+    }
+
+    private void clearExportState() {
+        previewExportSource = null;
+        if (exportPreviewButton != null) {
+            exportPreviewButton.setDisable(true);
+        }
+    }
+
+    private boolean isCurrentExportSource(PreviewExportSource source) {
+        return previewExportSource == source;
+    }
+
+    private void showExportSuccess(PreviewExportSource source, Path exported) {
+        if (isCurrentExportSource(source)) {
+            previewStatusLabel.setText("已导出 PNG：" + exported.toAbsolutePath().normalize());
+        }
+    }
+
+    private void showExportFailure(PreviewExportSource source, ExportException failure) {
+        if (isCurrentExportSource(source)) {
+            previewStatusLabel.setText("导出失败：" + failure.getMessage());
+            if (failure.reason() == FailureReason.SOURCE_UNAVAILABLE) {
+                clearExportState();
+            }
+        }
     }
 
     private final class PreviewTask extends Task<PreviewDisplay> {
@@ -519,5 +669,11 @@ public class MainController {
     private record PreviewDisplay(
             PreviewCacheResult cache,
             PreviewGenerationResult generation) {
+    }
+
+    private record PreviewExportSource(
+            Path imagePath,
+            Path worldDirectory,
+            String worldName) {
     }
 }
