@@ -44,6 +44,8 @@ MC World Explorer/
 │  └─ mc-world-explorer.log
 ├─ exports/
 │  └─ 世界名称-导出时间.png
+├─ config/
+│  └─ settings.properties
 └─ README.txt
 ```
 
@@ -62,11 +64,11 @@ MC World Explorer/
 - 缩略图内部缓存写入程序根目录的 `cache/`。
 - 运行日志写入程序根目录的 `logs/`。
 - 用户主动导出的图片默认写入程序根目录的 `exports/`。
-- 后续如增加配置文件，应写入程序根目录的 `config/`。
+- 配置文件写入程序根目录的 `config/`。
 - 不使用 `%APPDATA%` 或 `%LOCALAPPDATA%` 保存应用生成数据。
 - 不向 Minecraft 世界目录写入缓存、日志、预览图或配置。
 - 程序目录不可写时必须显示明确提示，不允许静默回退 AppData。
-- `cache/`、`logs/`、`exports/` 和未来的 `config/` 不纳入 Git。
+- `cache/`、`logs/`、`exports/` 和 `config/` 不纳入 Git。
 - 用户导出时如果程序目录不可写，可以由用户明确选择其他目录；该行为不属于静默回退。
 
 ## 对 V0.2 的影响
@@ -89,6 +91,15 @@ MC World Explorer/
 - 开发环境实际启动时日志根为项目目录。
 - 临时 jpackage 应用镜像从无关工作目录启动时，日志根仍为 EXE 所在目录。
 - 两类启动验收均未修改或重新创建 `%APPDATA%\MC World Explorer`。
+
+2026-07-18 完成剩余落实：
+
+- `PreviewCache` 将缩略图和失效元数据写入程序根目录 `cache/`。
+- `PreviewExporter` 默认将当前预览写入程序根目录 `exports/`；默认目录失败时只有用户明确选择后才写入其他位置。
+- `PortableSettings` 将自定义 Minecraft 目录写入程序根目录 `config/settings.properties`。
+- `MainController` 停止使用 Java `Preferences`，V0.2 不再读取或写入 Windows 注册表配置。
+- 缓存、导出和配置路径均有自动化测试；真实存档测试前后文件保持不变。
+- 已有旧版本 Windows Preferences 值不由 V0.2 自动删除，避免程序擅自清理用户系统数据。
 
 ## 本机旧日志迁移记录
 

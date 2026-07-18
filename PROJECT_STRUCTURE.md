@@ -14,7 +14,7 @@ MC-World-Explorer/
 ├─ docs/
 │  ├─ progress/                   各版本开发进度与验收记录
 │  ├─ issues/                     活动问题和问题记录规范
-│  │  └─ resolved/V0.1.1/         V0.1.1 已解决问题与验算记录
+│  │  └─ resolved/                各版本已解决问题与逐文件验算记录
 │  ├─ decisions/                  已确认的重大技术决策
 │  └─ superpowers/specs/          已确认或待确认的功能设计规范
 └─ src/
@@ -22,22 +22,22 @@ MC-World-Explorer/
    │  ├─ java/com/mcworldexplorer/
    │  │  ├─ App.java              JavaFX 应用入口
    │  │  ├─ nbt/                  level.dat 解析
-   │  │  ├─ preview/              中心点、地表采样、PNG 渲染与便携缓存
+   │  │  ├─ preview/              中心点、地表采样、PNG 渲染、缓存与导出
    │  │  ├─ region/               Region 文件头、区块定位与基础解压
-   │  │  ├─ storage/              严格便携的程序根目录和运行数据路径
+   │  │  ├─ storage/              严格便携的程序根目录、运行数据路径与配置
    │  │  ├─ ui/                   控制器和存档树 UI
    │  │  └─ world/                存档模型、扫描和游戏模式
    │  └─ resources/               FXML、CSS、日志和界面文本
    └─ test/java/com/mcworldexplorer/
       ├─ nbt/                     NBT 单元测试与只读集成测试
-      ├─ preview/                 中心点、采样、渲染、缓存和真实存档验收
+      ├─ preview/                 中心点、采样、渲染、缓存、导出和真实存档验收
       ├─ region/                  Region 合成测试与真实文件只读验收
-      ├─ storage/                 便携路径、目录写入和布局识别测试
+      ├─ storage/                 便携路径、配置、目录写入和布局识别测试
       ├─ ui/                      树节点测试
       └─ world/                   模型和扫描测试
 ```
 
 `docs/decisions/DECISION-001.md` 已记录严格便携的本地数据存储决策。V0.2 已使用
-`storage/PortablePaths.java` 将日志定位到程序根目录的 `logs/`；计划使用的 `cache/`、
-`exports/` 和未来的 `config/` 同样属于程序运行数据，受 `.gitignore` 保护，不属于
+`storage/PortablePaths.java` 将日志、缓存、导出和配置定位到程序根目录的 `logs/`、
+`cache/`、`exports/` 和 `config/`。这些目录受 `.gitignore` 保护，不属于
 源码目录，也不得写入 Minecraft 存档目录。

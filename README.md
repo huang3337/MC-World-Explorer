@@ -25,7 +25,7 @@
 
 MC World Explorer 用于在不启动 Minecraft 的情况下，快速查看本地世界存档的基础信息。
 
-当前稳定版本为 **V0.1.1**，主要完成存档扫描、信息展示、整合包兼容性和 Windows 便携版支持。项目仍在持续开发中，后续计划请查阅[项目路线图](PROJECT_ROADMAP.md)。
+当前已发布稳定版本为 **V0.1.1**，主要完成存档扫描、信息展示、整合包兼容性和 Windows 便携版支持。**V0.2 已完成开发与只读验收，正在等待发布审查，尚未提供正式软件包。** 后续计划请查阅[项目路线图](PROJECT_ROADMAP.md)。
 
 ## V0.1.1 功能
 
@@ -35,6 +35,15 @@ MC World Explorer 用于在不启动 Minecraft 的情况下，快速查看本地
 - 支持读取较大的整合包 `level.dat`
 - 在后台扫描存档，并显示加载、结果数量、空目录和失败状态
 - 仅以只读方式访问存档，不提供编辑或写入功能
+
+## V0.2 待发布功能
+
+- 围绕主世界个人重生点、世界出生点或原点生成俯视缩略图
+- 只读解析标准 `.mca` Region、现代 Section 和 Palette 数据
+- 生成并在程序内显示 `512 x 512` PNG 世界预览
+- 自动复用程序根目录 `cache/` 中的有效缓存
+- 一键导出当前预览到程序根目录 `exports/`
+- 日志、缓存、导出和配置全部保存在程序根目录，不再写入 AppData 或 Windows Preferences
 
 ## 快速开始
 
@@ -50,16 +59,17 @@ MC World Explorer 用于在不启动 Minecraft 的情况下，快速查看本地
 
 ## 存档安全
 
-当前版本仅以只读方式访问 `level.dat`、`icon.png` 和存档文件元数据，不会修改、移动或删除 Minecraft 存档。
+当前源码仅以只读方式访问 `level.dat`、`icon.png`、目录元数据和 `region/*.mca`，不会修改、移动或删除 Minecraft 存档，也不读取或写入 `playerdata/*.dat`。
 
-程序不解析或写入 `region/*.mca`、`playerdata/*.dat` 等后续版本内容。对于重要存档，仍建议保持正常的备份习惯。
+程序生成的日志、缩略图缓存、导出图片和配置分别保存在程序根目录的 `logs/`、`cache/`、`exports/` 和 `config/`。对于重要存档，仍建议保持正常的备份习惯。
 
 ## 开发状态
 
-MC World Explorer **仍在持续开发中**。V0.1.1 是当前稳定版本，V0.2 已进入开发但尚未发布；地图、Region 解析和三维浏览等后续能力不属于当前稳定版本。
+MC World Explorer **仍在持续开发中**。V0.1.1 是当前已发布稳定版本；V0.2 的世界缩略图、缓存和 PNG 导出已经完成开发与真实存档只读验收，等待审查后再打包和发布。V0.3 地图拖动、缩放、坐标定位和标记系统尚未开始。
 
 - [查看完整项目路线图](PROJECT_ROADMAP.md)
 - [查看 V0.1.1 开发与验收记录](docs/progress/V0.1.1.md)
+- [查看 V0.2 开发与验收记录](docs/progress/V0.2.md)
 - [下载 V0.1.1](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.1.1)
 
 ## 从源码运行
@@ -70,7 +80,7 @@ MC World Explorer **仍在持续开发中**。V0.1.1 是当前稳定版本，V0.
 .\gradlew.bat run
 ```
 
-首次构建需要下载 Gradle 和项目依赖。应用日志位于 `%APPDATA%\MC World Explorer\logs\mc-world-explorer.log`。
+首次构建需要下载 Gradle 和项目依赖。应用日志位于项目根目录 `logs/mc-world-explorer.log`；运行数据位于同一根目录下的 `cache/`、`exports/` 和 `config/`。
 
 ## 许可证
 
