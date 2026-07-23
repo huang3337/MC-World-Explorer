@@ -116,7 +116,11 @@ public class LevelDatReader {
         if (player != null && !player.keySet().isEmpty()) {
             ListBinaryTag pos = player.getList("Pos", BinaryTagTypes.DOUBLE);
             if (pos != null && pos.size() >= 3) {
-                info.setPlayerPosition(pos.getDouble(0), pos.getDouble(1), pos.getDouble(2));
+                info.setPlayerPosition(
+                        pos.getDouble(0),
+                        pos.getDouble(1),
+                        pos.getDouble(2),
+                        readDimension(player.get("Dimension")));
             }
             if (player.keySet().contains("SpawnX")
                     && player.keySet().contains("SpawnY")

@@ -30,11 +30,12 @@ class WorldInfoTest {
         assertFalse(info.isPlayerPositionAvailable());
 
         info.setRandomSeed(0);
-        info.setPlayerPosition(0, 0, 0);
+        info.setPlayerPosition(0, 0, 0, "minecraft:overworld");
 
         assertTrue(info.isSeedAvailable());
         assertTrue(info.isPlayerPositionAvailable());
         assertEquals(0, info.getRandomSeed());
+        assertEquals("minecraft:overworld", info.getPlayerDimension());
     }
 
     @Test
