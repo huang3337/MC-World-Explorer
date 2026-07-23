@@ -64,6 +64,64 @@ class SurfaceSamplerTest {
     }
 
     @Test
+    void samplesHighestWalkableFloorInsideHeightBand() throws IOException {
+        ListBinaryTag palette = palette("minecraft:air", "minecraft:stone");
+        long[] data = new long[256];
+        setPadded(data, 4, blockIndex(2, 3, 4), 1);
+        setPadded(data, 4, blockIndex(2, 8, 4), 1);
+        setPadded(data, 4, blockIndex(2, 9, 4), 1);
+        CompoundBinaryTag root = modernChunk(section(0, palette, data));
+
+        ChunkSurface surface = sampler.sample(
+                stream(root),
+                PreviewLayer.heightBand(0, 7));
+
+        assertEquals(new SurfaceColumn("minecraft:stone", 3),
+                surface.getColumn(2, 4).orElseThrow());
+    }
+
+    @Test
+    void checksHeadroomAcrossSectionBoundary() throws IOException {
+        ListBinaryTag palette = palette("minecraft:air", "minecraft:stone");
+        long[] lowerData = new long[256];
+        setPadded(lowerData, 4, blockIndex(1, 15, 1), 1);
+        CompoundBinaryTag upperAir = CompoundBinaryTag.builder()
+                .putInt("Y", 1)
+                .put("block_states", CompoundBinaryTag.builder()
+                        .put("palette", palette("minecraft:air"))
+                        .build())
+                .build();
+        CompoundBinaryTag root = modernChunk(section(0, palette, lowerData), upperAir);
+
+        ChunkSurface surface = sampler.sample(
+                stream(root),
+                PreviewLayer.heightBand(0, 15));
+
+        assertEquals(new SurfaceColumn("minecraft:stone", 15),
+                surface.getColumn(1, 1).orElseThrow());
+    }
+
+    @Test
+    void reportsActualSectionRange() throws IOException {
+        CompoundBinaryTag lower = CompoundBinaryTag.builder()
+                .putInt("Y", -2)
+                .put("block_states", CompoundBinaryTag.builder()
+                        .put("palette", palette("minecraft:deepslate"))
+                        .build())
+                .build();
+        CompoundBinaryTag upper = CompoundBinaryTag.builder()
+                .putInt("Y", 4)
+                .put("block_states", CompoundBinaryTag.builder()
+                        .put("palette", palette("minecraft:stone"))
+                        .build())
+                .build();
+
+        assertEquals(
+                new DimensionHeightRange(-32, 79),
+                sampler.sectionRange(stream(modernChunk(lower, upper))).orElseThrow());
+    }
+
+    @Test
     void supportsLevelPaletteWithCompactCrossLongPacking() throws IOException {
         List<String> names = new ArrayList<>();
         names.add("minecraft:air");
@@ -156,6 +214,20 @@ class SurfaceSamplerTest {
             builder.add(section);
         }
         return builder.build();
+    }
+
+    private static CompoundBinaryTag section(int y, ListBinaryTag palette, long[] data) {
+        return CompoundBinaryTag.builder()
+                .putInt("Y", y)
+                .put("block_states", CompoundBinaryTag.builder()
+                        .put("palette", palette)
+                        .putLongArray("data", data)
+                        .build())
+                .build();
+    }
+
+    private static CompoundBinaryTag modernChunk(CompoundBinaryTag... sections) {
+        return CompoundBinaryTag.builder().put("sections", sections(sections)).build();
     }
 
     private static ByteArrayInputStream stream(CompoundBinaryTag root) throws IOException {

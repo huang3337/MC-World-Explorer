@@ -23,6 +23,7 @@ public class WorldInfo {
     private double playerX;
     private double playerY;
     private double playerZ;
+    private String playerDimension;
     private boolean playerPositionAvailable;
     private int playerRespawnX;
     private int playerRespawnY;
@@ -118,11 +119,21 @@ public class WorldInfo {
 
     public double getPlayerZ() { return playerZ; }
     public void setPlayerZ(double playerZ) { this.playerZ = playerZ; }
+    public String getPlayerDimension() { return playerDimension; }
 
     public void setPlayerPosition(double playerX, double playerY, double playerZ) {
+        setPlayerPosition(playerX, playerY, playerZ, null);
+    }
+
+    public void setPlayerPosition(
+            double playerX,
+            double playerY,
+            double playerZ,
+            String playerDimension) {
         this.playerX = playerX;
         this.playerY = playerY;
         this.playerZ = playerZ;
+        this.playerDimension = playerDimension;
         this.playerPositionAvailable = true;
     }
 
@@ -163,6 +174,7 @@ public class WorldInfo {
                 ", spawnPos=(" + spawnX + ", " + spawnY + ", " + spawnZ + ")" +
                 ", playerRespawnPos=(" + playerRespawnX + ", " + playerRespawnY + ", " + playerRespawnZ + ")" +
                 ", playerRespawnDimension='" + playerRespawnDimension + '\'' +
+                ", playerDimension='" + playerDimension + '\'' +
                 ", playerPos=(" + playerX + ", " + playerY + ", " + playerZ + ")" +
                 '}';
     }

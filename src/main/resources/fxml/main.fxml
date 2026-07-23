@@ -8,11 +8,14 @@
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.ProgressIndicator?>
 <?import javafx.scene.control.ProgressBar?>
 <?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.Tab?>
 <?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.StackPane?>
@@ -97,8 +100,26 @@
                                  <padding>
                                     <Insets bottom="12.0" left="12.0" right="12.0" top="12.0" />
                                  </padding>
-                                 <children>
-                                    <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                  <children>
+                                     <VBox spacing="6.0">
+                                        <children>
+                                           <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                              <children>
+                                                 <Label text="维度" />
+                                                 <ComboBox fx:id="dimensionComboBox" disable="true" prefWidth="260.0" />
+                                                 <ToggleButton fx:id="surfaceOverviewButton" disable="true" mnemonicParsing="false" onAction="#handleSurfaceOverview" text="地表总览" />
+                                              </children>
+                                           </HBox>
+                                           <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                              <children>
+                                                 <Label text="洞穴高度" />
+                                                 <Label fx:id="layerRangeLabel" minWidth="180.0" text="-" />
+                                                 <Slider fx:id="layerHeightSlider" blockIncrement="1.0" disable="true" majorTickUnit="32.0" minWidth="160.0" showTickMarks="true" HBox.hgrow="ALWAYS" />
+                                              </children>
+                                           </HBox>
+                                        </children>
+                                     </VBox>
+                                     <HBox alignment="CENTER_LEFT" spacing="10.0">
                                        <children>
                                           <ProgressBar fx:id="previewProgressBar" managed="false" prefWidth="220.0" progress="0.0" visible="false" />
                                           <Label fx:id="previewStatusLabel" text="选择存档后生成缩略图" wrapText="true" HBox.hgrow="ALWAYS" />
