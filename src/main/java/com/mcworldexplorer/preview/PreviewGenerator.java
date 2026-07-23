@@ -32,28 +32,47 @@ public final class PreviewGenerator {
     }
 
     public PreviewGenerationResult generate(WorldInfo world) throws IOException {
-        return generate(world, PreviewGenerationMonitor.NONE);
+        return generate(world, defaultRequest(world), PreviewGenerationMonitor.NONE);
     }
 
     public PreviewGenerationResult generate(
             WorldInfo world,
             PreviewGenerationMonitor monitor) throws IOException {
+        return generate(world, defaultRequest(world), monitor);
+    }
+
+    public PreviewGenerationResult generate(
+            WorldInfo world,
+            PreviewRequest request) throws IOException {
+        return generate(world, request, PreviewGenerationMonitor.NONE);
+    }
+
+    public PreviewGenerationResult generate(
+            WorldInfo world,
+            PreviewRequest request,
+            PreviewGenerationMonitor monitor) throws IOException {
         if (world == null) {
             throw new IllegalArgumentException("world must not be null");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("request must not be null");
         }
         if (monitor == null) {
             throw new IllegalArgumentException("monitor must not be null");
         }
 
-        PreviewCenter center = PreviewCenterResolver.resolve(world);
-        int minBlockX = center.x() - BLOCK_RANGE / 2;
-        int minBlockZ = center.z() - BLOCK_RANGE / 2;
-        int maxBlockX = minBlockX + BLOCK_RANGE - 1;
-        int maxBlockZ = minBlockZ + BLOCK_RANGE - 1;
-        int minChunkX = Math.floorDiv(minBlockX, 16);
-        int minChunkZ = Math.floorDiv(minBlockZ, 16);
-        int maxChunkX = Math.floorDiv(maxBlockX, 16);
-        int maxChunkZ = Math.floorDiv(maxBlockZ, 16);
+        Path worldDirectory = world.getFolderPath().toAbsolutePath().normalize();
+        Path regionDirectory = request.dimension().regionDirectory().toAbsolutePath().normalize();
+        if (!regionDirectory.startsWith(worldDirectory)) {
+            throw new IllegalArgumentException("dimension Region directory must stay inside the world directory");
+        }
+
+        PreviewCenter center = request.center();
+        PreviewBounds bounds = boundsFor(center);
+        int minChunkX = bounds.minChunkX();
+        int minChunkZ = bounds.minChunkZ();
+        int maxChunkX = bounds.maxChunkX();
+        int maxChunkZ = bounds.maxChunkZ();
         int totalChunks = (maxChunkX - minChunkX + 1) * (maxChunkZ - minChunkZ + 1);
 
         int[] blockColors = new int[BLOCK_RANGE * BLOCK_RANGE];
@@ -67,6 +86,7 @@ public final class PreviewGenerator {
         int completedChunks = 0;
 
         Map<Path, RegionFileReader> readers = new HashMap<>();
+        Set<Path> emptyRegions = new HashSet<>();
         Set<Path> unavailableRegions = new HashSet<>();
         IOException closeFailure = null;
         try {
@@ -78,9 +98,15 @@ public final class PreviewGenerator {
 
                     int regionX = Math.floorDiv(chunkX, 32);
                     int regionZ = Math.floorDiv(chunkZ, 32);
-                    Path regionPath = world.getFolderPath().resolve("region")
-                            .resolve("r." + regionX + "." + regionZ + ".mca");
+                    Path regionPath = regionDirectory.resolve(
+                            "r." + regionX + "." + regionZ + ".mca");
                     if (!Files.isRegularFile(regionPath)) {
+                        missingChunks++;
+                        completedChunks++;
+                        monitor.onProgress(completedChunks, totalChunks);
+                        continue;
+                    }
+                    if (emptyRegions.contains(regionPath)) {
                         missingChunks++;
                         completedChunks++;
                         monitor.onProgress(completedChunks, totalChunks);
@@ -96,6 +122,13 @@ public final class PreviewGenerator {
                     RegionFileReader reader = readers.get(regionPath);
                     if (reader == null) {
                         try {
+                            if (Files.size(regionPath) == 0) {
+                                emptyRegions.add(regionPath);
+                                missingChunks++;
+                                completedChunks++;
+                                monitor.onProgress(completedChunks, totalChunks);
+                                continue;
+                            }
                             reader = new RegionFileReader(regionPath);
                             readers.put(regionPath, reader);
                         } catch (IOException e) {
@@ -114,7 +147,9 @@ public final class PreviewGenerator {
                         if (chunk.isEmpty()) {
                             missingChunks++;
                         } else {
-                            ChunkSurface surface = surfaceSampler.sample(chunk.orElseThrow());
+                            ChunkSurface surface = surfaceSampler.sample(
+                                    chunk.orElseThrow(),
+                                    request.layer());
                             sampledChunks++;
                             for (int localZ = 0; localZ < 16; localZ++) {
                                 for (int localX = 0; localX < 16; localX++) {
@@ -122,15 +157,15 @@ public final class PreviewGenerator {
                                     if (column.isEmpty()) {
                                         continue;
                                     }
-                                    int blockX = chunkX * 16 + localX - minBlockX;
-                                    int blockZ = chunkZ * 16 + localZ - minBlockZ;
+                                    long blockX = (long) chunkX * 16 + localX - bounds.minBlockX();
+                                    long blockZ = (long) chunkZ * 16 + localZ - bounds.minBlockZ();
                                     if (blockX < 0 || blockX >= BLOCK_RANGE
                                             || blockZ < 0 || blockZ >= BLOCK_RANGE) {
                                         continue;
                                     }
                                     SurfaceColumn value = column.orElseThrow();
                                     BlockColorPalette.BlockColor color = BlockColorPalette.resolve(value.blockName());
-                                    int index = blockX + blockZ * BLOCK_RANGE;
+                                    int index = (int) blockX + (int) blockZ * BLOCK_RANGE;
                                     blockColors[index] = color.rgb();
                                     heights[index] = value.y();
                                     populated[index] = true;
@@ -175,5 +210,57 @@ public final class PreviewGenerator {
                 failedChunks,
                 populatedColumns,
                 unknownBlockColumns);
+    }
+
+    static PreviewBounds boundsFor(PreviewCenter center) {
+        if (center == null) {
+            throw new IllegalArgumentException("center must not be null");
+        }
+        long minBlockX = (long) center.x() - BLOCK_RANGE / 2L;
+        long minBlockZ = (long) center.z() - BLOCK_RANGE / 2L;
+        long maxBlockX = minBlockX + BLOCK_RANGE - 1L;
+        long maxBlockZ = minBlockZ + BLOCK_RANGE - 1L;
+        int minChunkX = Math.toIntExact(Math.floorDiv(minBlockX, 16L));
+        int minChunkZ = Math.toIntExact(Math.floorDiv(minBlockZ, 16L));
+        int maxChunkX = Math.toIntExact(Math.floorDiv(maxBlockX, 16L));
+        int maxChunkZ = Math.toIntExact(Math.floorDiv(maxBlockZ, 16L));
+        return new PreviewBounds(
+                minBlockX,
+                minBlockZ,
+                maxBlockX,
+                maxBlockZ,
+                minChunkX,
+                minChunkZ,
+                maxChunkX,
+                maxChunkZ,
+                Math.floorDiv(minChunkX, 32),
+                Math.floorDiv(minChunkZ, 32),
+                Math.floorDiv(maxChunkX, 32),
+                Math.floorDiv(maxChunkZ, 32));
+    }
+
+    private static PreviewRequest defaultRequest(WorldInfo world) {
+        if (world == null) {
+            throw new IllegalArgumentException("world must not be null");
+        }
+        return new PreviewRequest(
+                WorldDimension.overworld(world.getFolderPath()),
+                PreviewCenterResolver.resolve(world),
+                PreviewLayer.surfaceOverview());
+    }
+
+    record PreviewBounds(
+            long minBlockX,
+            long minBlockZ,
+            long maxBlockX,
+            long maxBlockZ,
+            int minChunkX,
+            int minChunkZ,
+            int maxChunkX,
+            int maxChunkZ,
+            int minRegionX,
+            int minRegionZ,
+            int maxRegionX,
+            int maxRegionZ) {
     }
 }

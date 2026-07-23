@@ -14,6 +14,7 @@ import java.nio.file.attribute.FileTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PreviewCacheTest {
@@ -93,8 +94,41 @@ class PreviewCacheTest {
                 world,
                 result(new BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB)));
 
-        assertEquals(PortablePaths.cacheDirectory(), stored.imagePath().getParent().getParent());
-        assertTrue(stored.imagePath().getParent().getFileName().toString().startsWith("world-"));
+        assertEquals(PortablePaths.cacheDirectory(), stored.imagePath().getParent().getParent().getParent());
+        assertTrue(stored.imagePath().getParent().getParent().getFileName().toString().startsWith("world-"));
+    }
+
+    @Test
+    void isolatesDimensionAndLayerCaches() throws IOException {
+        System.setProperty(HOME_PROPERTY, tempDir.toString());
+        Path worldFolder = Files.createDirectory(tempDir.resolve("layered-world"));
+        Files.writeString(worldFolder.resolve("level.dat"), "level");
+        Files.createDirectories(worldFolder.resolve("region"));
+        Files.createDirectories(worldFolder.resolve("DIM-1/region"));
+        WorldInfo world = new WorldInfo(worldFolder);
+        PreviewGenerationResult generation = result(
+                new BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB));
+        PreviewRequest overworldSurface = new PreviewRequest(
+                WorldDimension.overworld(worldFolder),
+                generation.center(),
+                PreviewLayer.surfaceOverview());
+        PreviewRequest netherBand = new PreviewRequest(
+                WorldDimension.nether(worldFolder),
+                generation.center(),
+                PreviewLayer.heightBand(64, 95));
+        PreviewCache cache = new PreviewCache();
+
+        PreviewCacheResult surface = cache.store(world, overworldSurface, generation);
+        PreviewCacheResult nether = cache.store(world, netherBand, generation);
+
+        assertFalse(surface.imagePath().equals(nether.imagePath()));
+        assertEquals("surface-overview.png", surface.imagePath().getFileName().toString());
+        assertEquals("y-64-95.png", nether.imagePath().getFileName().toString());
+        String metadata = Files.readString(nether.metadataPath());
+        assertTrue(metadata.contains("\"dimensionId\": \"minecraft:the_nether\""));
+        assertTrue(metadata.contains("\"layerType\": \"HEIGHT_BAND\""));
+        assertEquals(surface, cache.findReusable(world, overworldSurface).orElseThrow());
+        assertEquals(nether, cache.findReusable(world, netherBand).orElseThrow());
     }
 
     @Test
@@ -134,6 +168,41 @@ class PreviewCacheTest {
         Files.write(regionDirectory.resolve("r.0.0.mca"), new byte[8192]);
 
         assertFalse(cache.findReusable(world, generation.center()).isPresent());
+    }
+
+    @Test
+    void rejectsCorruptedPngEvenWhenMetadataStillMatches() throws IOException {
+        System.setProperty(HOME_PROPERTY, tempDir.toString());
+        Path worldFolder = Files.createDirectory(tempDir.resolve("corrupt-cache-world"));
+        Files.writeString(worldFolder.resolve("level.dat"), "level");
+        WorldInfo world = new WorldInfo(worldFolder);
+        PreviewCache cache = new PreviewCache();
+        PreviewGenerationResult generation = result(
+                new BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB));
+        PreviewCacheResult stored = cache.store(world, generation);
+        Files.writeString(stored.imagePath(), "not a png");
+
+        assertFalse(cache.findReusable(world, generation.center()).isPresent());
+    }
+
+    @Test
+    void rejectsCacheRequestsForRegionDirectoriesOutsideTheWorld() throws IOException {
+        System.setProperty(HOME_PROPERTY, tempDir.toString());
+        Path worldFolder = Files.createDirectory(tempDir.resolve("bounded-cache-world"));
+        Path outsideRegion = Files.createDirectories(tempDir.resolve("outside/region"));
+        WorldInfo world = new WorldInfo(worldFolder);
+        PreviewGenerationResult generation = result(
+                new BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB));
+        PreviewRequest request = new PreviewRequest(
+                new WorldDimension("example:outside", "outside", outsideRegion, DimensionKind.MOD),
+                generation.center(),
+                PreviewLayer.surfaceOverview());
+        PreviewCache cache = new PreviewCache();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> cache.store(world, request, generation));
+        assertThrows(IllegalArgumentException.class,
+                () -> cache.findReusable(world, request));
     }
 
     private static PreviewGenerationResult result(BufferedImage image) {

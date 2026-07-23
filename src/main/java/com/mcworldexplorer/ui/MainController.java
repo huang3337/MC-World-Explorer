@@ -2,29 +2,38 @@ package com.mcworldexplorer.ui;
 
 import com.mcworldexplorer.preview.PreviewCache;
 import com.mcworldexplorer.preview.PreviewCacheResult;
-import com.mcworldexplorer.preview.PreviewCenter;
-import com.mcworldexplorer.preview.PreviewCenterResolver;
+import com.mcworldexplorer.preview.DimensionHeightRange;
+import com.mcworldexplorer.preview.DimensionHeightResolver;
 import com.mcworldexplorer.preview.PreviewGenerationMonitor;
 import com.mcworldexplorer.preview.PreviewGenerationResult;
 import com.mcworldexplorer.preview.PreviewGenerator;
 import com.mcworldexplorer.preview.PreviewExporter;
+import com.mcworldexplorer.preview.PreviewLayer;
+import com.mcworldexplorer.preview.PreviewRequest;
+import com.mcworldexplorer.preview.PreviewRequestResolver;
+import com.mcworldexplorer.preview.WorldDimension;
+import com.mcworldexplorer.preview.WorldDimensionDiscovery;
 import com.mcworldexplorer.preview.PreviewExporter.ExportException;
 import com.mcworldexplorer.preview.PreviewExporter.FailureReason;
 import com.mcworldexplorer.storage.PortableSettings;
 import com.mcworldexplorer.world.WorldInfo;
 import com.mcworldexplorer.world.WorldScanner;
 import javafx.concurrent.Task;
+import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.Slider;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.image.Image;
@@ -41,6 +50,7 @@ import java.text.SimpleDateFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,9 +80,12 @@ public class MainController {
     private final PortableSettings portableSettings = new PortableSettings();
     private Task<PreviewDisplay> previewTask;
     private PreviewExportSource previewExportSource;
+    private WorldInfo previewWorld;
     private Path selectedRootPath;
     private String pendingScanWarning;
     private long previewRequestId;
+    private boolean updatingPreviewControls;
+    private final DimensionPreviewStateStore dimensionPreviewStates = new DimensionPreviewStateStore();
 
     @FXML
     private TreeView<WorldTreeNode> worldTreeView;
@@ -138,9 +151,39 @@ public class MainController {
     private Button exportPreviewButton;
 
     @FXML
+    private ComboBox<WorldDimension> dimensionComboBox;
+
+    @FXML
+    private ToggleButton surfaceOverviewButton;
+
+    @FXML
+    private Slider layerHeightSlider;
+
+    @FXML
+    private Label layerRangeLabel;
+
+    @FXML
     public void initialize() {
         previewSurfacePane.widthProperty().addListener((observable, oldValue, newValue) -> updatePreviewImageSize());
         previewSurfacePane.heightProperty().addListener((observable, oldValue, newValue) -> updatePreviewImageSize());
+        dimensionComboBox.valueProperty().addListener((observable, oldValue, newValue) -> {
+            if (!updatingPreviewControls && previewWorld != null && newValue != null) {
+                selectPreviewDimension(previewWorld, newValue);
+            }
+        });
+        layerHeightSlider.valueProperty().addListener((observable, oldValue, newValue) -> {
+            if (!updatingPreviewControls) {
+                updateSliderPosition(newValue.doubleValue());
+                if (!layerHeightSlider.isValueChanging()) {
+                    activateSliderLayer();
+                }
+            }
+        });
+        layerHeightSlider.valueChangingProperty().addListener((observable, oldValue, newValue) -> {
+            if (!updatingPreviewControls && oldValue && !newValue) {
+                activateSliderLayer();
+            }
+        });
         clearDetails();
 
         // Setup custom cell factory for icons and names
@@ -152,7 +195,7 @@ public class MainController {
                     if (newValue != null && newValue.getValue().getWorldInfo() != null) {
                         WorldInfo world = newValue.getValue().getWorldInfo();
                         showWorldDetails(world);
-                        startPreview(world);
+                        preparePreview(world);
                     } else {
                         clearDetails();
                     }
@@ -329,35 +372,64 @@ public class MainController {
         }
     }
 
-    private void startPreview(WorldInfo world) {
+    private void preparePreview(WorldInfo world) {
         cancelPreviewTask();
         clearExportState();
         previewImageView.setImage(null);
         previewPlaceholderLabel.setVisible(true);
         detailTabPane.getSelectionModel().select(previewTab);
+        previewWorld = world;
+        dimensionPreviewStates.clear();
+        clearPreviewControls();
 
         if (!world.isParsed()) {
             setPreviewIdle(PREVIEW_UNAVAILABLE);
             return;
         }
 
-        PreviewCenter center = PreviewCenterResolver.resolve(world);
         try {
-            Optional<PreviewCacheResult> reusable = previewCache.findReusable(world, center);
-            if (reusable.isPresent() && showPreviewImage(reusable.orElseThrow().imagePath())) {
-                setExportSource(reusable.orElseThrow().imagePath(), world);
-                setPreviewReady(String.format(
-                        "已加载缓存 · 中心 %d, %d",
-                        center.x(),
-                        center.z()));
+            List<WorldDimension> dimensions = WorldDimensionDiscovery.discover(world);
+            updatingPreviewControls = true;
+            dimensionComboBox.setItems(FXCollections.observableArrayList(dimensions));
+            dimensionComboBox.getSelectionModel().selectFirst();
+            dimensionComboBox.setDisable(dimensions.isEmpty());
+            updatingPreviewControls = false;
+            WorldDimension initialDimension = dimensionComboBox.getValue();
+            if (initialDimension == null) {
+                setPreviewIdle("该存档没有可预览维度");
                 return;
             }
+            selectPreviewDimension(world, initialDimension);
         } catch (IOException e) {
-            LOGGER.debug("Failed to read preview cache for {}", world.getFolderPath(), e);
+            LOGGER.error("Failed to discover dimensions for {}", world.getFolderPath(), e);
+            showPreviewFailure(shortMessage(e));
         }
+    }
+
+    private void selectPreviewDimension(WorldInfo world, WorldDimension dimension) {
+        DimensionPreviewState state = dimensionPreviewStates.get(dimension);
+        if (state == null) {
+            clearLayerControls();
+            startPreview(world, dimension, null, null);
+        } else {
+            updateLayerControls(state);
+            startPreview(world, dimension, state.selectedLayer(), state.sliderY());
+        }
+    }
+
+    private void startPreview(
+            WorldInfo world,
+            WorldDimension dimension,
+            PreviewLayer requestedLayer,
+            Integer preferredSliderY) {
+        cancelPreviewTask();
+        clearExportState();
+        previewImageView.setImage(null);
+        previewPlaceholderLabel.setVisible(true);
+        setLayerControlsDisabled(true);
 
         long requestId = previewRequestId;
-        PreviewTask task = new PreviewTask(world);
+        PreviewTask task = new PreviewTask(world, dimension, requestedLayer, preferredSliderY);
         previewTask = task;
         previewStatusLabel.setText(PREVIEW_GENERATING);
         previewPlaceholderLabel.setText(PREVIEW_GENERATING);
@@ -371,10 +443,30 @@ public class MainController {
                 return;
             }
             PreviewDisplay display = task.getValue();
+            int sliderY = resolveSliderY(
+                    world,
+                    dimension,
+                    display.heightRange(),
+                    display.request().layer(),
+                    task.preferredSliderY);
+            DimensionPreviewState state = new DimensionPreviewState(
+                    display.heightRange(),
+                    sliderY,
+                    display.request().layer());
             if (showPreviewImage(display.cache().imagePath())) {
+                dimensionPreviewStates.put(dimension, state);
+                updateLayerControls(state);
                 setExportSource(display.cache().imagePath(), world);
-                setPreviewReady(formatPreviewStatus(display.generation()));
+                setPreviewReady(display.generation() == null
+                        ? formatCachedPreviewStatus(display.request())
+                        : formatPreviewStatus(display.generation(), display.request()));
             } else {
+                DimensionPreviewState previousState = dimensionPreviewStates.get(dimension);
+                if (previousState == null) {
+                    clearLayerControls();
+                } else {
+                    updateLayerControls(previousState);
+                }
                 showPreviewFailure("缓存图片无法读取");
             }
         });
@@ -382,9 +474,14 @@ public class MainController {
             if (!isCurrentPreview(task, requestId)) {
                 return;
             }
-            finishPreviewProgress();
             Throwable failure = task.getException();
             LOGGER.error("Failed to generate preview for {}", world.getFolderPath(), failure);
+            DimensionPreviewState state = dimensionPreviewStates.get(dimension);
+            if (state == null) {
+                clearLayerControls();
+            } else {
+                updateLayerControls(state);
+            }
             showPreviewFailure(shortMessage(failure));
         });
         task.setOnCancelled(event -> {
@@ -396,6 +493,107 @@ public class MainController {
         Thread thread = new Thread(task, "world-preview-" + requestId);
         thread.setDaemon(true);
         thread.start();
+    }
+
+    @FXML
+    public void handleSurfaceOverview(ActionEvent event) {
+        if (updatingPreviewControls) {
+            return;
+        }
+        if (!surfaceOverviewButton.isSelected()) {
+            updatingPreviewControls = true;
+            surfaceOverviewButton.setSelected(true);
+            updatingPreviewControls = false;
+        }
+
+        WorldDimension dimension = dimensionComboBox.getValue();
+        if (previewWorld == null || dimension == null) {
+            return;
+        }
+        DimensionPreviewState state = dimensionPreviewStates.get(dimension);
+        if (state == null) {
+            return;
+        }
+        PreviewLayer surface = PreviewLayer.surfaceOverview();
+        startPreview(previewWorld, dimension, surface, state.sliderY());
+    }
+
+    private void updateSliderPosition(double value) {
+        WorldDimension dimension = dimensionComboBox.getValue();
+        if (dimension == null) {
+            return;
+        }
+        DimensionPreviewState state = dimensionPreviewStates.get(dimension);
+        if (state == null) {
+            return;
+        }
+        int sliderY = sliderCoordinate(state.heightRange(), value);
+        layerRangeLabel.setText(formatLayerSliderLabel(state.heightRange(), sliderY));
+        dimensionPreviewStates.put(dimension, state.withSliderY(sliderY));
+    }
+
+    private void activateSliderLayer() {
+        WorldDimension dimension = dimensionComboBox.getValue();
+        if (previewWorld == null || dimension == null) {
+            return;
+        }
+        DimensionPreviewState state = dimensionPreviewStates.get(dimension);
+        if (state == null) {
+            return;
+        }
+        int sliderY = sliderCoordinate(state.heightRange(), layerHeightSlider.getValue());
+        PreviewLayer layer = layerForSlider(state.heightRange(), sliderY);
+        if (shouldSkipLayerRequest(
+                layer,
+                state.selectedLayer(),
+                previewImageView.getImage() != null)) {
+            return;
+        }
+
+        dimensionPreviewStates.put(dimension, state.withSliderY(sliderY));
+        updatingPreviewControls = true;
+        surfaceOverviewButton.setSelected(false);
+        updatingPreviewControls = false;
+        // selectedLayer tracks the last successfully displayed preview.
+        startPreview(previewWorld, dimension, layer, sliderY);
+    }
+
+    private void updateLayerControls(DimensionPreviewState state) {
+        updatingPreviewControls = true;
+        surfaceOverviewButton.setSelected(state.selectedLayer().isSurfaceOverview());
+        surfaceOverviewButton.setDisable(false);
+        layerHeightSlider.setMin(state.heightRange().minY());
+        layerHeightSlider.setMax(state.heightRange().maxY());
+        layerHeightSlider.setValue(state.sliderY());
+        layerHeightSlider.setDisable(false);
+        layerRangeLabel.setText(formatLayerSliderLabel(state.heightRange(), state.sliderY()));
+        updatingPreviewControls = false;
+    }
+
+    private void setLayerControlsDisabled(boolean disabled) {
+        surfaceOverviewButton.setDisable(disabled);
+        layerHeightSlider.setDisable(disabled);
+    }
+
+    private void clearPreviewControls() {
+        updatingPreviewControls = true;
+        dimensionComboBox.getItems().clear();
+        dimensionComboBox.setDisable(true);
+        clearLayerControls();
+        updatingPreviewControls = false;
+    }
+
+    private void clearLayerControls() {
+        boolean wasUpdating = updatingPreviewControls;
+        updatingPreviewControls = true;
+        surfaceOverviewButton.setSelected(false);
+        surfaceOverviewButton.setDisable(true);
+        layerHeightSlider.setMin(0);
+        layerHeightSlider.setMax(0);
+        layerHeightSlider.setValue(0);
+        layerHeightSlider.setDisable(true);
+        layerRangeLabel.setText(NOT_AVAILABLE);
+        updatingPreviewControls = wasUpdating;
     }
 
     private boolean showPreviewImage(Path imagePath) {
@@ -418,6 +616,7 @@ public class MainController {
     }
 
     private void showPreviewFailure(String detail) {
+        finishPreviewProgress();
         clearExportState();
         previewImageView.setImage(null);
         previewPlaceholderLabel.setText("缩略图生成失败");
@@ -444,6 +643,13 @@ public class MainController {
 
     static boolean shouldShowPreviewPlaceholder(boolean imagePresent) {
         return !imagePresent;
+    }
+
+    static boolean shouldSkipLayerRequest(
+            PreviewLayer requestedLayer,
+            PreviewLayer selectedLayer,
+            boolean imagePresent) {
+        return imagePresent && requestedLayer.equals(selectedLayer);
     }
 
     private void cancelPreviewTask() {
@@ -475,6 +681,73 @@ public class MainController {
                 result.center().x(),
                 result.center().z(),
                 result.sampledChunks());
+    }
+
+    static PreviewLayer layerForSlider(DimensionHeightRange heightRange, double sliderValue) {
+        return heightRange.bandContaining(sliderCoordinate(heightRange, sliderValue));
+    }
+
+    static int sliderCoordinate(DimensionHeightRange heightRange, double sliderValue) {
+        if (heightRange == null) {
+            throw new IllegalArgumentException("heightRange must not be null");
+        }
+        if (!Double.isFinite(sliderValue)) {
+            return heightRange.minY();
+        }
+        long floored = (long) Math.floor(sliderValue);
+        return (int) Math.max(heightRange.minY(), Math.min(heightRange.maxY(), floored));
+    }
+
+    static String formatLayerSliderLabel(DimensionHeightRange heightRange, double sliderValue) {
+        int y = sliderCoordinate(heightRange, sliderValue);
+        PreviewLayer layer = heightRange.bandContaining(y);
+        return String.format("Y %d · 区间 Y %d - %d", y, layer.minY(), layer.maxY());
+    }
+
+    private static int resolveSliderY(
+            WorldInfo world,
+            WorldDimension dimension,
+            DimensionHeightRange heightRange,
+            PreviewLayer selectedLayer,
+            Integer preferredSliderY) {
+        if (preferredSliderY != null) {
+            return sliderCoordinate(heightRange, preferredSliderY);
+        }
+        if (PreviewRequestResolver.playerPositionMatches(world, dimension)) {
+            return sliderCoordinate(heightRange, world.getPlayerY());
+        }
+        if (!selectedLayer.isSurfaceOverview()) {
+            if (selectedLayer.minY() <= 64 && selectedLayer.maxY() >= 64) {
+                return 64;
+            }
+            return selectedLayer.minY() + (selectedLayer.maxY() - selectedLayer.minY()) / 2;
+        }
+        return sliderCoordinate(heightRange, 64);
+    }
+
+    static String formatPreviewStatus(
+            PreviewGenerationResult result,
+            PreviewRequest request) {
+        String quality = result.failedChunks() == 0
+                ? "已生成"
+                : "已生成，" + result.failedChunks() + " 个区块失败";
+        return String.format(
+                "%s · %s · %s · 中心 %d, %d · %d 个区块",
+                quality,
+                request.dimension().displayName(),
+                request.layer(),
+                result.center().x(),
+                result.center().z(),
+                result.sampledChunks());
+    }
+
+    private static String formatCachedPreviewStatus(PreviewRequest request) {
+        return String.format(
+                "已加载缓存 · %s · %s · 中心 %d, %d",
+                request.dimension().displayName(),
+                request.layer(),
+                request.center().x(),
+                request.center().z());
     }
 
     private static String shortMessage(Throwable failure) {
@@ -509,6 +782,9 @@ public class MainController {
     private void clearDetails() {
         cancelPreviewTask();
         clearExportState();
+        previewWorld = null;
+        dimensionPreviewStates.clear();
+        clearPreviewControls();
         worldNameLabel.setText(NO_SELECTION);
         versionLabel.setText(NOT_AVAILABLE);
         gameModeLabel.setText(NOT_AVAILABLE);
@@ -639,15 +915,40 @@ public class MainController {
 
     private final class PreviewTask extends Task<PreviewDisplay> {
         private final WorldInfo world;
+        private final WorldDimension dimension;
+        private final PreviewLayer requestedLayer;
+        private final Integer preferredSliderY;
 
-        private PreviewTask(WorldInfo world) {
+        private PreviewTask(
+                WorldInfo world,
+                WorldDimension dimension,
+                PreviewLayer requestedLayer,
+                Integer preferredSliderY) {
             this.world = world;
+            this.dimension = dimension;
+            this.requestedLayer = requestedLayer;
+            this.preferredSliderY = preferredSliderY;
         }
 
         @Override
         protected PreviewDisplay call() throws IOException {
+            DimensionHeightRange heightRange = DimensionHeightResolver.resolve(dimension);
+            PreviewRequest request = PreviewRequestResolver.resolve(
+                    world,
+                    dimension,
+                    heightRange,
+                    requestedLayer);
+            Optional<PreviewCacheResult> reusable = previewCache.findReusable(world, request);
+            if (reusable.isPresent()) {
+                return new PreviewDisplay(
+                        reusable.orElseThrow(),
+                        null,
+                        request,
+                        heightRange);
+            }
             PreviewGenerationResult generation = previewGenerator.generate(
                     world,
+                    request,
                     new PreviewGenerationMonitor() {
                         @Override
                         public boolean isCancelled() {
@@ -662,13 +963,44 @@ public class MainController {
             if (isCancelled()) {
                 throw new CancellationException("preview generation cancelled");
             }
-            return new PreviewDisplay(previewCache.store(world, generation), generation);
+            return new PreviewDisplay(
+                    previewCache.store(world, request, generation),
+                    generation,
+                    request,
+                    heightRange);
         }
     }
 
     private record PreviewDisplay(
             PreviewCacheResult cache,
-            PreviewGenerationResult generation) {
+            PreviewGenerationResult generation,
+            PreviewRequest request,
+            DimensionHeightRange heightRange) {
+    }
+
+    static record DimensionPreviewState(
+            DimensionHeightRange heightRange,
+            int sliderY,
+            PreviewLayer selectedLayer) {
+        DimensionPreviewState withSliderY(int nextSliderY) {
+            return new DimensionPreviewState(heightRange, nextSliderY, selectedLayer);
+        }
+    }
+
+    static final class DimensionPreviewStateStore {
+        private final Map<String, DimensionPreviewState> states = new HashMap<>();
+
+        DimensionPreviewState get(WorldDimension dimension) {
+            return states.get(dimension.id());
+        }
+
+        void put(WorldDimension dimension, DimensionPreviewState state) {
+            states.put(dimension.id(), state);
+        }
+
+        void clear() {
+            states.clear();
+        }
     }
 
     private record PreviewExportSource(

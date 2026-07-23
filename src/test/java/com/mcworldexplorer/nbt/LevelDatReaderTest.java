@@ -132,6 +132,27 @@ public class LevelDatReaderTest {
     }
 
     @Test
+    void readsCurrentPlayerDimensionWithPosition() throws IOException {
+        Path worldFolder = Files.createDirectory(tempDir.resolve("player-dimension-world"));
+        CompoundBinaryTag player = CompoundBinaryTag.builder()
+                .put("Pos", net.kyori.adventure.nbt.ListBinaryTag.from(
+                        java.util.List.of(
+                                net.kyori.adventure.nbt.DoubleBinaryTag.doubleBinaryTag(1.5),
+                                net.kyori.adventure.nbt.DoubleBinaryTag.doubleBinaryTag(72.0),
+                                net.kyori.adventure.nbt.DoubleBinaryTag.doubleBinaryTag(-3.5))))
+                .putString("Dimension", "minecraft:the_nether")
+                .build();
+        CompoundBinaryTag data = CompoundBinaryTag.builder().put("Player", player).build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder().put("Data", data).build();
+        BinaryTagIO.writer().write(root, worldFolder.resolve("level.dat"), BinaryTagIO.Compression.GZIP);
+
+        WorldInfo info = LevelDatReader.readLevelDat(worldFolder);
+
+        assertTrue(info.isPlayerPositionAvailable());
+        assertEquals("minecraft:the_nether", info.getPlayerDimension());
+    }
+
+    @Test
     void readsLegacyNumericPlayerRespawnDimension() throws IOException {
         Path worldFolder = Files.createDirectory(tempDir.resolve("legacy-respawn-world"));
         CompoundBinaryTag player = CompoundBinaryTag.builder()

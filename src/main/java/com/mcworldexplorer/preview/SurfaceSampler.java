@@ -10,7 +10,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public final class SurfaceSampler {
     private static final int BLOCKS_PER_SECTION = 16 * 16 * 16;
@@ -18,11 +21,20 @@ public final class SurfaceSampler {
     private static final BinaryTagIO.Reader CHUNK_READER = BinaryTagIO.reader(MAX_CHUNK_NBT_BYTES);
 
     public ChunkSurface sample(RegionChunkData chunkData) throws SurfaceSamplingException {
+        return sample(chunkData, PreviewLayer.surfaceOverview());
+    }
+
+    public ChunkSurface sample(
+            RegionChunkData chunkData,
+            PreviewLayer layer) throws SurfaceSamplingException {
         if (chunkData == null) {
             throw new IllegalArgumentException("chunkData must not be null");
         }
+        if (layer == null) {
+            throw new IllegalArgumentException("layer must not be null");
+        }
         try (InputStream input = chunkData.openNbtStream()) {
-            return sample(input);
+            return sample(input, layer);
         } catch (SurfaceSamplingException e) {
             throw e;
         } catch (IOException e) {
@@ -34,6 +46,58 @@ public final class SurfaceSampler {
     }
 
     ChunkSurface sample(InputStream input) throws SurfaceSamplingException {
+        return sample(input, PreviewLayer.surfaceOverview());
+    }
+
+    ChunkSurface sample(InputStream input, PreviewLayer layer) throws SurfaceSamplingException {
+        ParsedChunk parsed = parse(input);
+        List<SectionView> sectionViews = parsed.sections();
+        ChunkSurface surface = new ChunkSurface(parsed.layout());
+        if (layer.isSurfaceOverview()) {
+            sectionViews.sort(Comparator.comparingInt(SectionView::sectionY).reversed());
+            for (SectionView section : sectionViews) {
+                fillSurface(surface, section);
+                if (surface.getPopulatedColumnCount() == ChunkSurface.WIDTH * ChunkSurface.WIDTH) {
+                    break;
+                }
+            }
+        } else {
+            fillHeightBand(surface, sectionViews, layer);
+        }
+        return surface;
+    }
+
+    Optional<DimensionHeightRange> sectionRange(RegionChunkData chunkData)
+            throws SurfaceSamplingException {
+        if (chunkData == null) {
+            throw new IllegalArgumentException("chunkData must not be null");
+        }
+        try (InputStream input = chunkData.openNbtStream()) {
+            return sectionRange(input);
+        } catch (SurfaceSamplingException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new SurfaceSamplingException(
+                    SurfaceSamplingException.Reason.INVALID_NBT,
+                    "failed to close chunk NBT input",
+                    e);
+        }
+    }
+
+    Optional<DimensionHeightRange> sectionRange(InputStream input)
+            throws SurfaceSamplingException {
+        List<SectionView> sections = parse(input).sections();
+        if (sections.isEmpty()) {
+            return Optional.empty();
+        }
+        int minSectionY = sections.stream().mapToInt(SectionView::sectionY).min().orElseThrow();
+        int maxSectionY = sections.stream().mapToInt(SectionView::sectionY).max().orElseThrow();
+        return Optional.of(new DimensionHeightRange(
+                Math.multiplyExact(minSectionY, 16),
+                Math.addExact(Math.multiplyExact(maxSectionY, 16), 15)));
+    }
+
+    private static ParsedChunk parse(InputStream input) throws SurfaceSamplingException {
         CompoundBinaryTag root;
         try {
             root = CHUNK_READER.read(input, BinaryTagIO.Compression.NONE);
@@ -68,16 +132,7 @@ public final class SurfaceSampler {
                 sectionViews.add(view);
             }
         }
-        sectionViews.sort(Comparator.comparingInt(SectionView::sectionY).reversed());
-
-        ChunkSurface surface = new ChunkSurface(layout);
-        for (SectionView section : sectionViews) {
-            fillSurface(surface, section);
-            if (surface.getPopulatedColumnCount() == ChunkSurface.WIDTH * ChunkSurface.WIDTH) {
-                break;
-            }
-        }
-        return surface;
+        return new ParsedChunk(layout, sectionViews);
     }
 
     private static SectionView readSection(
@@ -136,15 +191,7 @@ public final class SurfaceSampler {
                     if (surface.hasColumn(localX, localZ)) {
                         continue;
                     }
-                    int blockIndex = localY * 256 + localZ * 16 + localX;
-                    int paletteIndex = section.storage().paletteIndex(blockIndex);
-                    if (paletteIndex < 0 || paletteIndex >= section.palette().length) {
-                        throw new SurfaceSamplingException(
-                                SurfaceSamplingException.Reason.PALETTE_INDEX_OUT_OF_RANGE,
-                                "palette index " + paletteIndex
-                                        + " exceeds palette size " + section.palette().length);
-                    }
-                    String blockName = section.palette()[paletteIndex];
+                    String blockName = blockName(section, localX, localY, localZ);
                     if (!isAir(blockName)) {
                         surface.setColumn(
                                 localX,
@@ -157,6 +204,57 @@ public final class SurfaceSampler {
         }
     }
 
+    private static void fillHeightBand(
+            ChunkSurface surface,
+            List<SectionView> sections,
+            PreviewLayer layer) throws SurfaceSamplingException {
+        Map<Integer, SectionView> sectionsByY = new HashMap<>();
+        for (SectionView section : sections) {
+            sectionsByY.put(section.sectionY(), section);
+        }
+
+        for (int localZ = 0; localZ < 16; localZ++) {
+            for (int localX = 0; localX < 16; localX++) {
+                for (int y = layer.maxY(); y >= layer.minY(); y--) {
+                    String ground = blockName(sectionsByY, localX, y, localZ);
+                    if (!isAir(ground)
+                            && isAir(blockName(sectionsByY, localX, y + 1, localZ))
+                            && isAir(blockName(sectionsByY, localX, y + 2, localZ))) {
+                        surface.setColumn(localX, localZ, ground, y);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private static String blockName(
+            Map<Integer, SectionView> sections,
+            int localX,
+            int y,
+            int localZ) throws SurfaceSamplingException {
+        SectionView section = sections.get(Math.floorDiv(y, 16));
+        return section == null
+                ? "minecraft:air"
+                : blockName(section, localX, Math.floorMod(y, 16), localZ);
+    }
+
+    private static String blockName(
+            SectionView section,
+            int localX,
+            int localY,
+            int localZ) throws SurfaceSamplingException {
+        int blockIndex = localY * 256 + localZ * 16 + localX;
+        int paletteIndex = section.storage().paletteIndex(blockIndex);
+        if (paletteIndex < 0 || paletteIndex >= section.palette().length) {
+            throw new SurfaceSamplingException(
+                    SurfaceSamplingException.Reason.PALETTE_INDEX_OUT_OF_RANGE,
+                    "palette index " + paletteIndex
+                            + " exceeds palette size " + section.palette().length);
+        }
+        return section.palette()[paletteIndex];
+    }
+
     private static boolean isAir(String blockName) {
         return blockName.equals("minecraft:air")
                 || blockName.equals("minecraft:cave_air")
@@ -164,6 +262,9 @@ public final class SurfaceSampler {
     }
 
     private record SectionView(int sectionY, String[] palette, BlockStateStorage storage) {
+    }
+
+    private record ParsedChunk(ChunkSurfaceLayout layout, List<SectionView> sections) {
     }
 
     private static final class BlockStateStorage {
