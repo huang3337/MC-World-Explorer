@@ -3,11 +3,11 @@ package com.mcworldexplorer.preview;
 import java.awt.Color;
 import java.util.Locale;
 
-final class BlockColorPalette {
+public final class BlockColorPalette {
     private BlockColorPalette() {
     }
 
-    static BlockColor resolve(String blockName) {
+    public static BlockColor resolve(String blockName) {
         String name = blockName.toLowerCase(Locale.ROOT);
         if (containsAny(name, "water", "bubble_column")) {
             return known(0x3F76E4);
@@ -105,6 +105,6 @@ final class BlockColorPalette {
         return false;
     }
 
-    record BlockColor(int rgb, boolean known) {
+    public record BlockColor(int rgb, boolean known) {
     }
 }

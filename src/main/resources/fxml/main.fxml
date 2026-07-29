@@ -94,46 +94,9 @@
                               </ScrollPane>
                            </content>
                         </Tab>
-                        <Tab fx:id="previewTab" text="%tab.worldPreview">
+                        <Tab text="%tab.worldPreview">
                            <content>
-                              <VBox alignment="TOP_CENTER" spacing="10.0">
-                                 <padding>
-                                    <Insets bottom="12.0" left="12.0" right="12.0" top="12.0" />
-                                 </padding>
-                                  <children>
-                                     <VBox spacing="6.0">
-                                        <children>
-                                           <HBox alignment="CENTER_LEFT" spacing="8.0">
-                                              <children>
-                                                 <Label text="维度" />
-                                                 <ComboBox fx:id="dimensionComboBox" disable="true" prefWidth="260.0" />
-                                                 <ToggleButton fx:id="surfaceOverviewButton" disable="true" mnemonicParsing="false" onAction="#handleSurfaceOverview" text="地表总览" />
-                                              </children>
-                                           </HBox>
-                                           <HBox alignment="CENTER_LEFT" spacing="8.0">
-                                              <children>
-                                                 <Label text="洞穴高度" />
-                                                 <Label fx:id="layerRangeLabel" minWidth="180.0" text="-" />
-                                                 <Slider fx:id="layerHeightSlider" blockIncrement="1.0" disable="true" majorTickUnit="32.0" minWidth="160.0" showTickMarks="true" HBox.hgrow="ALWAYS" />
-                                              </children>
-                                           </HBox>
-                                        </children>
-                                     </VBox>
-                                     <HBox alignment="CENTER_LEFT" spacing="10.0">
-                                       <children>
-                                          <ProgressBar fx:id="previewProgressBar" managed="false" prefWidth="220.0" progress="0.0" visible="false" />
-                                          <Label fx:id="previewStatusLabel" text="选择存档后生成缩略图" wrapText="true" HBox.hgrow="ALWAYS" />
-                                          <Button fx:id="exportPreviewButton" disable="true" mnemonicParsing="false" onAction="#handleExportPreview" text="%button.exportPreview" />
-                                       </children>
-                                    </HBox>
-                                    <StackPane fx:id="previewSurfacePane" styleClass="preview-surface" VBox.vgrow="ALWAYS">
-                                       <children>
-                                          <ImageView fx:id="previewImageView" preserveRatio="true" smooth="false" />
-                                          <Label fx:id="previewPlaceholderLabel" styleClass="preview-placeholder" text="选择存档后生成缩略图" wrapText="true" />
-                                       </children>
-                                    </StackPane>
-                                 </children>
-                              </VBox>
+                              <fx:include fx:id="mapViewer" source="map-view.fxml" />
                            </content>
                         </Tab>
                      </tabs>

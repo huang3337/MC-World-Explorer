@@ -16,28 +16,33 @@ MC-World-Explorer/
 │  ├─ issues/                     活动问题、编号清单和问题记录规范
 │  │  └─ resolved/                各版本已解决问题与逐文件验算记录
 │  ├─ decisions/                  已确认的重大技术决策
-│  └─ superpowers/specs/          已确认或待确认的功能设计规范
+│  └─ superpowers/
+│     ├─ specs/                   已确认或待确认的功能设计规范
+│     └─ plans/                   已确认功能的实施计划
 └─ src/
    ├─ main/
    │  ├─ java/com/mcworldexplorer/
    │  │  ├─ App.java              JavaFX 应用入口
-   │  │  ├─ nbt/                  level.dat 解析
-   │  │  ├─ preview/              维度发现、图层请求、地表/高度带采样、PNG、缓存与导出
+   │  │  ├─ map/                  地图块、五级缓存、调度、标记、视口协调与导出
+   │  │  ├─ nbt/                  level.dat 与多人 playerdata 解析
+   │  │  ├─ preview/              维度发现、图层请求及共享地表/高度带采样
    │  │  ├─ region/               Region 文件头、区块定位与基础解压
    │  │  ├─ storage/              严格便携的程序根目录、运行数据路径与配置
    │  │  ├─ ui/                   控制器和存档树 UI
    │  │  └─ world/                存档模型、扫描和游戏模式
    │  └─ resources/               FXML、CSS、日志和界面文本
    └─ test/java/com/mcworldexplorer/
-      ├─ nbt/                     NBT 单元测试与只读集成测试
-      ├─ preview/                 中心点、采样、渲染、缓存、导出和真实存档验收
+      ├─ map/                     地图坐标、缓存、调度、标记、生成与真实存档验收
+      ├─ nbt/                     NBT、多人玩家数据与只读集成测试
+      ├─ preview/                 中心点、采样、渲染、缓存与真实存档验收
       ├─ region/                  Region 合成测试与真实文件只读验收
       ├─ storage/                 便携路径、配置、目录写入和布局识别测试
-      ├─ ui/                      树节点测试
+      ├─ ui/                      树节点、地图控制器和视口行为测试
       └─ world/                   模型和扫描测试
 ```
 
-`docs/decisions/` 已记录严格便携存储、Region 兼容边界和统一维度图层系统三项重大决策。
+`docs/decisions/` 已记录严格便携存储、Region 兼容边界、统一维度图层系统、多级地图块架构，以及 V0.3/V0.3.1 源码与发布节奏五项重大决策。
 V0.2/V0.2.1 使用 `storage/PortablePaths.java` 将日志、缓存、导出和配置定位到程序根目录
 的 `logs/`、`cache/`、`exports/` 和 `config/`。这些目录受 `.gitignore` 保护，不属于
-源码目录，也不得写入 Minecraft 存档目录。当前多维度预览继续复用同一便携缓存边界。
+源码目录，也不得写入 Minecraft 存档目录。V0.3 地图块缓存和多人玩家读取继续复用同一
+便携、只读边界。
