@@ -5,7 +5,7 @@
 <h1 align="center">MC World Explorer</h1>
 
 <p align="center">
-  只读的 Minecraft Java 版存档浏览工具
+  只读的 Minecraft Java 版存档与交互地图浏览工具
 </p>
 
 <p align="center">
@@ -16,66 +16,80 @@
 </p>
 
 <p align="center">
-  <strong><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest">下载最新版本</a></strong>
+  <strong><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest">下载最新软件包</a></strong>
   ·
   <strong><a href="PROJECT_ROADMAP.md">查看项目路线图</a></strong>
+  ·
+  <strong><a href="#从源码运行">从源码运行</a></strong>
 </p>
+
+## 当前软件包
+
+| 最新软件包 | 支持平台 | 运行环境 | 下个计划发布 |
+|---|---|---|---|
+| **V0.2.1** | Windows x64 | 内置 Java 21 | **V0.3.1** |
+
+V0.2.1 是当前可直接下载的便携版。软件包无需另外安装 Java，完整解压后即可运行。
+
+[下载 V0.2.1](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.2.1)
+
+## 源码开发状态
+
+| 最新完成源码 | 状态 | 下一开发阶段 | 状态 |
+|---|---|---|---|
+| **V0.3** | 已完成并通过人工验收 | **V0.3.1** | 尚未开始 |
+
+> [!IMPORTANT]
+> V0.3 已完成源码开发并同步至 GitHub，但没有构建软件包。V0.3.1 完成最后完善后，再评估版本标签、Windows 软件包和 GitHub Release。
 
 ## 关于项目
 
-MC World Explorer 用于在不启动 Minecraft 的情况下，快速查看本地世界存档的基础信息。
+MC World Explorer 可以在不启动 Minecraft 的情况下扫描本地 Java 版世界、查看存档信息，并通过交互地图浏览已有区块、不同维度、玩家和传送门位置。
 
-当前已发布的软件包版本为 **V0.2.1**。V0.3 交互地图已完成开发、人工验收并同步源码；本版本不生成软件包，待 V0.3.1 完成最后完善后再评估构建与发布。后续计划请查阅[项目路线图](PROJECT_ROADMAP.md)。
+项目坚持严格只读访问 Minecraft 存档，缓存、日志、配置和导出文件均与原存档分离。
 
-## V0.1.1 功能
+## 软件包发布路线
 
-- 扫描 Minecraft Java 版原版存档和版本隔离的整合包存档
-- 支持选择 `.minecraft`、`saves`、`versions`、单个整合包实例或单个世界目录
-- 显示世界名称、版本、游戏模式、时间、种子、出生点、玩家位置和世界图标
-- 支持读取较大的整合包 `level.dat`
-- 在后台扫描存档，并显示加载、结果数量、空目录和失败状态
-- 仅以只读方式访问存档，不提供编辑或写入功能
+| 版本 | 发布状态 | 主要内容 |
+|---|---|---|
+| **V0.1.1** | 已发布 | 存档扫描、基础信息展示与只读能力加固 |
+| **V0.2.1** | 当前最新软件包 | 多维度预览、地表总览、洞穴高度带与便携运行环境 |
+| **V0.3.1** | 计划发布 | 整合 V0.3 交互地图能力并完成最后完善 |
 
-## V0.2.1 功能
+> [!NOTE]
+> V0.3 是仅同步源码的开发版本，因此不列入已发布软件包版本。
 
-- 围绕主世界个人重生点、世界出生点或原点生成俯视缩略图
-- 只读解析标准 `.mca` Region、现代 Section 和 Palette 数据
-- 生成并在程序内显示 `512 x 512` PNG 世界预览
-- 发现主世界、下界、末地和真实样本可验证的 Mod 维度
-- 通过地表总览按钮和平滑高度滑块按需切换 32 格洞穴高度带，并为各维度独立恢复本次运行中的选择
-- 按世界、维度和图层隔离并复用缩略图缓存
-- 自动复用程序根目录 `cache/` 中的有效缓存
-- 一键导出当前预览到程序根目录 `exports/`
-- 日志、缓存、导出和配置全部保存在程序根目录，不再写入 AppData 或 Windows Preferences
+## 核心能力
+
+| 存档浏览 | 交互地图 | 定位与标记 |
+|---|---|---|
+| 扫描原版及版本隔离存档<br>支持游戏目录、实例和单个世界<br>显示世界信息、图标和基础坐标<br>后台加载并反馈空目录或错误 | 浏览主世界、下界、末地和可识别的 Mod 维度<br>地表总览与 32 格洞穴高度带<br>地图自由拖动与五级缩放<br>地图块缓存、缓存清理和视口 PNG 导出 | 输入 X/Z 坐标快速跳转<br>显示玩家、出生点和下界传送门<br>读取多人玩家最后保存位置<br>从玩家列表跨维度定位 |
 
 ## 快速开始
 
-1. 从 [GitHub Releases](https://github.com/huang3337/MC-World-Explorer/releases/latest) 下载 Windows x64 便携版 ZIP。
+1. 从 [V0.2.1 Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.2.1) 下载 Windows x64 便携版 ZIP。
 2. 将 ZIP 完整解压到普通文件夹。
 3. 双击 `MC World Explorer.exe`。
-4. 点击“选择 Minecraft 目录...”，选择需要浏览的游戏目录、存档目录或世界。
+4. 点击“选择 Minecraft 目录...”，选择游戏目录、存档目录、整合包实例或单个世界。
 
-软件包已经内置 Java 21 运行时，无需另行安装 Java。请保留 EXE、`app` 和 `runtime` 的原有目录结构，不要单独移动 EXE，也不要直接在压缩包内运行。
+请保留 EXE、`app` 和 `runtime` 的原有目录结构，不要单独移动 EXE，也不要直接在压缩包内运行。
 
 > [!NOTE]
-> 软件包尚未进行代码签名。Windows SmartScreen 可能显示安全提示，请从本仓库的正式 Release 下载并核对发布页提供的 SHA-256。
+> 软件包尚未进行代码签名。Windows SmartScreen 可能显示安全提示，请从本仓库的正式 Release 下载，并核对发布页提供的 SHA-256。
 
 ## 存档安全
 
-当前源码仅以只读方式访问 `level.dat`、`icon.png`、目录元数据和 `region/*.mca`，不会修改、移动或删除 Minecraft 存档，也不读取或写入 `playerdata/*.dat`。
+程序只读访问以下 Minecraft 存档数据：
 
-程序生成的日志、缩略图缓存、导出图片和配置分别保存在程序根目录的 `logs/`、`cache/`、`exports/` 和 `config/`。对于重要存档，仍建议保持正常的备份习惯。
+- `level.dat`
+- `playerdata/*.dat`
+- `icon.png`
+- 目录元数据
+- 各维度的 Region 文件
 
-## 开发状态
+程序不会修改、移动或删除 Minecraft 存档。日志、缩略图和地图块缓存、导出图片及配置分别保存在程序根目录的 `logs/`、`cache/`、`exports/` 和 `config/`。
 
-MC World Explorer **仍在持续开发中**。V0.3 已实现按需地图块、自由拖动、五级缩放、X/Z 定位、单人及多人玩家/出生点/传送门标记、玩家列表与跨维度定位、当前世界缓存清理和当前视口 PNG 导出，并通过自动化测试、真实存档只读验收、逐文件代码审查和人工界面验收。V0.3 源码已完成，软件包和正式发布统一延后到 V0.3.1 最后完善后评估。
-
-- [查看完整项目路线图](PROJECT_ROADMAP.md)
-- [查看 V0.1.1 开发与验收记录](docs/progress/V0.1.1.md)
-- [查看 V0.2 开发与验收记录](docs/progress/V0.2.md)
-- [查看 V0.2.1 开发与验收记录](docs/progress/V0.2.1.md)
-- [查看 V0.3 开发进度](docs/progress/V0.3.md)
-- [下载 V0.2.1](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.2.1)
+对于重要存档，仍建议保持正常的备份习惯。
 
 ## 从源码运行
 
@@ -86,6 +100,15 @@ MC World Explorer **仍在持续开发中**。V0.3 已实现按需地图块、�
 ```
 
 首次构建需要下载 Gradle 和项目依赖。应用日志位于项目根目录 `logs/mc-world-explorer.log`；运行数据位于同一根目录下的 `cache/`、`exports/` 和 `config/`。
+
+## 项目文档
+
+- [项目路线图](PROJECT_ROADMAP.md)
+- [V0.1.1 开发与验收记录](docs/progress/V0.1.1.md)
+- [V0.2 开发与验收记录](docs/progress/V0.2.md)
+- [V0.2.1 开发与验收记录](docs/progress/V0.2.1.md)
+- [V0.3 开发与验收记录](docs/progress/V0.3.md)
+- [重大开发决策](docs/decisions/)
 
 ## 许可证
 
