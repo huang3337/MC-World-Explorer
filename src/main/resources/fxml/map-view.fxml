@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox spacing="8.0" xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.mcworldexplorer.ui.MapViewerController">
+    <padding>
+        <Insets bottom="12.0" left="12.0" right="12.0" top="12.0"/>
+    </padding>
+    <children>
+        <HBox alignment="CENTER_LEFT" spacing="8.0" styleClass="map-toolbar-row">
+            <children>
+                <Label text="维度"/>
+                <ComboBox fx:id="dimensionComboBox" disable="true" prefWidth="210.0"/>
+                <ToggleButton fx:id="surfaceOverviewButton" disable="true"
+                              mnemonicParsing="false" onAction="#handleSurfaceOverview"
+                              text="地表总览"/>
+                <Label text="洞穴高度"/>
+                <Label fx:id="layerRangeLabel" minWidth="160.0" text="-"/>
+                <Slider fx:id="layerHeightSlider" blockIncrement="1.0" disable="true"
+                        majorTickUnit="32.0" minWidth="130.0" showTickMarks="true"
+                        HBox.hgrow="ALWAYS"/>
+            </children>
+        </HBox>
+        <FlowPane hgap="8.0" vgap="6.0" alignment="CENTER_LEFT" styleClass="map-toolbar-row">
+            <children>
+                <HBox alignment="CENTER_LEFT" spacing="4.0">
+                    <children>
+                        <Label text="X"/>
+                        <TextField fx:id="xField" onAction="#handleLocate" prefColumnCount="7"
+                                   promptText="0"/>
+                        <Label text="Z"/>
+                        <TextField fx:id="zField" onAction="#handleLocate" prefColumnCount="7"
+                                   promptText="0"/>
+                        <Button mnemonicParsing="false" onAction="#handleLocate" text="定位"/>
+                        <Label fx:id="coordinateErrorLabel" styleClass="field-error" text=""/>
+                    </children>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="4.0">
+                    <children>
+                        <ToggleButton fx:id="playerMarkerButton" selected="true" text="玩家"/>
+                        <MenuButton fx:id="playerListButton" disable="true"
+                                    mnemonicParsing="false" text="玩家列表"/>
+                        <ToggleButton fx:id="spawnMarkerButton" selected="true" text="出生点"/>
+                        <ToggleButton fx:id="portalMarkerButton" selected="true" text="传送门"/>
+                    </children>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="4.0">
+                    <children>
+                        <Button mnemonicParsing="false" onAction="#handleZoomOut" text="−">
+                            <tooltip><Tooltip text="缩小"/></tooltip>
+                        </Button>
+                        <Button mnemonicParsing="false" onAction="#handleZoomIn" text="+">
+                            <tooltip><Tooltip text="放大"/></tooltip>
+                        </Button>
+                        <Button mnemonicParsing="false" onAction="#handleReset" text="重置视图"/>
+                        <Button fx:id="clearCacheButton" disable="true" mnemonicParsing="false"
+                                onAction="#handleClearCache" text="清理当前世界缓存"/>
+                        <Button fx:id="exportButton" disable="true" mnemonicParsing="false"
+                                onAction="#handleExport" text="导出当前视口 PNG"/>
+                    </children>
+                </HBox>
+            </children>
+        </FlowPane>
+        <Label fx:id="statusLabel" text="选择存档后浏览地图" wrapText="true"/>
+        <StackPane fx:id="viewportHost" minHeight="240.0" styleClass="map-viewport"
+                   VBox.vgrow="ALWAYS"/>
+    </children>
+</VBox>

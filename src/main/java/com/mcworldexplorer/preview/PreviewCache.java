@@ -1,6 +1,7 @@
 package com.mcworldexplorer.preview;
 
 import com.mcworldexplorer.storage.PortablePaths;
+import com.mcworldexplorer.storage.WorldCachePaths;
 import com.mcworldexplorer.world.WorldInfo;
 
 import javax.imageio.ImageIO;
@@ -48,9 +49,8 @@ public final class PreviewCache {
             throw new IllegalArgumentException("request and generation centers must match");
         }
 
-        Path cacheDirectory = PortablePaths.cacheDirectory()
-                .resolve(worldDirectoryName(world))
-                .resolve(dimensionDirectoryName(request.dimension()));
+        Path cacheDirectory = WorldCachePaths.worldDirectory(world)
+                .resolve(WorldCachePaths.dimensionDirectoryName(request.dimension()));
         Files.createDirectories(cacheDirectory);
         Path imagePath = cacheDirectory.resolve(request.layer().cacheKey() + ".png");
         Path metadataPath = cacheDirectory.resolve(request.layer().cacheKey() + ".json");
@@ -84,29 +84,6 @@ public final class PreviewCache {
         }
     }
 
-    private static String worldDirectoryName(WorldInfo world) {
-        String readable = world.getLevelName()
-                .replaceAll("[<>:\"/\\|?*\\p{Cntrl}]", "_")
-                .strip()
-                .replaceAll("[. ]+$", "");
-        if (readable.isEmpty() || readable.equals(".") || readable.equals("..")) {
-            readable = "world";
-        }
-        int codePointCount = readable.codePointCount(0, readable.length());
-        if (codePointCount > 48) {
-            readable = readable.substring(0, readable.offsetByCodePoints(0, 48)).stripTrailing();
-        }
-        return readable + "-" + worldPathHash(world.getFolderPath());
-    }
-
-    private static String dimensionDirectoryName(WorldDimension dimension) {
-        String readable = dimension.id().replaceAll("[^A-Za-z0-9._-]", "_");
-        if (readable.isBlank() || readable.equals(".") || readable.equals("..")) {
-            readable = "dimension";
-        }
-        return readable + "-" + textHash(dimension.id());
-    }
-
     private static void validateRegionBoundary(WorldInfo world, PreviewRequest request) {
         Path worldDirectory = world.getFolderPath().toAbsolutePath().normalize();
         Path regionDirectory = request.dimension().regionDirectory().toAbsolutePath().normalize();
@@ -134,20 +111,6 @@ public final class PreviewCache {
             }
         }
         return sources;
-    }
-
-    private static String worldPathHash(Path worldPath) {
-        return textHash(worldPath.toAbsolutePath().normalize().toString());
-    }
-
-    private static String textHash(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash, 0, 8);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
     }
 
     private static String metadataJson(
@@ -252,8 +215,8 @@ public final class PreviewCache {
 
         PreviewCenter center = request.center();
         Path cacheDirectory = PortablePaths.cacheDirectory()
-                .resolve(worldDirectoryName(world))
-                .resolve(dimensionDirectoryName(request.dimension()));
+                .resolve(WorldCachePaths.worldDirectoryName(world))
+                .resolve(WorldCachePaths.dimensionDirectoryName(request.dimension()));
         Path imagePath = cacheDirectory.resolve(request.layer().cacheKey() + ".png");
         Path metadataPath = cacheDirectory.resolve(request.layer().cacheKey() + ".json");
         if (!Files.isRegularFile(imagePath) || !Files.isRegularFile(metadataPath)) {

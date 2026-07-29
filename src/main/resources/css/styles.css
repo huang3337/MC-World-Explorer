@@ -41,3 +41,61 @@
     -fx-font-size: 14px;
     -fx-padding: 20px;
 }
+
+.map-toolbar-row {
+    -fx-padding: 4 0 4 0;
+}
+
+.map-viewport {
+    -fx-background-color: #20262b;
+    -fx-border-color: #aeb6bd;
+    -fx-border-width: 1;
+    -fx-min-width: 0;
+    -fx-min-height: 0;
+}
+
+.field-error {
+    -fx-text-fill: #b3261e;
+}
+
+.marker-toggle {
+    -fx-background-color: #eceff1;
+    -fx-border-color: #aeb6bd;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-text-fill: #687078;
+}
+
+.marker-toggle .marker-swatch {
+    -fx-fill: #8b9298;
+}
+
+.marker-toggle-player:selected {
+    -fx-background-color: #e5f7e9;
+    -fx-border-color: #44c767;
+    -fx-text-fill: #216c36;
+}
+
+.marker-toggle-player:selected .marker-toggle-player-swatch {
+    -fx-fill: #44c767;
+}
+
+.marker-toggle-spawn:selected {
+    -fx-background-color: #fff8dc;
+    -fx-border-color: #d1a91e;
+    -fx-text-fill: #725c00;
+}
+
+.marker-toggle-spawn:selected .marker-toggle-spawn-swatch {
+    -fx-fill: #f2c94c;
+}
+
+.marker-toggle-portal:selected {
+    -fx-background-color: #f4e9ff;
+    -fx-border-color: #bd5cff;
+    -fx-text-fill: #6d2994;
+}
+
+.marker-toggle-portal:selected .marker-toggle-portal-swatch {
+    -fx-fill: #bd5cff;
+}
