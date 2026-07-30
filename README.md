@@ -29,9 +29,9 @@
 |---|---|---|---|
 | **V0.3.1** | Windows x64 | 内置 Java 21 | **V0.5** |
 
-V0.3.1 是当前可直接下载的便携版。软件包无需另外安装 Java，完整解压后即可运行。
+当前便携版无需另外安装 Java，完整解压后即可运行。
 
-[下载 V0.3.1](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.3.1)
+[下载最新软件包](https://github.com/huang3337/MC-World-Explorer/releases/latest)
 
 ## 源码开发状态
 
@@ -40,7 +40,7 @@ V0.3.1 是当前可直接下载的便携版。软件包无需另外安装 Java�
 | **V0.3.1** | 已完成并发布 | **V0.5** | 尚未开始 |
 
 > [!IMPORTANT]
-> V0.3.1 已完成源码开发、人工功能确认、Windows 软件包验证和正式发布。源码、`v0.3.1` 标签与 Release 对应同一版本。
+> 当前源码与最新发布版保持一致；具体版本和软件包以 GitHub Releases 页面为准。
 
 ## 关于项目
 
@@ -63,11 +63,11 @@ MC World Explorer 可以在不启动 Minecraft 的情况下扫描本地 Java 版
 
 | 存档浏览 | 交互地图 | 定位与标记 |
 |---|---|---|
-| 扫描原版及版本隔离存档<br>支持游戏目录、实例和单个世界<br>显示世界信息、图标和基础坐标<br>后台加载并反馈空目录或错误 | 浏览主世界、下界、末地和可识别的 Mod 维度<br>地表总览与 32 格洞穴高度带<br>地图自由拖动与七级缩放<br>地图块缓存、缓存清理和视口 PNG 导出 | 输入 X/Z 坐标快速跳转<br>显示玩家、出生点和下界传送门<br>读取多人玩家最后保存位置<br>从玩家列表跨维度定位 |
+| 扫描原版及版本隔离存档<br>支持游戏目录、实例和单个世界<br>显示世界信息、图标和基础坐标<br>后台加载并反馈空目录或错误 | 浏览主世界、下界、末地和可识别的 Mod 维度<br>地表总览与 32 格洞穴高度带<br>地图自由拖动与七级缩放<br>地图块缓存、缓存清理和视口 PNG 导出 | 输入 X/Z 坐标快速跳转<br>显示玩家和世界出生点<br>在已加载地图区块中标记下界传送门<br>读取多人玩家最后保存位置<br>从玩家列表跨维度定位 |
 
 ## 快速开始
 
-1. 从 [V0.2.1 Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.2.1) 下载 Windows x64 便携版 ZIP。
+1. 打开 [Releases](https://github.com/huang3337/MC-World-Explorer/releases) 页面自行选择版本，推荐下载带有 `Latest` 标记的最新版 Windows x64 便携版 ZIP。
 2. 将 ZIP 完整解压到普通文件夹。
 3. 双击 `MC World Explorer.exe`。
 4. 点击“选择 Minecraft 目录...”，选择游戏目录、存档目录、整合包实例或单个世界。
