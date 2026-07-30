@@ -5,10 +5,10 @@ import java.util.Objects;
 public final class MapViewportState {
     private final double defaultCenterX;
     private final double defaultCenterZ;
-    private final MapZoomLevel defaultZoom;
+    private final MapDisplayZoom defaultDisplayZoom;
     private double centerX;
     private double centerZ;
-    private MapZoomLevel zoom;
+    private MapDisplayZoom displayZoom;
     private double visualBlocksPerPixel;
 
     public MapViewportState(double defaultCenterX, double defaultCenterZ, MapZoomLevel defaultZoom) {
@@ -17,7 +17,8 @@ public final class MapViewportState {
         }
         this.defaultCenterX = defaultCenterX;
         this.defaultCenterZ = defaultCenterZ;
-        this.defaultZoom = Objects.requireNonNull(defaultZoom, "defaultZoom");
+        this.defaultDisplayZoom = MapDisplayZoom.fromTileZoom(
+                Objects.requireNonNull(defaultZoom, "defaultZoom"));
         reset();
     }
 
@@ -30,7 +31,11 @@ public final class MapViewportState {
     }
 
     public MapZoomLevel zoom() {
-        return zoom;
+        return displayZoom.tileZoom();
+    }
+
+    public MapDisplayZoom displayZoom() {
+        return displayZoom;
     }
 
     public double visualBlocksPerPixel() {
@@ -75,10 +80,24 @@ public final class MapViewportState {
             double pointerY,
             double viewportWidth,
             double viewportHeight) {
+        zoomAt(
+                MapDisplayZoom.fromTileZoom(Objects.requireNonNull(nextZoom, "nextZoom")),
+                pointerX,
+                pointerY,
+                viewportWidth,
+                viewportHeight);
+    }
+
+    public void zoomAt(
+            MapDisplayZoom nextZoom,
+            double pointerX,
+            double pointerY,
+            double viewportWidth,
+            double viewportHeight) {
         Objects.requireNonNull(nextZoom, "nextZoom");
         double anchorX = worldXAt(pointerX, viewportWidth);
         double anchorZ = worldZAt(pointerY, viewportHeight);
-        zoom = nextZoom;
+        displayZoom = nextZoom;
         visualBlocksPerPixel = nextZoom.blocksPerPixel();
         centerX = anchorX - (pointerX - viewportWidth / 2.0) * visualBlocksPerPixel;
         centerZ = anchorZ - (pointerY - viewportHeight / 2.0) * visualBlocksPerPixel;
@@ -91,9 +110,10 @@ public final class MapViewportState {
             double viewportWidth,
             double viewportHeight) {
         if (!Double.isFinite(nextBlocksPerPixel)
-                || nextBlocksPerPixel < MapZoomLevel.BLOCKS_1.blocksPerPixel()
-                || nextBlocksPerPixel > MapZoomLevel.BLOCKS_16.blocksPerPixel()) {
-            throw new IllegalArgumentException("visual zoom must stay within 1..16 blocks per pixel");
+                || nextBlocksPerPixel < MapDisplayZoom.PIXELS_4.blocksPerPixel()
+                || nextBlocksPerPixel > MapDisplayZoom.BLOCKS_16.blocksPerPixel()) {
+            throw new IllegalArgumentException(
+                    "visual zoom must stay within 0.25..16 blocks per pixel");
         }
         double anchorX = worldXAt(pointerX, viewportWidth);
         double anchorZ = worldZAt(pointerY, viewportHeight);
@@ -103,7 +123,12 @@ public final class MapViewportState {
     }
 
     public void commitZoom(MapZoomLevel nextZoom) {
-        zoom = Objects.requireNonNull(nextZoom, "nextZoom");
+        displayZoom = MapDisplayZoom.fromTileZoom(
+                Objects.requireNonNull(nextZoom, "nextZoom"));
+    }
+
+    public void commitZoom(MapDisplayZoom nextZoom) {
+        displayZoom = Objects.requireNonNull(nextZoom, "nextZoom");
     }
 
     public void setView(
@@ -113,16 +138,17 @@ public final class MapViewportState {
         if (!Double.isFinite(worldX) || !Double.isFinite(worldZ)) {
             throw new IllegalArgumentException("viewport center must be finite");
         }
-        zoom = Objects.requireNonNull(nextZoom, "nextZoom");
+        displayZoom = MapDisplayZoom.fromTileZoom(
+                Objects.requireNonNull(nextZoom, "nextZoom"));
         centerX = worldX;
         centerZ = worldZ;
-        visualBlocksPerPixel = nextZoom.blocksPerPixel();
+        visualBlocksPerPixel = displayZoom.blocksPerPixel();
     }
 
     public void reset() {
         centerX = defaultCenterX;
         centerZ = defaultCenterZ;
-        zoom = defaultZoom;
-        visualBlocksPerPixel = defaultZoom.blocksPerPixel();
+        displayZoom = defaultDisplayZoom;
+        visualBlocksPerPixel = defaultDisplayZoom.blocksPerPixel();
     }
 }

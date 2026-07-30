@@ -1,6 +1,7 @@
 package com.mcworldexplorer.ui;
 
 import com.mcworldexplorer.map.MapMarkerType;
+import com.mcworldexplorer.map.WorldMapCacheCleaner;
 import com.mcworldexplorer.preview.DimensionHeightRange;
 import com.mcworldexplorer.preview.PreviewRequest;
 import com.mcworldexplorer.preview.WorldDimension;
@@ -61,5 +62,35 @@ class MapViewerControllerTest {
     @Test
     void emptyMarkerTooltipHasNoDisplayText() {
         assertTrue(MapViewport.markerTooltipText(null).isEmpty());
+    }
+
+    @Test
+    void cacheTextShowsScopeSizeAndReloadBehavior() {
+        WorldMapCacheCleaner.Summary summary = new WorldMapCacheCleaner.Summary(12, 1536);
+
+        String text = MapViewerController.cacheConfirmationText("测试世界", summary);
+
+        assertTrue(text.contains("“测试世界”"));
+        assertTrue(text.contains("12 个缓存文件"));
+        assertTrue(text.contains("1.5 KB"));
+        assertTrue(text.contains("重新加载当前视口"));
+        assertTrue(text.contains("不会修改存档"));
+    }
+
+    @Test
+    void cacheClearStatusReportsActualDeletionAndPartialFailure() {
+        WorldMapCacheCleaner.ClearResult result = new WorldMapCacheCleaner.ClearResult(
+                3,
+                2048,
+                1,
+                "locked");
+
+        assertEquals(
+                "已清理 3 个文件，释放 2.0 KB，1 项未能清理：locked，正在重新加载",
+                MapViewerController.cacheClearStatus(result));
+        assertEquals(
+                "没有可清理的缓存，正在重新加载",
+                MapViewerController.cacheClearStatus(
+                        new WorldMapCacheCleaner.ClearResult(0, 0, 0, null)));
     }
 }

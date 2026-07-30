@@ -3,6 +3,7 @@ package com.mcworldexplorer.ui;
 import com.mcworldexplorer.map.MapMarker;
 import com.mcworldexplorer.map.MapMarkerMerger;
 import com.mcworldexplorer.map.MapMarkerType;
+import com.mcworldexplorer.map.MapDisplayZoom;
 import com.mcworldexplorer.map.MapTileBounds;
 import com.mcworldexplorer.map.MapTileKey;
 import com.mcworldexplorer.map.MapViewportState;
@@ -30,12 +31,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 public final class MapViewport extends Region {
     private static final double MARKER_RADIUS = 7;
-    private static final double MIN_VISUAL_ZOOM = 1;
-    private static final double MAX_VISUAL_ZOOM = 16;
+    private static final double MIN_VISUAL_ZOOM = MapDisplayZoom.PIXELS_4.blocksPerPixel();
+    private static final double MAX_VISUAL_ZOOM = MapDisplayZoom.BLOCKS_16.blocksPerPixel();
     private static final double WHEEL_ZOOM_DIVISOR = 240;
+    private static final double CLICK_DRAG_THRESHOLD = 4;
     private static final int ZOOM_ANIMATION_MILLIS = 120;
 
     private final Canvas canvas = new Canvas();
@@ -43,7 +46,7 @@ public final class MapViewport extends Region {
     private final Map<MapTileKey, List<MapMarker>> tileMarkers = new HashMap<>();
     private final Map<MapTileKey, Image> partialTiles = new HashMap<>();
     private final Map<MapTileKey, List<MapMarker>> partialTileMarkers = new HashMap<>();
-    private final List<MapMarker> fixedMarkers = new ArrayList<>();
+    private final List<DisplayMapMarker> fixedMarkers = new ArrayList<>();
     private final Tooltip markerTooltip = new Tooltip();
     private final BooleanProperty showPlayer = new SimpleBooleanProperty(true);
     private final BooleanProperty showSpawn = new SimpleBooleanProperty(true);
@@ -51,6 +54,8 @@ public final class MapViewport extends Region {
     private final PauseTransition zoomSettle = new PauseTransition(Duration.millis(150));
     private final Timeline zoomAnimation = new Timeline();
     private Set<MapTileKey> targetKeys = Set.of();
+    private Set<MapTileKey> failedKeys = Set.of();
+    private Set<MapTileKey> loadingKeys = Set.of();
     private MapViewportState state;
     private Runnable viewportChanged = () -> {
     };
@@ -58,10 +63,18 @@ public final class MapViewport extends Region {
     };
     private Runnable zoomTargetChanged = () -> {
     };
+    private Consumer<MapTileKey> retryRequested = ignored -> {
+    };
     private double dragX;
     private double dragY;
+    private double pressX;
+    private double pressY;
     private double zoomAnchorX;
     private double zoomAnchorY;
+    private boolean primaryPressed;
+    private boolean dragging;
+    private MapTileKey pressedFailedKey;
+    private String highlightedPlayerIdentifier;
 
     public MapViewport() {
         getChildren().add(canvas);
@@ -73,22 +86,36 @@ public final class MapViewport extends Region {
         canvas.setOnMousePressed(event -> {
             hideMarkerTooltip();
             if (event.getButton() == MouseButton.PRIMARY) {
-                MapMarker marker = markerAt(event.getX(), event.getY());
+                DisplayMapMarker marker = markerAt(event.getX(), event.getY());
                 if (marker != null) {
-                    state.centerOn(marker.x(), marker.z());
+                    state.centerOn(marker.marker().x(), marker.marker().z());
                     draw();
                     viewportChanged.run();
                     return;
                 }
+                primaryPressed = true;
+                dragging = false;
+                pressX = event.getX();
+                pressY = event.getY();
                 dragX = event.getX();
                 dragY = event.getY();
-                canvas.setCursor(Cursor.CLOSED_HAND);
+                pressedFailedKey = failedTileAt(event.getX(), event.getY());
+                canvas.setCursor(pressedFailedKey == null ? Cursor.CLOSED_HAND : Cursor.HAND);
             }
         });
         canvas.setOnMouseDragged(event -> {
             hideMarkerTooltip();
-            if (state == null || !event.isPrimaryButtonDown()) {
+            if (state == null || !event.isPrimaryButtonDown() || !primaryPressed) {
                 return;
+            }
+            if (!dragging) {
+                if (Math.hypot(event.getX() - pressX, event.getY() - pressY)
+                        <= CLICK_DRAG_THRESHOLD) {
+                    return;
+                }
+                dragging = true;
+                pressedFailedKey = null;
+                canvas.setCursor(Cursor.CLOSED_HAND);
             }
             state.panPixels(event.getX() - dragX, event.getY() - dragY);
             dragX = event.getX();
@@ -96,7 +123,22 @@ public final class MapViewport extends Region {
             draw();
             viewportChanged.run();
         });
-        canvas.setOnMouseReleased(event -> canvas.setCursor(Cursor.DEFAULT));
+        canvas.setOnMouseReleased(event -> {
+            if (event.getButton() == MouseButton.PRIMARY
+                    && primaryPressed
+                    && !dragging
+                    && isRetryClick(
+                            pressedFailedKey,
+                            failedTileAt(event.getX(), event.getY()),
+                            event.getX() - pressX,
+                            event.getY() - pressY)) {
+                retryRequested.accept(pressedFailedKey);
+            }
+            primaryPressed = false;
+            dragging = false;
+            pressedFailedKey = null;
+            canvas.setCursor(Cursor.DEFAULT);
+        });
         canvas.setOnScroll(event -> {
             hideMarkerTooltip();
             if (state == null || event.getDeltaY() == 0) {
@@ -119,9 +161,17 @@ public final class MapViewport extends Region {
             event.consume();
         });
         canvas.setOnMouseMoved(event -> {
-            MapMarker marker = markerAt(event.getX(), event.getY());
-            showMarkerTooltip(marker, event.getScreenX(), event.getScreenY());
-            canvas.setCursor(marker == null ? Cursor.DEFAULT : Cursor.HAND);
+            DisplayMapMarker marker = markerAt(event.getX(), event.getY());
+            MapTileKey failedKey = marker == null
+                    ? failedTileAt(event.getX(), event.getY())
+                    : null;
+            Optional<String> text = marker == null
+                    ? failedKey == null
+                            ? Optional.empty()
+                            : Optional.of("加载失败，点击重试")
+                    : displayMarkerTooltipText(marker);
+            showTooltip(text, event.getScreenX(), event.getScreenY());
+            canvas.setCursor(marker == null && failedKey == null ? Cursor.DEFAULT : Cursor.HAND);
         });
         canvas.setOnMouseExited(event -> {
             hideMarkerTooltip();
@@ -158,11 +208,18 @@ public final class MapViewport extends Region {
         } : zoomTargetChanged;
     }
 
+    public void setOnRetryRequested(Consumer<MapTileKey> retryRequested) {
+        this.retryRequested = retryRequested == null ? ignored -> {
+        } : retryRequested;
+    }
+
     public void showTile(MapTileKey key, Image image, List<MapMarker> markers) {
         tiles.put(key, image);
         tileMarkers.put(key, List.copyOf(markers));
         partialTiles.remove(key);
         partialTileMarkers.remove(key);
+        failedKeys = without(failedKeys, key);
+        loadingKeys = without(loadingKeys, key);
         releaseFallbackIfCovered();
         draw();
     }
@@ -190,7 +247,18 @@ public final class MapViewport extends Region {
                 key.zoom() == targetZoom && !targetKeys.contains(key));
         partialTiles.keySet().removeIf(key -> !targetKeys.contains(key));
         partialTileMarkers.keySet().removeIf(key -> !targetKeys.contains(key));
+        failedKeys = intersection(failedKeys, targetKeys);
+        loadingKeys = intersection(loadingKeys, targetKeys);
         releaseFallbackIfCovered();
+        draw();
+    }
+
+    public void setTileLoadStates(Set<MapTileKey> failedKeys, Set<MapTileKey> loadingKeys) {
+        this.failedKeys = intersection(Set.copyOf(failedKeys), targetKeys);
+        this.loadingKeys = intersection(Set.copyOf(loadingKeys), targetKeys);
+        if (pressedFailedKey != null && !this.failedKeys.contains(pressedFailedKey)) {
+            pressedFailedKey = null;
+        }
         draw();
     }
 
@@ -200,13 +268,30 @@ public final class MapViewport extends Region {
         partialTiles.clear();
         partialTileMarkers.clear();
         targetKeys = Set.of();
+        failedKeys = Set.of();
+        loadingKeys = Set.of();
+        primaryPressed = false;
+        dragging = false;
+        pressedFailedKey = null;
+        highlightedPlayerIdentifier = null;
+        hideMarkerTooltip();
         draw();
     }
 
-    public void setFixedMarkers(List<MapMarker> markers) {
+    public void setFixedMarkers(List<DisplayMapMarker> markers) {
         hideMarkerTooltip();
         fixedMarkers.clear();
         fixedMarkers.addAll(markers);
+        draw();
+    }
+
+    public void highlightPlayer(String identifier) {
+        highlightedPlayerIdentifier = identifier;
+        draw();
+    }
+
+    public void clearPlayerHighlight() {
+        highlightedPlayerIdentifier = null;
         draw();
     }
 
@@ -228,13 +313,13 @@ public final class MapViewport extends Region {
 
     public void zoomIn() {
         if (state != null) {
-            animateToZoom(state.zoom().zoomIn(), getWidth() / 2, getHeight() / 2);
+            animateToZoom(state.displayZoom().zoomIn(), getWidth() / 2, getHeight() / 2);
         }
     }
 
     public void zoomOut() {
         if (state != null) {
-            animateToZoom(state.zoom().zoomOut(), getWidth() / 2, getHeight() / 2);
+            animateToZoom(state.displayZoom().zoomOut(), getWidth() / 2, getHeight() / 2);
         }
     }
 
@@ -282,7 +367,7 @@ public final class MapViewport extends Region {
 
     public boolean isShowingTemporaryScale() {
         return state != null && (Math.abs(
-                state.visualBlocksPerPixel() - state.zoom().blocksPerPixel()) > 0.000001
+                state.visualBlocksPerPixel() - state.displayZoom().blocksPerPixel()) > 0.000001
                 || tiles.keySet().stream().anyMatch(key -> key.zoom() != state.zoom()));
     }
 
@@ -295,13 +380,13 @@ public final class MapViewport extends Region {
             return;
         }
         animateToZoom(
-                MapZoomLevel.nearest(state.visualBlocksPerPixel()),
+                MapDisplayZoom.nearest(state.visualBlocksPerPixel()),
                 zoomAnchorX,
                 zoomAnchorY);
     }
 
     private void animateToZoom(
-            MapZoomLevel target,
+            MapDisplayZoom target,
             double pointerX,
             double pointerY) {
         zoomSettle.stop();
@@ -310,6 +395,9 @@ public final class MapViewport extends Region {
         zoomAnimation.setOnFinished(null);
         double start = state.visualBlocksPerPixel();
         double end = target.blocksPerPixel();
+        if (isSettledAtZoom(state.displayZoom(), start, target)) {
+            return;
+        }
         state.commitZoom(target);
         if (Math.abs(start - end) < 0.000001) {
             draw();
@@ -356,6 +444,8 @@ public final class MapViewport extends Region {
         drawTiles(graphics, false);
         drawPartialTiles(graphics);
         drawTiles(graphics, true);
+        drawFailedTiles(graphics);
+        drawLoadingTiles(graphics);
         graphics.setStroke(Color.rgb(255, 255, 255, 0.08));
         for (MapTileKey key : tiles.keySet()) {
             MapTileBounds bounds = key.bounds();
@@ -403,6 +493,54 @@ public final class MapViewport extends Region {
         }
     }
 
+    private void drawFailedTiles(GraphicsContext graphics) {
+        for (MapTileKey key : failedKeys) {
+            MapTileBounds bounds = key.bounds();
+            double x = state.screenXFor(bounds.minX(), canvas.getWidth());
+            double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
+            double size = bounds.blockWidth() / state.visualBlocksPerPixel();
+            if (!tiles.containsKey(key) && !partialTiles.containsKey(key)) {
+                graphics.setFill(Color.rgb(12, 15, 18, 0.92));
+                graphics.fillRect(Math.floor(x), Math.floor(y), Math.ceil(size), Math.ceil(size));
+            }
+            graphics.save();
+            graphics.beginPath();
+            graphics.rect(Math.floor(x), Math.floor(y), Math.ceil(size), Math.ceil(size));
+            graphics.closePath();
+            graphics.clip();
+            graphics.setFill(Color.rgb(190, 34, 42, 0.18));
+            graphics.fillRect(Math.floor(x), Math.floor(y), Math.ceil(size), Math.ceil(size));
+            graphics.setStroke(Color.rgb(235, 72, 82, 0.72));
+            graphics.setLineWidth(2);
+            double step = 18;
+            for (double offset = -size; offset < size * 2; offset += step) {
+                graphics.strokeLine(x + offset, y + size, x + offset + size, y);
+            }
+            graphics.restore();
+            graphics.setStroke(Color.rgb(239, 75, 85, 0.95));
+            graphics.setLineWidth(2);
+            graphics.strokeRect(Math.floor(x) + 1, Math.floor(y) + 1,
+                    Math.max(0, Math.ceil(size) - 2), Math.max(0, Math.ceil(size) - 2));
+        }
+    }
+
+    private void drawLoadingTiles(GraphicsContext graphics) {
+        for (MapTileKey key : loadingKeys) {
+            MapTileBounds bounds = key.bounds();
+            double x = state.screenXFor(bounds.minX(), canvas.getWidth());
+            double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
+            double size = bounds.blockWidth() / state.visualBlocksPerPixel();
+            if (!tiles.containsKey(key) && !partialTiles.containsKey(key)) {
+                graphics.setFill(Color.rgb(12, 15, 18, 0.75));
+                graphics.fillRect(Math.floor(x), Math.floor(y), Math.ceil(size), Math.ceil(size));
+            }
+            graphics.setStroke(Color.rgb(255, 255, 255, 0.75));
+            graphics.setLineWidth(2);
+            graphics.strokeRect(Math.floor(x) + 2, Math.floor(y) + 2,
+                    Math.max(0, Math.ceil(size) - 4), Math.max(0, Math.ceil(size) - 4));
+        }
+    }
+
     private void releaseFallbackIfCovered() {
         if (!hasCompleteTargetCoverage() || state == null) {
             return;
@@ -417,9 +555,22 @@ public final class MapViewport extends Region {
         return Math.max(MIN_VISUAL_ZOOM, Math.min(MAX_VISUAL_ZOOM, value));
     }
 
-    private void drawMarker(GraphicsContext graphics, MapMarker marker) {
+    private void drawMarker(GraphicsContext graphics, DisplayMapMarker displayMarker) {
+        MapMarker marker = displayMarker.marker();
         double x = state.screenXFor(marker.x(), canvas.getWidth());
         double y = state.screenYFor(marker.z(), canvas.getHeight());
+        if (displayMarker.identifier()
+                .filter(identifier -> identifier.equals(highlightedPlayerIdentifier))
+                .isPresent()) {
+            graphics.setFill(Color.TRANSPARENT);
+            graphics.setStroke(Color.rgb(68, 199, 103, 0.95));
+            graphics.setLineWidth(3);
+            graphics.strokeOval(
+                    x - MARKER_RADIUS - 6,
+                    y - MARKER_RADIUS - 6,
+                    (MARKER_RADIUS + 6) * 2,
+                    (MARKER_RADIUS + 6) * 2);
+        }
         graphics.setFill(markerColor(marker.type()));
         graphics.setStroke(Color.WHITE);
         graphics.setLineWidth(2);
@@ -429,34 +580,72 @@ public final class MapViewport extends Region {
                 MARKER_RADIUS * 2, MARKER_RADIUS * 2);
     }
 
-    private MapMarker markerAt(double screenX, double screenY) {
+    private DisplayMapMarker markerAt(double screenX, double screenY) {
         if (state == null) {
             return null;
         }
-        for (MapMarker marker : visibleMarkers()) {
+        for (DisplayMapMarker displayMarker : visibleMarkers()) {
+            MapMarker marker = displayMarker.marker();
             double x = state.screenXFor(marker.x(), canvas.getWidth());
             double y = state.screenYFor(marker.z(), canvas.getHeight());
             if (Math.hypot(screenX - x, screenY - y) <= MARKER_RADIUS + 3) {
-                return marker;
+                return displayMarker;
             }
         }
         return null;
     }
 
-    private List<MapMarker> visibleMarkers() {
-        List<MapMarker> markers = new ArrayList<>(fixedMarkers);
+    private MapTileKey failedTileAt(double screenX, double screenY) {
+        if (state == null) {
+            return null;
+        }
+        for (MapTileKey key : failedKeys) {
+            MapTileBounds bounds = key.bounds();
+            double x = state.screenXFor(bounds.minX(), canvas.getWidth());
+            double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
+            double size = bounds.blockWidth() / state.visualBlocksPerPixel();
+            if (screenX >= x && screenX <= x + size
+                    && screenY >= y && screenY <= y + size) {
+                return key;
+            }
+        }
+        return null;
+    }
+
+    static boolean isRetryClick(
+            MapTileKey pressed,
+            MapTileKey released,
+            double deltaX,
+            double deltaY) {
+        return pressed != null
+                && pressed.equals(released)
+                && Math.hypot(deltaX, deltaY) <= CLICK_DRAG_THRESHOLD;
+    }
+
+    static boolean isSettledAtZoom(
+            MapDisplayZoom current,
+            double visualBlocksPerPixel,
+            MapDisplayZoom target) {
+        return current == target
+                && Math.abs(visualBlocksPerPixel - target.blocksPerPixel()) <= 0.000001;
+    }
+
+    private List<DisplayMapMarker> visibleMarkers() {
+        List<DisplayMapMarker> markers = new ArrayList<>(fixedMarkers);
         List<MapMarker> portals = java.util.stream.Stream.concat(
                         tileMarkers.values().stream(),
                         partialTileMarkers.values().stream())
                 .flatMap(List::stream)
                 .filter(marker -> marker.type() == MapMarkerType.NETHER_PORTAL)
                 .toList();
-        markers.addAll(MapMarkerMerger.mergePortals(portals));
+        MapMarkerMerger.mergePortals(portals).stream()
+                .map(DisplayMapMarker::standard)
+                .forEach(markers::add);
         return markers.stream().filter(this::isMarkerVisible).distinct().toList();
     }
 
-    private boolean isMarkerVisible(MapMarker marker) {
-        return switch (marker.type()) {
+    private boolean isMarkerVisible(DisplayMapMarker displayMarker) {
+        return switch (displayMarker.marker().type()) {
             case PLAYER -> showPlayer.get();
             case WORLD_SPAWN -> showSpawn.get();
             case NETHER_PORTAL -> showPortals.get();
@@ -467,24 +656,20 @@ public final class MapViewport extends Region {
         return MapMarkerStyle.color(type);
     }
 
-    private static String markerLabel(MapMarker marker) {
-        String type = switch (marker.type()) {
-            case PLAYER -> "玩家";
-            case WORLD_SPAWN -> "世界出生点";
-            case NETHER_PORTAL -> "下界传送门";
-        };
-        return type + " · X " + marker.x() + " · Z " + marker.z();
-    }
-
     static Optional<String> markerTooltipText(MapMarker marker) {
-        return marker == null ? Optional.empty() : Optional.of(markerLabel(marker));
+        return marker == null
+                ? Optional.empty()
+                : Optional.of(DisplayMapMarker.standard(marker).tooltipText());
     }
 
-    private void showMarkerTooltip(
-            MapMarker marker,
+    static Optional<String> displayMarkerTooltipText(DisplayMapMarker marker) {
+        return marker == null ? Optional.empty() : Optional.of(marker.tooltipText());
+    }
+
+    private void showTooltip(
+            Optional<String> text,
             double screenX,
             double screenY) {
-        Optional<String> text = markerTooltipText(marker);
         if (text.isEmpty()) {
             hideMarkerTooltip();
             return;
@@ -505,5 +690,19 @@ public final class MapViewport extends Region {
     private void hideMarkerTooltip() {
         markerTooltip.hide();
         markerTooltip.setText("");
+    }
+
+    private static Set<MapTileKey> intersection(
+            Set<MapTileKey> left,
+            Set<MapTileKey> right) {
+        return left.stream()
+                .filter(right::contains)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static Set<MapTileKey> without(Set<MapTileKey> keys, MapTileKey removed) {
+        return keys.stream()
+                .filter(key -> !key.equals(removed))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 }
