@@ -1,7 +1,7 @@
 # Issue 编号对照清单
 
 - **更新日期**：2026-07-29
-- **当前问题总数**：68
+- **当前问题总数**：69
 - **当前编号前缀数**：21
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
@@ -23,7 +23,7 @@
 | `MapTileGenerator.java` | `MAPGEN` | `001` | `ISSUE-MAPGEN-001` | `ISSUE-MAPGEN-002` |
 | `MapTileScheduler.java` | `MAPSCHED` | `001-002` | `ISSUE-MAPSCHED-002` | `ISSUE-MAPSCHED-003` |
 | `MapTileService.java` | `MAPSERVICE` | `001` | `ISSUE-MAPSERVICE-001` | `ISSUE-MAPSERVICE-002` |
-| `MapViewerController.java` | `MAPVIEW` | `001-002` | `ISSUE-MAPVIEW-002` | `ISSUE-MAPVIEW-003` |
+| `MapViewerController.java` | `MAPVIEW` | `001-003` | `ISSUE-MAPVIEW-003` | `ISSUE-MAPVIEW-004` |
 | `MapViewport.java` | `VIEWPORT` | `001-002` | `ISSUE-VIEWPORT-002` | `ISSUE-VIEWPORT-003` |
 | `WorldListCell.java` | `LISTCELL` | `001-003` | `ISSUE-LISTCELL-003` | `ISSUE-LISTCELL-004` |
 | `PortablePaths.java` | `PORTABLE` | `001` | `ISSUE-PORTABLE-001` | `ISSUE-PORTABLE-002` |
