@@ -68,7 +68,7 @@
                         </Button>
                         <Button mnemonicParsing="false" onAction="#handleReset" text="重置视图"/>
                         <Button fx:id="clearCacheButton" disable="true" mnemonicParsing="false"
-                                onAction="#handleClearCache" text="清理当前世界缓存"/>
+                                onAction="#handleClearCache" text="清理存档缓存并重新加载"/>
                         <Button fx:id="exportButton" disable="true" mnemonicParsing="false"
                                 onAction="#handleExport" text="导出当前视口 PNG"/>
                     </children>
