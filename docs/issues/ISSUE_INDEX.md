@@ -1,8 +1,8 @@
 # Issue 编号对照清单
 
-- **更新日期**：2026-07-29
-- **当前问题总数**：69
-- **当前编号前缀数**：21
+- **更新日期**：2026-08-01
+- **当前问题总数**：84
+- **当前编号前缀数**：33
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
@@ -31,6 +31,18 @@
 | `WorldScanner.java` | `SCANNER` | `001-006` | `ISSUE-SCANNER-006` | `ISSUE-SCANNER-007` |
 | `WorldTreeCell.java` | `TREECELL` | `001-004` | `ISSUE-TREECELL-004` | `ISSUE-TREECELL-005` |
 | `WorldInfo.java` | `WORLDINFO` | `001-005` | `ISSUE-WORLDINFO-005` | `ISSUE-WORLDINFO-006` |
+| `FrameTimeRecorder.java` | `FRAMETIME` | `001` | `ISSUE-FRAMETIME-001` | `ISSUE-FRAMETIME-002` |
+| `JavaFxCameraTransform.java` | `JFXCAM` | `001` | `ISSUE-JFXCAM-001` | `ISSUE-JFXCAM-002` |
+| `JavaFxOrbitController.java` | `JFXORBIT` | `001` | `ISSUE-JFXORBIT-001` | `ISSUE-JFXORBIT-002` |
+| `LwjglV04Renderer.java` | `LWJGLRENDER` | `001` | `ISSUE-LWJGLRENDER-001` | `ISSUE-LWJGLRENDER-002` |
+| `OpenGlMeshResources.java` | `GLMESH` | `001` | `ISSUE-GLMESH-001` | `ISSUE-GLMESH-002` |
+| `ShaderProgram.java` | `SHADER` | `001` | `ISSUE-SHADER-001` | `ISSUE-SHADER-002` |
+| `V04Arguments.java` | `V04ARGS` | `001-002` | `ISSUE-V04ARGS-002` | `ISSUE-V04ARGS-003` |
+| `VoxelChunk.java` | `VOXCHUNK` | `001` | `ISSUE-VOXCHUNK-001` | `ISSUE-VOXCHUNK-002` |
+| `VoxelChunkParser.java` | `VOXPARSE` | `001-003` | `ISSUE-VOXPARSE-003` | `ISSUE-VOXPARSE-004` |
+| `VoxelMesher.java` | `VOXMESH` | `001` | `ISSUE-VOXMESH-001` | `ISSUE-VOXMESH-002` |
+| `measure-v04.ps1` | `V04MEASURE` | `001` | `ISSUE-V04MEASURE-001` | `ISSUE-V04MEASURE-002` |
+| `build-v04-trials.ps1` | `V04PACKAGE` | `001` | `ISSUE-V04PACKAGE-001` | `ISSUE-V04PACKAGE-002` |
 
 ## 使用规则
 
