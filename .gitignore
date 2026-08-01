@@ -2,7 +2,10 @@
 build/
 out/
 bin/
-packaging/
+!packaging/
+packaging/*
+!packaging/build-v04-trials.ps1
+!packaging/V0.4-TRIAL-NOTICE.txt
 bin/
 
 # ==================== Gradle 缓存 ====================
