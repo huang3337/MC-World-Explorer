@@ -37,10 +37,35 @@
 
 | 最新完成源码 | 状态 | 下一开发阶段 | 状态 |
 |---|---|---|---|
-| **V0.3.1** | 已完成并发布 | **V0.4** | 尚未开始 |
+| **V0.4** | 内部技术验证已完成 | **V0.5** | 尚未开始 |
 
 > [!IMPORTANT]
-> V0.4 是内部三维技术可行性验证阶段，不承诺面向普通用户发布三维功能。具体版本和软件包以 GitHub Releases 页面为准。
+> V0.4 是内部三维技术可行性验证，不是正式程序中的三维浏览功能，也没有对应的用户软件包。当前最新正式软件包仍以 GitHub Releases 页面为准。
+
+## V0.4 开发者说明
+
+V0.4 的作用是验证 Minecraft 存档能否被可靠转换为三维数据，并比较 JavaFX 3D 与 LWJGL/OpenGL 的可行性。该阶段完成了完整方块状态解析、负高度与邻区块处理、简化体素网格、流体空气接触外壳、共享相机、性能测量和 Windows x64 非发布 app-image 验证，最终选择 **LWJGL/OpenGL** 作为后续三维渲染基础。
+
+V0.4 **没有接入正式 `Launcher`、主窗口或现有二维地图**。正常执行 `gradlew run` 或打开 V0.3.1 软件包时看不到三维入口，这是预期行为。第一个面向用户的小范围三维预览仍规划在 V0.6。
+
+主要代码和证据位置：
+
+- 三维实验源码：[`src/main/java/com/mcworldexplorer/experimental/v04/`](src/main/java/com/mcworldexplorer/experimental/v04/)
+- LWJGL/OpenGL 后端：[`render/lwjgl/`](src/main/java/com/mcworldexplorer/experimental/v04/render/lwjgl/)
+- JavaFX 3D 对照原型：[`render/javafx/`](src/main/java/com/mcworldexplorer/experimental/v04/render/javafx/)
+- OpenGL 着色器：[`src/main/resources/v04/shaders/`](src/main/resources/v04/shaders/)
+- 自动化测试：[`src/test/java/com/mcworldexplorer/experimental/v04/`](src/test/java/com/mcworldexplorer/experimental/v04/)
+- 测量与非发布打包：[`scripts/v04/`](scripts/v04/) 和 [`packaging/build-v04-trials.ps1`](packaging/build-v04-trials.ps1)
+- 完整验证记录：[`docs/progress/V0.4.md`](docs/progress/V0.4.md)
+- 渲染后端决策：[`docs/decisions/DECISION-007.md`](docs/decisions/DECISION-007.md)
+
+开发者可在 PowerShell 中指定真实世界和区块，单独启动 LWJGL 试验入口：
+
+```powershell
+.\gradlew.bat runV04Lwjgl '--args=--world "D:\path\to\world" --dimension minecraft:overworld --chunk-x 0 --chunk-z 0'
+```
+
+试验窗口支持鼠标左键拖动旋转、滚轮缩放、`R` 重置和 `Esc` 退出。当前画面只用于验证解析、几何和渲染后端，不代表后续三维预览的最终视觉效果。
 
 ## 关于项目
 
@@ -109,6 +134,7 @@ MC World Explorer 可以在不启动 Minecraft 的情况下扫描本地 Java 版
 - [V0.2.1 开发与验收记录](docs/progress/V0.2.1.md)
 - [V0.3 开发与验收记录](docs/progress/V0.3.md)
 - [V0.3.1 开发与验收记录](docs/progress/V0.3.1.md)
+- [V0.4 三维技术可行性验证记录](docs/progress/V0.4.md)
 - [重大开发决策](docs/decisions/)
 
 ## 许可证

@@ -1,0 +1,23 @@
+MC World Explorer V0.4 3D Feasibility Trial
+============================================
+
+This app-image is a development-only technical trial. It is not a release,
+does not replace V0.3.1, and must not be redistributed as a stable build.
+
+Both JavaFX and LWJGL trial images intentionally contain the same complete
+runtime classpath so that packaging differences do not affect startup tests.
+Their package sizes are therefore not meaningful backend comparison data.
+
+The trial reads selected Minecraft save data and writes reports or screenshots
+only to paths explicitly supplied on the command line. Do not place report or
+screenshot paths inside a world directory.
+
+Third-party runtime components include:
+- OpenJFX 21, licensed under GPL-2.0 with the Classpath Exception.
+- LWJGL 3.4.1, licensed under BSD-3-Clause.
+- JOML 1.10.5, licensed under MIT.
+- Adventure NBT 4.17.0, licensed under MIT.
+
+The full dependency JARs, including LWJGL Windows x64 native JARs, are bundled
+inside the app-image. Project licensing remains described by the included
+LICENSE file.
