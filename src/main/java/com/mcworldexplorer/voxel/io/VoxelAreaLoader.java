@@ -16,15 +16,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 public final class VoxelAreaLoader {
     public VoxelAreaLoadResult load(VoxelAreaRequest request, CancellationSignal cancellation)
             throws IOException {
-        if (request == null || cancellation == null) {
-            throw new IllegalArgumentException("request and cancellation must not be null");
+        return load(request, cancellation, VoxelAreaLoadMonitor.NONE);
+    }
+
+    public VoxelAreaLoadResult load(
+            VoxelAreaRequest request,
+            CancellationSignal cancellation,
+            VoxelAreaLoadMonitor monitor) throws IOException {
+        if (request == null || cancellation == null || monitor == null) {
+            throw new IllegalArgumentException("request, cancellation and monitor must not be null");
         }
         Path world = request.world().toRealPath();
         if (!Files.isDirectory(world)) {
@@ -44,40 +53,32 @@ public final class VoxelAreaLoader {
             return thread;
         });
         try {
-            List<Callable<ChunkLoadResult>> jobs = coordinates.stream()
-                    .<Callable<ChunkLoadResult>>map(coordinate ->
-                            () -> readChunk(regionDirectory, coordinate, cancellation))
-                    .toList();
-            List<Future<ChunkLoadResult>> futures;
-            try {
-                futures = executor.invokeAll(jobs);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                Map<ChunkCoordinate, ChunkLoadResult> cancelled = new LinkedHashMap<>();
-                for (ChunkCoordinate coordinate : coordinates) {
-                    cancelled.put(coordinate, ChunkLoadResult.withoutChunk(
-                            coordinate,
-                            ChunkLoadStatus.CANCELLED,
-                            "loading interrupted",
-                            0,
-                            0));
-                }
-                return new VoxelAreaLoadResult(world, dimension, request.target(), cancelled);
+            CompletionService<ChunkLoadResult> completion =
+                    new ExecutorCompletionService<>(executor);
+            for (ChunkCoordinate coordinate : coordinates) {
+                completion.submit((Callable<ChunkLoadResult>) () ->
+                        readChunk(regionDirectory, coordinate, cancellation));
             }
             Map<ChunkCoordinate, ChunkLoadResult> results = new LinkedHashMap<>();
-            for (int index = 0; index < coordinates.size(); index++) {
-                ChunkCoordinate coordinate = coordinates.get(index);
+            for (int completed = 1; completed <= coordinates.size(); completed++) {
                 try {
-                    results.put(coordinate, futures.get(index).get());
+                    ChunkLoadResult result = completion.take().get();
+                    results.put(result.coordinate(), result);
+                    monitor.onChunkCompleted(
+                            result.coordinate(), result.status(), completed, coordinates.size());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    results.put(coordinate, ChunkLoadResult.withoutChunk(
-                            coordinate, ChunkLoadStatus.CANCELLED, "loading interrupted", 0, 0));
-                } catch (java.util.concurrent.ExecutionException e) {
+                    break;
+                } catch (ExecutionException e) {
                     Throwable cause = e.getCause();
                     throw new IOException(
-                            "unexpected chunk load failure at " + coordinate,
-                            cause);
+                            "unexpected background chunk load failure", cause);
+                }
+            }
+            if (results.size() < coordinates.size()) {
+                for (ChunkCoordinate coordinate : coordinates) {
+                    results.computeIfAbsent(coordinate, ignored -> ChunkLoadResult.withoutChunk(
+                            coordinate, ChunkLoadStatus.CANCELLED, "loading interrupted", 0, 0));
                 }
             }
             return new VoxelAreaLoadResult(world, dimension, request.target(), results);

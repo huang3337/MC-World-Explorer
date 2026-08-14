@@ -14,8 +14,15 @@ import java.util.Map;
 
 public final class VoxelSceneBuilder {
     public VoxelSceneResult build(VoxelAreaLoadResult area, CancellationSignal cancellation) {
-        if (area == null || cancellation == null) {
-            throw new IllegalArgumentException("area and cancellation must not be null");
+        return build(area, cancellation, VoxelSceneBuildMonitor.NONE);
+    }
+
+    public VoxelSceneResult build(
+            VoxelAreaLoadResult area,
+            CancellationSignal cancellation,
+            VoxelSceneBuildMonitor monitor) {
+        if (area == null || cancellation == null || monitor == null) {
+            throw new IllegalArgumentException("area, cancellation and monitor must not be null");
         }
         long start = System.nanoTime();
         Map<ChunkCoordinate, ChunkLoadStatus> statuses = new LinkedHashMap<>();
@@ -23,15 +30,21 @@ public final class VoxelSceneBuilder {
         boolean cancelled = false;
         ChunkMesher mesher = new ChunkMesher();
 
-        for (ChunkCoordinate coordinate : area.target().coordinates()) {
+        List<ChunkCoordinate> coordinates = area.target().coordinates();
+        int completed = 0;
+        for (ChunkCoordinate coordinate : coordinates) {
             ChunkLoadResult load = area.result(coordinate);
             if (load.status() != ChunkLoadStatus.SUCCESS) {
                 statuses.put(coordinate, load.status());
+                monitor.onChunkCompleted(
+                        coordinate, load.status(), ++completed, coordinates.size());
                 continue;
             }
             if (cancellation.isCancelled() || Thread.currentThread().isInterrupted()) {
                 statuses.put(coordinate, ChunkLoadStatus.CANCELLED);
                 cancelled = true;
+                monitor.onChunkCompleted(
+                        coordinate, ChunkLoadStatus.CANCELLED, ++completed, coordinates.size());
                 continue;
             }
             try {
@@ -43,6 +56,8 @@ public final class VoxelSceneBuilder {
             } catch (ChunkDecodeException e) {
                 statuses.put(coordinate, ChunkLoadStatus.CORRUPT);
             }
+            monitor.onChunkCompleted(
+                    coordinate, statuses.get(coordinate), ++completed, coordinates.size());
         }
 
         VoxelSceneSnapshot snapshot = meshes.isEmpty() ? null : snapshot(area, meshes);

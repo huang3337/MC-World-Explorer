@@ -23,12 +23,15 @@ MC-World-Explorer/
    ├─ main/
    │  ├─ java/com/mcworldexplorer/
    │  │  ├─ App.java              JavaFX 应用入口
+   │  │  ├─ experimental/         V0.4/V0.5 隔离验证入口，不由正式主界面调用
    │  │  ├─ map/                  地图块、五级缓存、调度、标记、视口协调与导出
    │  │  ├─ nbt/                  level.dat 与多人 playerdata 解析
    │  │  ├─ preview/              维度发现、图层请求及共享地表/高度带采样
    │  │  ├─ region/               Region 文件头、区块定位与基础解压
    │  │  ├─ storage/              严格便携的程序根目录、运行数据路径与配置
    │  │  ├─ ui/                   控制器和存档树 UI
+   │  │  ├─ viewer/               V0.6 三维请求、任务、内存缓存、环绕相机与唯一窗口
+   │  │  ├─ voxel/                共享方块状态、有限区域加载、简化网格与 OpenGL 资源
    │  │  └─ world/                存档模型、扫描和游戏模式
    │  └─ resources/               FXML、CSS、日志和界面文本
    └─ test/java/com/mcworldexplorer/
@@ -38,10 +41,12 @@ MC-World-Explorer/
       ├─ region/                  Region 合成测试与真实文件只读验收
       ├─ storage/                 便携路径、配置、目录写入和布局识别测试
       ├─ ui/                      树节点、地图控制器和视口行为测试
+      ├─ viewer/                  三维范围、档位、缓存、任务竞态和环绕相机测试
+      ├─ voxel/                   区块解码、进度、网格和 OpenGL 资源测试
       └─ world/                   模型和扫描测试
 ```
 
-`docs/decisions/` 已记录严格便携存储、Region 兼容边界、统一维度图层系统、多级地图块架构，以及 V0.3/V0.3.1 源码与发布节奏五项重大决策。
+`docs/decisions/` 保存已经开发者确认的重大技术决策；V0.6 的正式窗口与模块边界见 `DECISION-009.md`，三维鼠标交互与有限旋转中心平移见 `DECISION-010.md`。
 V0.2/V0.2.1 使用 `storage/PortablePaths.java` 将日志、缓存、导出和配置定位到程序根目录
 的 `logs/`、`cache/`、`exports/` 和 `config/`。这些目录受 `.gitignore` 保护，不属于
 源码目录，也不得写入 Minecraft 存档目录。V0.3 地图块缓存和多人玩家读取继续复用同一

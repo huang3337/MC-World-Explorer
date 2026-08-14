@@ -7,6 +7,9 @@ import com.mcworldexplorer.preview.PreviewRequest;
 import com.mcworldexplorer.preview.WorldDimension;
 import com.mcworldexplorer.world.PlayerLocation;
 import com.mcworldexplorer.world.WorldInfo;
+import com.mcworldexplorer.viewer.ViewerPerformanceProfile;
+import com.mcworldexplorer.viewer.ViewerRangePreset;
+import com.mcworldexplorer.voxel.data.ChunkRectangle;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -92,5 +95,22 @@ class MapViewerControllerTest {
                 "没有可清理的缓存，正在重新加载",
                 MapViewerController.cacheClearStatus(
                         new WorldMapCacheCleaner.ClearResult(0, 0, 0, null)));
+    }
+
+    @Test
+    void basicAndEnhancedProfilesExposeTheirConfirmedRanges() {
+        assertEquals(
+                java.util.List.of(ViewerRangePreset.ONE, ViewerRangePreset.THREE),
+                MapViewerController.viewerRangesForProfile(ViewerPerformanceProfile.BASIC));
+        assertEquals(java.util.List.of(ViewerRangePreset.values()),
+                MapViewerController.viewerRangesForProfile(ViewerPerformanceProfile.ENHANCED));
+    }
+
+    @Test
+    void viewerSelectionTextUsesChunkAreaAndBlockCenter() {
+        assertEquals(
+                "3 x 3（9 个）· 区块 X 0..2 · Z -2..0 · 中心 X 24 · Z -8",
+                MapViewerController.formatViewerSelection(
+                        ChunkRectangle.target(0, -2, 2, 0)));
     }
 }

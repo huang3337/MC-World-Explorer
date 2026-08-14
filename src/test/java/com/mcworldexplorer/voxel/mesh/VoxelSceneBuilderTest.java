@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -78,6 +79,27 @@ class VoxelSceneBuilderTest {
 
         assertEquals("example:machine", warning.detail());
         assertEquals(2, warning.occurrences());
+    }
+
+    @Test
+    void reportsMonotonicProgressForEveryTargetChunk() {
+        ChunkRectangle target = ChunkRectangle.target(0, 0, 1, 0);
+        Map<ChunkCoordinate, ChunkLoadResult> results = missingHalo(target);
+        Path world = Path.of(".").toAbsolutePath().normalize();
+        VoxelAreaLoadResult area = new VoxelAreaLoadResult(
+                world, WorldDimension.overworld(world), target, results);
+        List<Integer> completed = new ArrayList<>();
+
+        new VoxelSceneBuilder().build(
+                area,
+                CancellationSignal.NONE,
+                (coordinate, status, count, total) -> {
+                    assertEquals(ChunkLoadStatus.MISSING, status);
+                    assertEquals(2, total);
+                    completed.add(count);
+                });
+
+        assertEquals(List.of(1, 2), completed);
     }
 
     private static Map<ChunkCoordinate, ChunkLoadResult> missingHalo(ChunkRectangle target) {

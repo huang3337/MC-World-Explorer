@@ -69,6 +69,41 @@ class PortableSettingsTest {
     }
 
     @Test
+    void viewerProfileAndCustomPathPreserveEachOther() throws IOException {
+        Path applicationRoot = Files.createDirectory(tempDir.resolve("app"));
+        Path selectedPath = tempDir.resolve("instances");
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, applicationRoot.toString());
+        PortableSettings settings = new PortableSettings();
+
+        settings.saveCustomSavesPath(selectedPath);
+        settings.saveViewerPerformanceProfile("enhanced");
+        settings.saveCustomSavesPath(tempDir.resolve("updated"));
+
+        assertEquals("enhanced", settings.loadViewerPerformanceProfile().orElseThrow());
+        assertEquals(
+                tempDir.resolve("updated").toAbsolutePath().normalize(),
+                settings.loadCustomSavesPath().orElseThrow());
+    }
+
+    @Test
+    void missingViewerProfileDoesNotCreateConfiguration() throws IOException {
+        Path applicationRoot = Files.createDirectory(tempDir.resolve("app"));
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, applicationRoot.toString());
+
+        assertTrue(new PortableSettings().loadViewerPerformanceProfile().isEmpty());
+        assertTrue(Files.notExists(applicationRoot.resolve("config")));
+    }
+
+    @Test
+    void rejectsBlankViewerProfile() throws IOException {
+        Path applicationRoot = Files.createDirectory(tempDir.resolve("app"));
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, applicationRoot.toString());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new PortableSettings().saveViewerPerformanceProfile(" "));
+    }
+
+    @Test
     void reportsConfigDirectoryFailureWithoutFallback() throws IOException {
         Path applicationRoot = Files.createDirectory(tempDir.resolve("app"));
         Files.writeString(applicationRoot.resolve("config"), "occupied");

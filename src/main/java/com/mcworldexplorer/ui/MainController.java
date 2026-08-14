@@ -77,6 +77,12 @@ public class MainController {
     @FXML
     private MapViewerController mapViewerController;
 
+    public void shutdown() {
+        if (mapViewerController != null) {
+            mapViewerController.shutdown();
+        }
+    }
+
     @FXML
     public void initialize() {
         clearDetails();

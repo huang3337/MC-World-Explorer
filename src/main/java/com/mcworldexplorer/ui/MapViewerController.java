@@ -22,6 +22,18 @@ import com.mcworldexplorer.preview.PreviewRequest;
 import com.mcworldexplorer.preview.PreviewRequestResolver;
 import com.mcworldexplorer.preview.WorldDimension;
 import com.mcworldexplorer.preview.WorldDimensionDiscovery;
+import com.mcworldexplorer.storage.PortableSettings;
+import com.mcworldexplorer.viewer.ViewerAreaKey;
+import com.mcworldexplorer.viewer.ViewerMapReturnState;
+import com.mcworldexplorer.viewer.ViewerPerformanceProfile;
+import com.mcworldexplorer.viewer.ViewerProgress;
+import com.mcworldexplorer.viewer.ViewerRangePreset;
+import com.mcworldexplorer.viewer.ViewerRequest;
+import com.mcworldexplorer.viewer.ViewerTaskListener;
+import com.mcworldexplorer.viewer.ViewerTaskResult;
+import com.mcworldexplorer.viewer.VoxelPreviewCoordinator;
+import com.mcworldexplorer.viewer.lwjgl.LwjglViewerWindow;
+import com.mcworldexplorer.voxel.data.ChunkRectangle;
 import com.mcworldexplorer.world.PlayerLocation;
 import com.mcworldexplorer.world.WorldInfo;
 import javafx.animation.PauseTransition;
@@ -37,11 +49,13 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
@@ -73,6 +87,7 @@ public final class MapViewerController {
     private final WorldMapCacheCleaner cacheCleaner = new WorldMapCacheCleaner();
     private final ViewportExporter exporter = new ViewportExporter();
     private final PlayerDataReader playerDataReader = new PlayerDataReader();
+    private final PortableSettings portableSettings = new PortableSettings();
     private final MapTileLoadTracker tileLoadTracker = new MapTileLoadTracker();
     private final PauseTransition viewportDebounce = new PauseTransition(Duration.millis(200));
     private final PauseTransition playerHighlight = new PauseTransition(Duration.seconds(3));
@@ -92,6 +107,17 @@ public final class MapViewerController {
     private long cacheMaintenanceId;
     private long currentRequestId = -1;
     private long prefetchRequestId = -1;
+    private VoxelPreviewCoordinator viewerCoordinator;
+    private ViewerPerformanceProfile viewerProfile = ViewerPerformanceProfile.BASIC;
+    private ViewerRangePreset viewerRange = ViewerRangePreset.THREE;
+    private ChunkRectangle viewerLockedSelection;
+    private ChunkRectangle activeViewerTarget;
+    private long activeViewerRequestId = -1;
+    private boolean viewerTaskRunning;
+    private boolean shuttingDown;
+    private long viewerCacheInspectionId;
+    private Set<ChunkRectangle> validViewerCachedAreas = Set.of();
+    private boolean activeViewerExpectedFromCache;
 
     @FXML
     private ComboBox<WorldDimension> dimensionComboBox;
@@ -120,6 +146,22 @@ public final class MapViewerController {
     @FXML
     private Button clearCacheButton;
     @FXML
+    private ToggleButton viewerModeButton;
+    @FXML
+    private FlowPane viewerSelectionBar;
+    @FXML
+    private ComboBox<ViewerRangePreset> viewerRangeComboBox;
+    @FXML
+    private ComboBox<ViewerPerformanceProfile> viewerProfileComboBox;
+    @FXML
+    private Label viewerSelectionLabel;
+    @FXML
+    private ProgressBar viewerProgressBar;
+    @FXML
+    private Button viewerConfirmButton;
+    @FXML
+    private Button viewerCancelButton;
+    @FXML
     private Label statusLabel;
     @FXML
     private StackPane viewportHost;
@@ -141,6 +183,8 @@ public final class MapViewerController {
             refreshTiles();
         });
         viewport.setOnRetryRequested(this::retryTile);
+        viewport.setOnViewerSelectionLocked(this::lockViewerSelection);
+        viewport.setOnViewerEscapeRequested(this::handleViewerEscape);
         playerHighlight.setOnFinished(event -> viewport.clearPlayerHighlight());
         viewportDebounce.setOnFinished(event -> refreshTiles());
         playerMarkerButton.selectedProperty().bindBidirectional(viewport.showPlayerProperty());
@@ -171,6 +215,7 @@ public final class MapViewerController {
                 selectSliderLayer();
             }
         });
+        configureViewerControls();
         clear();
     }
 
@@ -202,9 +247,12 @@ public final class MapViewerController {
     }
 
     public void clear() {
+        cancelViewerTask(false);
+        exitViewerMode(false);
         contextId++;
         playerLoadId++;
         cacheMaintenanceId++;
+        viewerCacheInspectionId++;
         viewportDebounce.stop();
         playerHighlight.stop();
         scheduler.cancelAll();
@@ -237,6 +285,7 @@ public final class MapViewerController {
             updatingControls = false;
             exportButton.setDisable(true);
             clearCacheButton.setDisable(true);
+            viewerModeButton.setDisable(true);
             coordinateErrorLabel.setText("");
             playerListButton.getItems().clear();
             playerListButton.setText("玩家列表");
@@ -245,7 +294,29 @@ public final class MapViewerController {
         }
     }
 
+    public void shutdown() {
+        if (shuttingDown) {
+            return;
+        }
+        shuttingDown = true;
+        contextId++;
+        playerLoadId++;
+        cacheMaintenanceId++;
+        viewerCacheInspectionId++;
+        activeViewerRequestId = -1;
+        viewerTaskRunning = false;
+        viewportDebounce.stop();
+        playerHighlight.stop();
+        scheduler.close();
+        if (viewerCoordinator != null) {
+            viewerCoordinator.close();
+            viewerCoordinator = null;
+        }
+    }
+
     private void selectDimension(WorldDimension selected) {
+        cancelViewerTask(false);
+        exitViewerMode(false);
         playerHighlight.stop();
         viewport.clearPlayerHighlight();
         if (pendingPlayerNavigation != null
@@ -258,6 +329,8 @@ public final class MapViewerController {
         readyKeys.clear();
         currentRequestId = -1;
         dimension = selected;
+        viewerCacheInspectionId++;
+        validViewerCachedAreas = Set.of();
         clearCacheButton.setDisable(false);
         statusLabel.setText("正在读取维度高度...");
         setLayerControlsDisabled(true);
@@ -326,12 +399,392 @@ public final class MapViewerController {
         updatingControls = false;
         viewport.setViewportState(state.viewportState());
         viewport.setFixedMarkers(fixedMarkers());
+        viewport.setViewerCachedAreaContext(dimension.displayName());
+        viewerModeButton.setDisable(false);
         if (navigation != null && navigation.dimensionId().equals(dimension.id())) {
             playerMarkerButton.setSelected(true);
             viewport.highlightPlayer(navigation.identifier());
             playerHighlight.playFromStart();
         }
         refreshTiles();
+    }
+
+    private void configureViewerControls() {
+        try {
+            viewerProfile = portableSettings.loadViewerPerformanceProfile()
+                    .map(ViewerPerformanceProfile::fromSetting)
+                    .orElse(ViewerPerformanceProfile.BASIC);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read viewer performance profile", e);
+            viewerProfile = ViewerPerformanceProfile.BASIC;
+        }
+        viewerProfileComboBox.setItems(FXCollections.observableArrayList(
+                ViewerPerformanceProfile.values()));
+        viewerProfileComboBox.getSelectionModel().select(viewerProfile);
+        replaceViewerRanges(viewerRange);
+        viewerProfileComboBox.valueProperty().addListener((observable, oldValue, value) -> {
+            if (value == null || value == viewerProfile) {
+                return;
+            }
+            if (viewerTaskRunning) {
+                cancelViewerTask(false);
+            }
+            viewerProfile = value;
+            viewerRange = viewerProfile.constrain(viewerRange);
+            replaceViewerRanges(viewerRange);
+            viewport.setViewerRangePreset(viewerRange);
+            clearViewerSelection("在地图上点击以锁定三维区域");
+            if (viewerCoordinator != null) {
+                viewerCoordinator.setProfile(viewerProfile);
+                refreshViewerCachedAreas();
+            }
+            try {
+                portableSettings.saveViewerPerformanceProfile(viewerProfile.settingValue());
+            } catch (IOException e) {
+                LOGGER.warn("Failed to save viewer performance profile", e);
+                statusLabel.setText("性能档位已生效，但无法保存本地配置");
+            }
+        });
+        viewerRangeComboBox.valueProperty().addListener((observable, oldValue, value) -> {
+            if (value == null || value == viewerRange) {
+                return;
+            }
+            if (viewerTaskRunning) {
+                cancelViewerTask(false);
+            }
+            viewerRange = value;
+            viewport.setViewerRangePreset(value);
+            clearViewerSelection("在地图上点击以锁定三维区域");
+        });
+    }
+
+    private void replaceViewerRanges(ViewerRangePreset preferred) {
+        List<ViewerRangePreset> ranges = viewerRangesForProfile(viewerProfile);
+        viewerRangeComboBox.setItems(FXCollections.observableArrayList(ranges));
+        viewerRangeComboBox.getSelectionModel().select(
+                ranges.contains(preferred) ? preferred : ViewerRangePreset.THREE);
+        viewerRange = viewerRangeComboBox.getValue();
+    }
+
+    static List<ViewerRangePreset> viewerRangesForProfile(ViewerPerformanceProfile profile) {
+        return java.util.Arrays.stream(ViewerRangePreset.values())
+                .filter(profile::allows)
+                .toList();
+    }
+
+    @FXML
+    private void handleViewerMode(ActionEvent event) {
+        if (viewerModeButton.isSelected()) {
+            enterViewerMode();
+        } else {
+            exitViewerMode(true);
+        }
+    }
+
+    @FXML
+    private void handleViewerConfirm(ActionEvent event) {
+        startViewerTask();
+    }
+
+    @FXML
+    private void handleViewerCancel(ActionEvent event) {
+        cancelViewerTask(true);
+    }
+
+    private void enterViewerMode() {
+        if (world == null || dimension == null || layer == null) {
+            viewerModeButton.setSelected(false);
+            return;
+        }
+        viewerSelectionBar.setManaged(true);
+        viewerSelectionBar.setVisible(true);
+        viewport.setViewerRangePreset(viewerRange);
+        viewport.setViewerSelectionMode(true);
+        refreshViewerCachedAreas();
+        clearViewerSelection("在地图上点击以锁定三维区域");
+        viewport.requestFocus();
+    }
+
+    private void exitViewerMode(boolean cancelTask) {
+        if (cancelTask) {
+            cancelViewerTask(false);
+        }
+        viewerLockedSelection = null;
+        activeViewerTarget = null;
+        if (viewport != null) {
+            viewport.setViewerSelectionMode(false);
+            viewport.setViewerCachedAreas(List.of());
+        }
+        if (viewerModeButton != null) {
+            viewerModeButton.setSelected(false);
+            viewerSelectionBar.setManaged(false);
+            viewerSelectionBar.setVisible(false);
+            setViewerTaskUi(false);
+        }
+    }
+
+    private void handleViewerEscape() {
+        if (viewerTaskRunning) {
+            cancelViewerTask(true);
+        } else if (viewerLockedSelection != null) {
+            clearViewerSelection("在地图上点击以锁定三维区域");
+        } else {
+            exitViewerMode(false);
+        }
+    }
+
+    private void lockViewerSelection(ChunkRectangle selection) {
+        if (!viewport.isViewerSelectionMode()) {
+            return;
+        }
+        if (viewerTaskRunning) {
+            cancelViewerTask(false);
+        }
+        viewerLockedSelection = selection;
+        activeViewerTarget = null;
+        viewerSelectionLabel.setText(formatViewerSelection(selection));
+        viewerConfirmButton.setText(isCachedArea(selection) ? "打开三维预览" : "生成三维预览");
+        viewerConfirmButton.setDisable(false);
+    }
+
+    private void clearViewerSelection(String message) {
+        viewerLockedSelection = null;
+        activeViewerTarget = null;
+        if (viewport != null) {
+            viewport.clearViewerLockedSelection();
+        }
+        if (viewerSelectionLabel != null) {
+            viewerSelectionLabel.setText(message);
+            viewerConfirmButton.setText("生成三维预览");
+            viewerConfirmButton.setDisable(true);
+        }
+    }
+
+    static String formatViewerSelection(ChunkRectangle selection) {
+        int centerX = selection.minX() * 16 + selection.width() * 8;
+        int centerZ = selection.minZ() * 16 + selection.depth() * 8;
+        return String.format(
+                "%d x %d（%d 个）· 区块 X %d..%d · Z %d..%d · 中心 X %d · Z %d",
+                selection.width(), selection.depth(),
+                selection.width() * selection.depth(),
+                selection.minX(), selection.maxX(), selection.minZ(), selection.maxZ(),
+                centerX, centerZ);
+    }
+
+    private boolean isCachedArea(ChunkRectangle selection) {
+        return validViewerCachedAreas.contains(selection);
+    }
+
+    private void refreshViewerCachedAreas() {
+        if (viewerCoordinator == null || world == null || dimension == null) {
+            validViewerCachedAreas = Set.of();
+            viewport.setViewerCachedAreas(List.of());
+            return;
+        }
+        long inspectionId = ++viewerCacheInspectionId;
+        Path worldPath = world.getFolderPath().toAbsolutePath().normalize();
+        String dimensionId = dimension.id();
+        VoxelPreviewCoordinator currentCoordinator = viewerCoordinator;
+        validViewerCachedAreas = Set.of();
+        viewport.setViewerCachedAreas(List.of());
+        Task<List<ChunkRectangle>> task = new Task<>() {
+            @Override
+            protected List<ChunkRectangle> call() {
+                return currentCoordinator.validateCachedAreas().stream()
+                        .filter(key -> key.world().equals(worldPath)
+                                && key.dimensionId().equals(dimensionId))
+                        .map(ViewerAreaKey::target)
+                        .toList();
+            }
+        };
+        task.setOnSucceeded(event -> {
+            if (inspectionId != viewerCacheInspectionId || world == null || dimension == null
+                    || !world.getFolderPath().toAbsolutePath().normalize().equals(worldPath)
+                    || !dimension.id().equals(dimensionId)) {
+                return;
+            }
+            validViewerCachedAreas = Set.copyOf(task.getValue());
+            viewport.setViewerCachedAreas(validViewerCachedAreas);
+        });
+        task.setOnFailed(event -> LOGGER.debug("Failed to validate viewer cache", task.getException()));
+        Thread thread = new Thread(task, "viewer-cache-validator");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private VoxelPreviewCoordinator ensureViewerCoordinator() {
+        if (shuttingDown) {
+            throw new IllegalStateException("应用正在关闭");
+        }
+        if (viewerCoordinator == null) {
+            viewerCoordinator = new VoxelPreviewCoordinator(
+                    new LwjglViewerWindow(), viewerProfile);
+        }
+        return viewerCoordinator;
+    }
+
+    private void startViewerTask() {
+        if (viewerTaskRunning || viewerLockedSelection == null
+                || world == null || dimension == null || layer == null) {
+            return;
+        }
+        ChunkRectangle target = viewerLockedSelection;
+        MapViewportState mapState = viewport.viewportState();
+        ViewerRequest request = new ViewerRequest(
+                world.getFolderPath(),
+                world.getLevelName(),
+                dimension.id(),
+                dimension.displayName(),
+                target,
+                viewerProfile,
+                new ViewerMapReturnState(
+                        mapState.centerX(), mapState.centerZ(),
+                        mapState.visualBlocksPerPixel(), layer));
+        activeViewerTarget = target;
+        activeViewerExpectedFromCache = isCachedArea(target);
+        viewerLockedSelection = null;
+        viewport.clearViewerLockedSelection();
+        setViewerTaskUi(true);
+        viewerSelectionLabel.setText("正在准备三维预览");
+        if (activeViewerExpectedFromCache) {
+            viewerProgressBar.setManaged(false);
+            viewerProgressBar.setVisible(false);
+            viewerSelectionLabel.setText("正在打开缓存中的三维预览");
+        }
+        try {
+            activeViewerRequestId = ensureViewerCoordinator().start(
+                    request,
+                    new ViewerTaskListener() {
+                        @Override
+                        public void onProgress(long requestId, ViewerProgress progress) {
+                            Platform.runLater(() -> acceptViewerProgress(requestId, progress));
+                        }
+
+                        @Override
+                        public void onSucceeded(long requestId, ViewerTaskResult result) {
+                            Platform.runLater(() -> acceptViewerSuccess(requestId, result));
+                        }
+
+                        @Override
+                        public void onFailed(long requestId, Throwable failure) {
+                            Platform.runLater(() -> acceptViewerFailure(requestId, failure));
+                        }
+
+                        @Override
+                        public void onCancelled(long requestId) {
+                            Platform.runLater(() -> acceptViewerCancellation(requestId));
+                        }
+                    });
+        } catch (RuntimeException e) {
+            LOGGER.error("Failed to start voxel preview", e);
+            activeViewerRequestId = -1;
+            viewerTaskRunning = false;
+            setViewerTaskUi(false);
+            restoreActiveViewerTarget();
+            viewerSelectionLabel.setText("三维预览启动失败：" + shortMessage(e));
+        }
+    }
+
+    private void acceptViewerProgress(long requestId, ViewerProgress progress) {
+        if (requestId != activeViewerRequestId || !viewerTaskRunning) {
+            return;
+        }
+        if (activeViewerExpectedFromCache
+                && progress.stage() != com.mcworldexplorer.viewer.ViewerProgressStage.READING_CHUNKS
+                && progress.stage() != com.mcworldexplorer.viewer.ViewerProgressStage.BUILDING_MESH) {
+            return;
+        }
+        viewerProgressBar.setManaged(true);
+        viewerProgressBar.setVisible(true);
+        viewerSelectionLabel.setText(progress.message());
+        viewerProgressBar.setProgress(progress.fraction());
+    }
+
+    private void acceptViewerSuccess(long requestId, ViewerTaskResult result) {
+        if (requestId != activeViewerRequestId) {
+            return;
+        }
+        activeViewerRequestId = -1;
+        viewerTaskRunning = false;
+        activeViewerTarget = null;
+        activeViewerExpectedFromCache = false;
+        setViewerTaskUi(false);
+        refreshViewerCachedAreas();
+        String state = result.fromCache() ? "已打开缓存中的三维预览"
+                : result.partialSuccess()
+                        ? "三维预览已打开，" + result.failedChunks() + " 个区块读取失败"
+                        : "三维预览已打开";
+        clearViewerSelection(state + "；可继续选择其他区域");
+    }
+
+    private void acceptViewerFailure(long requestId, Throwable failure) {
+        if (requestId != activeViewerRequestId) {
+            return;
+        }
+        LOGGER.error("Voxel preview generation failed", failure);
+        activeViewerRequestId = -1;
+        viewerTaskRunning = false;
+        activeViewerExpectedFromCache = false;
+        setViewerTaskUi(false);
+        restoreActiveViewerTarget();
+        viewerSelectionLabel.setText("生成失败：" + shortMessage(failure));
+        viewerConfirmButton.setText("重新生成");
+    }
+
+    private void acceptViewerCancellation(long requestId) {
+        if (requestId != activeViewerRequestId) {
+            return;
+        }
+        activeViewerRequestId = -1;
+        viewerTaskRunning = false;
+        activeViewerExpectedFromCache = false;
+        setViewerTaskUi(false);
+        restoreActiveViewerTarget();
+        viewerSelectionLabel.setText("已取消生成");
+    }
+
+    private void cancelViewerTask(boolean restoreSelection) {
+        if (!viewerTaskRunning) {
+            return;
+        }
+        long cancelledId = activeViewerRequestId;
+        activeViewerRequestId = -1;
+        viewerTaskRunning = false;
+        activeViewerExpectedFromCache = false;
+        if (viewerCoordinator != null) {
+            viewerCoordinator.cancel();
+        }
+        setViewerTaskUi(false);
+        if (restoreSelection) {
+            restoreActiveViewerTarget();
+            viewerSelectionLabel.setText("已取消生成");
+        } else {
+            activeViewerTarget = null;
+        }
+        LOGGER.debug("Cancelled voxel preview request {}", cancelledId);
+    }
+
+    private void restoreActiveViewerTarget() {
+        if (activeViewerTarget == null) {
+            return;
+        }
+        viewerLockedSelection = activeViewerTarget;
+        viewport.lockViewerSelection(activeViewerTarget);
+        viewerConfirmButton.setDisable(false);
+        activeViewerTarget = null;
+    }
+
+    private void setViewerTaskUi(boolean running) {
+        viewerTaskRunning = running;
+        if (viewerProgressBar == null) {
+            return;
+        }
+        viewerProgressBar.setManaged(running);
+        viewerProgressBar.setVisible(running);
+        viewerProgressBar.setProgress(-1);
+        viewerCancelButton.setManaged(running);
+        viewerCancelButton.setVisible(running);
+        viewerConfirmButton.setDisable(running || viewerLockedSelection == null);
     }
 
     @FXML
