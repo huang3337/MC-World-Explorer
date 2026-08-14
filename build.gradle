@@ -60,6 +60,13 @@ tasks.register('runV04Lwjgl', JavaExec) {
     mainClass = 'com.mcworldexplorer.experimental.v04.render.lwjgl.LwjglV04Launcher'
 }
 
+tasks.register('runV05Lwjgl', JavaExec) {
+    group = 'application'
+    description = 'Runs the isolated V0.5 LWJGL/OpenGL internal validation'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mcworldexplorer.experimental.v05.LwjglV05Launcher'
+}
+
 test {
     useJUnitPlatform()
 }

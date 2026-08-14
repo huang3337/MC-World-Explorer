@@ -35,12 +35,38 @@
 
 ## 源码开发状态
 
-| 最新完成源码 | 状态 | 下一开发阶段 | 状态 |
+| 最新完成源码 | 状态 | 当前开发阶段 | 状态 |
 |---|---|---|---|
-| **V0.4** | 内部技术验证已完成 | **V0.5** | 尚未开始 |
+| **V0.5** | 内部三维基础已完成 | **V0.6** | 待规划 |
 
 > [!IMPORTANT]
-> V0.4 是内部三维技术可行性验证，不是正式程序中的三维浏览功能，也没有对应的用户软件包。当前最新正式软件包仍以 GitHub Releases 页面为准。
+> V0.5 是内部三维数据与渲染基础阶段，不提供正式程序中的三维入口，也没有对应的用户软件包。代码、内部验证和开发者整体审核均已完成；当前最新正式软件包仍以 GitHub Releases 页面为准。
+
+## V0.5 开发者说明
+
+V0.5 将 V0.4 的可行性结论整理为正式、可复用的三维基础：共享完整方块状态解析、最大 `8x8` 的有限多区块加载、外围一圈边界数据、分层简化网格、后端无关快照，以及正式 LWJGL/OpenGL 上传和资源释放组件。未知及 Mod 方块保留 ID 与属性并使用醒目不透明方块降级，不根据名称猜测类型。
+
+V0.5 仍是内部基础版本，**没有修改正式 `Launcher`、主窗口或二维地图入口**。正常启动当前软件包时看不到三维功能是预期行为；第一个面向用户的小范围三维预览仍属于 V0.6。
+
+主要代码和证据位置：
+
+- 正式数据、加载与网格：[`src/main/java/com/mcworldexplorer/voxel/`](src/main/java/com/mcworldexplorer/voxel/)
+- V0.5 独立验证入口：[`src/main/java/com/mcworldexplorer/experimental/v05/`](src/main/java/com/mcworldexplorer/experimental/v05/)
+- OpenGL 着色器：[`src/main/resources/v05/shaders/`](src/main/resources/v05/shaders/)
+- 自动化测试：[`src/test/java/com/mcworldexplorer/voxel/`](src/test/java/com/mcworldexplorer/voxel/) 与 [`experimental/v05/`](src/test/java/com/mcworldexplorer/experimental/v05/)
+- 只读测量脚本：[`scripts/v05/measure-v05.ps1`](scripts/v05/measure-v05.ps1)
+- 完整验证记录：[`docs/progress/V0.5.md`](docs/progress/V0.5.md)
+- 架构决策：[`docs/decisions/DECISION-008.md`](docs/decisions/DECISION-008.md)
+
+开发者可以在 PowerShell 中指定真实存档、维度和中心区块，运行带清单、报告和截图的内部验证：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\v05\measure-v05.ps1 `
+  -World "D:\path\to\world" -Dimension "minecraft:overworld" `
+  -CenterChunkX 0 -CenterChunkZ 0 -Width 3 -Depth 3
+```
+
+验证窗口支持鼠标左键拖动旋转、滚轮缩放、`R` 重置和 `Esc` 退出。当前使用简化颜色和立方体几何，目标是验证正式数据与渲染基础，不代表后续三维预览的最终视觉效果。
 
 ## V0.4 开发者说明
 
