@@ -1,6 +1,7 @@
 package com.mcworldexplorer;
 
 import com.mcworldexplorer.storage.PortablePaths;
+import com.mcworldexplorer.ui.MainController;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -16,6 +17,7 @@ public class App extends Application {
     private static final Logger LOGGER = LoggerFactory.getLogger(App.class);
     private static final int DEFAULT_WIDTH = 1100;
     private static final int DEFAULT_HEIGHT = 720;
+    private MainController controller;
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -25,6 +27,7 @@ public class App extends Application {
         }
         FXMLLoader loader = new FXMLLoader(fxmlLocation, ResourceBundle.getBundle("messages"));
         Parent root = loader.load();
+        controller = loader.getController();
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
         URL stylesheet = getClass().getResource("/css/styles.css");
         if (stylesheet == null) {
@@ -36,6 +39,13 @@ public class App extends Application {
         stage.setMinWidth(900);
         stage.setMinHeight(600);
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+        if (controller != null) {
+            controller.shutdown();
+        }
     }
 
     public static void main(String[] args) {

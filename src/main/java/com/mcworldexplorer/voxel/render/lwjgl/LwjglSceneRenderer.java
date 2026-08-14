@@ -4,6 +4,8 @@ import com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot;
 import org.joml.Matrix4f;
 
 import java.io.IOException;
+import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 import static org.lwjgl.opengl.GL11.GL_BLEND;
 import static org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA;
@@ -28,13 +30,24 @@ public final class LwjglSceneRenderer implements AutoCloseable {
     }
 
     public void replace(VoxelSceneSnapshot snapshot) {
+        replace(snapshot, () -> true);
+    }
+
+    public boolean replace(VoxelSceneSnapshot snapshot, BooleanSupplier commitAllowed) {
         requireOwnerThread();
+        Objects.requireNonNull(snapshot, "snapshot");
+        Objects.requireNonNull(commitAllowed, "commitAllowed");
         OpenGlSceneResources replacement = OpenGlSceneResources.upload(snapshot);
+        if (!commitAllowed.getAsBoolean()) {
+            replacement.close();
+            return false;
+        }
         OpenGlSceneResources previous = scene;
         scene = replacement;
         if (previous != null) {
             previous.close();
         }
+        return true;
     }
 
     public void draw(Matrix4f viewProjection) {

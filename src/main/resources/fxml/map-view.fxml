@@ -5,6 +5,7 @@
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.ProgressBar?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
@@ -71,8 +72,30 @@
                                 onAction="#handleClearCache" text="清理存档缓存并重新加载"/>
                         <Button fx:id="exportButton" disable="true" mnemonicParsing="false"
                                 onAction="#handleExport" text="导出当前视口 PNG"/>
+                        <ToggleButton fx:id="viewerModeButton" disable="true"
+                                      mnemonicParsing="false" onAction="#handleViewerMode"
+                                      text="三维预览"/>
                     </children>
                 </HBox>
+            </children>
+        </FlowPane>
+        <FlowPane fx:id="viewerSelectionBar" alignment="CENTER_LEFT" managed="false"
+                  hgap="8.0" vgap="6.0" styleClass="viewer-selection-bar" visible="false">
+            <children>
+                <Label text="范围"/>
+                <ComboBox fx:id="viewerRangeComboBox" prefWidth="92.0"/>
+                <Label text="性能"/>
+                <ComboBox fx:id="viewerProfileComboBox" prefWidth="92.0"/>
+                <Label fx:id="viewerSelectionLabel" minWidth="180.0"
+                       text="在地图上点击以锁定三维区域"/>
+                <ProgressBar fx:id="viewerProgressBar" managed="false"
+                             prefWidth="140.0" progress="-1.0" visible="false"/>
+                <Button fx:id="viewerConfirmButton" disable="true"
+                        mnemonicParsing="false" onAction="#handleViewerConfirm"
+                        text="生成三维预览"/>
+                <Button fx:id="viewerCancelButton" managed="false"
+                        mnemonicParsing="false" onAction="#handleViewerCancel"
+                        text="取消生成" visible="false"/>
             </children>
         </FlowPane>
         <Label fx:id="statusLabel" text="选择存档后浏览地图" wrapText="true"/>

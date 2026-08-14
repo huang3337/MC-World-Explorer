@@ -46,6 +46,13 @@
     -fx-padding: 4 0 4 0;
 }
 
+.viewer-selection-bar {
+    -fx-background-color: #eef5fb;
+    -fx-border-color: #9db9d0;
+    -fx-border-width: 1;
+    -fx-padding: 7 8 7 8;
+}
+
 .map-viewport {
     -fx-background-color: #20262b;
     -fx-border-color: #aeb6bd;
