@@ -266,7 +266,7 @@ world_preview.png
 
 本版本属于内部技术验证阶段，不承诺面向普通用户发布三维功能。
 
-V0.4 代码与正式程序保持隔离：核心源码位于 `src/main/java/com/mcworldexplorer/experimental/v04/`，OpenGL 着色器位于 `src/main/resources/v04/`，对应测试位于 `src/test/java/com/mcworldexplorer/experimental/v04/`。正式 `com.mcworldexplorer.Launcher`、主窗口和 V0.3.1 二维地图入口不因 V0.4 改变；测量及非发布打包入口分别位于 `scripts/v04/` 和 `packaging/build-v04-trials.ps1`。
+V0.4 代码与正式程序保持隔离：核心源码位于 `src/main/java/com/mcworldexplorer/experimental/v04/`，OpenGL 着色器位于 `src/main/resources/v04/`，对应测试位于 `src/test/java/com/mcworldexplorer/experimental/v04/`。正式 `com.mcworldexplorer.Launcher`、主窗口和 V0.3.1 二维地图入口不因 V0.4 改变；测量及非发布打包工具仅在本地保留，不进入正式仓库。
 
 ## 功能
 
@@ -778,4 +778,4 @@ V0.4 已于 2026-08-01 完成隔离的完整方块状态解析、单区块简化
 
 V0.5 已于 2026-08-04 正式开始，并已完成设计范围内的共享完整状态解析、二维适配、最大 `8x8` 有限多区块加载、外围边界、分层简化网格、后端无关快照、正式 LWJGL/OpenGL 资源和独立验证入口。最终干净全量测试执行 76 个套件、240 项测试，0 失败、0 错误；真实主世界、下界、末地和 Aether Mod 维度均生成非空截图，单区块、`3x3` 和 `8x8` 证据中的存档文件清单、大小、修改时间和 SHA-256 前后完全一致。Rule 16 已审查 50 个文件并修复 11 项问题，当前活动问题为 0。开发者已于 2026-08-14 完成人工审核并明确确认 V0.5 整体完成，同时分别授权创建统一提交和推送至 GitHub。V0.5 仍不接入正式主界面，也不构建或发布用户软件包。
 
-V0.6 已于 2026-08-14 完成功能开发、全量自动化、真实存档只读管线、开发者人工交互、31 个生产文件及发布版本配置的 Rule 16 审查，活动问题为 0。正式流程采用 JavaFX 二维主窗口与独立 LWJGL 三维窗口、新建 `com.mcworldexplorer.viewer` 模块、受控范围预设、非模态后台生成、唯一窗口复用、有限内存缓存、手动性能档位、完整垂直范围和局部失败隔离；交互修订见 `docs/decisions/DECISION-010.md`。Windows x64 最终软件包当时从确定提交 `f169ebf7330172ea6c3c1b6e5fdda922e2b94278` 重新干净构建；该提交经历史清理后对应 `d58ddfca0119a9c9cb7e9a0f7e8f2fc623617866`。软件包通过结构、SHA-256 和纯净解压启动验收，并使用标签 `v0.6.0` 和 GitHub Release 发布。
+V0.6 已于 2026-08-14 完成功能开发、全量自动化、真实存档只读管线、开发者人工交互、31 个生产文件及发布版本配置的 Rule 16 审查，活动问题为 0。正式流程采用 JavaFX 二维主窗口与独立 LWJGL 三维窗口、新建 `com.mcworldexplorer.viewer` 模块、受控范围预设、非模态后台生成、唯一窗口复用、有限内存缓存、手动性能档位、完整垂直范围和局部失败隔离；交互修订见 `docs/decisions/DECISION-010.md`。Windows x64 最终软件包当时从确定提交 `f169ebf7330172ea6c3c1b6e5fdda922e2b94278` 重新干净构建；两次仓库历史清理后，当前对应提交为 `307497d5ac7cfc08acee528c9a494973be7ef455`，完整映射见 `docs/decisions/DECISION-011.md` 和 `docs/decisions/DECISION-012.md`。软件包通过结构、SHA-256 和纯净解压启动验收，并使用标签 `v0.6.0` 和 GitHub Release 发布。

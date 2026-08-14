@@ -2,11 +2,10 @@
 build/
 out/
 bin/
-!packaging/
-packaging/*
-!packaging/build-v04-trials.ps1
-!packaging/V0.4-TRIAL-NOTICE.txt
-bin/
+
+# ==================== 本地打包与内部验证工具 ====================
+packaging/
+scripts/
 
 # ==================== Gradle 缓存 ====================
 .gradle/

@@ -41,6 +41,8 @@
 | `v0.3.1` | `1341aad9db572dd05f0ea6f523ecd73a90f96ed0` | `f29401c2e96979a892c80a1d854455cf2300fbbf` |
 | `v0.6.0` | `f169ebf7330172ea6c3c1b6e5fdda922e2b94278` | `d58ddfca0119a9c9cb7e9a0f7e8f2fc623617866` |
 
+后续内部验证工具历史清理再次改写了 `v0.6.0`，当前映射见 `docs/decisions/DECISION-012.md`。
+
 ## 长期影响
 
 - `docs/superpowers/` 仅作为本地开发资料存在，不再提交到 Git。
