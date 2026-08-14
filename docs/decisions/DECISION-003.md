@@ -42,7 +42,7 @@
 - 图层缓存按世界、维度、中心、类型、高度范围和渲染版本隔离。
 - 所有图层保持存档只读，并继续使用程序根目录下的严格便携缓存。
 
-完整设计见 `docs/superpowers/specs/2026-07-18-unified-dimension-layer-system-design.md`。
+实现与验收结果见 `docs/progress/V0.2.1.md`。
 
 ## 版本安排与约束
 
