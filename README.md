@@ -20,6 +20,8 @@
   ·
   <strong><a href="PROJECT_ROADMAP.md">查看项目路线图</a></strong>
   ·
+  <strong><a href="docs/FAQ.md">常见问题</a></strong>
+  ·
   <strong><a href="#从源码运行">从源码运行</a></strong>
 </p>
 
@@ -39,59 +41,8 @@
 |---|---|---|---|
 | **V0.6** | 小范围三维预览已完成 | **V0.7** | 尚未开始 |
 
-> [!IMPORTANT]
-> V0.5 是内部三维数据与渲染基础阶段，没有对应的用户软件包。V0.6 已将小范围三维预览接入正式程序；当前最新软件包以 GitHub Releases 页面为准。
-
-## V0.5 开发者说明
-
-V0.5 将 V0.4 的可行性结论整理为正式、可复用的三维基础：共享完整方块状态解析、最大 `8x8` 的有限多区块加载、外围一圈边界数据、分层简化网格、后端无关快照，以及正式 LWJGL/OpenGL 上传和资源释放组件。未知及 Mod 方块保留 ID 与属性并使用醒目不透明方块降级，不根据名称猜测类型。
-
-V0.5 是内部基础版本，**没有修改正式 `Launcher`、主窗口或二维地图入口**。该阶段的源码没有正式三维入口；第一个面向用户的小范围三维预览已在 V0.6 接入。
-
-主要代码和证据位置：
-
-- 正式数据、加载与网格：[`src/main/java/com/mcworldexplorer/voxel/`](src/main/java/com/mcworldexplorer/voxel/)
-- V0.5 独立验证入口：[`src/main/java/com/mcworldexplorer/experimental/v05/`](src/main/java/com/mcworldexplorer/experimental/v05/)
-- OpenGL 着色器：[`src/main/resources/v05/shaders/`](src/main/resources/v05/shaders/)
-- 自动化测试：[`src/test/java/com/mcworldexplorer/voxel/`](src/test/java/com/mcworldexplorer/voxel/) 与 [`experimental/v05/`](src/test/java/com/mcworldexplorer/experimental/v05/)
-- 只读测量脚本：[`scripts/v05/measure-v05.ps1`](scripts/v05/measure-v05.ps1)
-- 完整验证记录：[`docs/progress/V0.5.md`](docs/progress/V0.5.md)
-- 架构决策：[`docs/decisions/DECISION-008.md`](docs/decisions/DECISION-008.md)
-
-开发者可以在 PowerShell 中指定真实存档、维度和中心区块，运行带清单、报告和截图的内部验证：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\v05\measure-v05.ps1 `
-  -World "D:\path\to\world" -Dimension "minecraft:overworld" `
-  -CenterChunkX 0 -CenterChunkZ 0 -Width 3 -Depth 3
-```
-
-验证窗口支持鼠标左键拖动旋转、滚轮缩放、`R` 重置和 `Esc` 退出。当前使用简化颜色和立方体几何，目标是验证正式数据与渲染基础，不代表后续三维预览的最终视觉效果。
-
-## V0.4 开发者说明
-
-V0.4 的作用是验证 Minecraft 存档能否被可靠转换为三维数据，并比较 JavaFX 3D 与 LWJGL/OpenGL 的可行性。该阶段完成了完整方块状态解析、负高度与邻区块处理、简化体素网格、流体空气接触外壳、共享相机、性能测量和 Windows x64 非发布 app-image 验证，最终选择 **LWJGL/OpenGL** 作为后续三维渲染基础。
-
-V0.4 **没有接入正式 `Launcher`、主窗口或现有二维地图**。正常执行 `gradlew run` 或打开 V0.3.1 软件包时看不到三维入口，这是预期行为。第一个面向用户的小范围三维预览仍规划在 V0.6。
-
-主要代码和证据位置：
-
-- 三维实验源码：[`src/main/java/com/mcworldexplorer/experimental/v04/`](src/main/java/com/mcworldexplorer/experimental/v04/)
-- LWJGL/OpenGL 后端：[`render/lwjgl/`](src/main/java/com/mcworldexplorer/experimental/v04/render/lwjgl/)
-- JavaFX 3D 对照原型：[`render/javafx/`](src/main/java/com/mcworldexplorer/experimental/v04/render/javafx/)
-- OpenGL 着色器：[`src/main/resources/v04/shaders/`](src/main/resources/v04/shaders/)
-- 自动化测试：[`src/test/java/com/mcworldexplorer/experimental/v04/`](src/test/java/com/mcworldexplorer/experimental/v04/)
-- 测量与非发布打包：[`scripts/v04/`](scripts/v04/) 和 [`packaging/build-v04-trials.ps1`](packaging/build-v04-trials.ps1)
-- 完整验证记录：[`docs/progress/V0.4.md`](docs/progress/V0.4.md)
-- 渲染后端决策：[`docs/decisions/DECISION-007.md`](docs/decisions/DECISION-007.md)
-
-开发者可在 PowerShell 中指定真实世界和区块，单独启动 LWJGL 试验入口：
-
-```powershell
-.\gradlew.bat runV04Lwjgl '--args=--world "D:\path\to\world" --dimension minecraft:overworld --chunk-x 0 --chunk-z 0'
-```
-
-试验窗口支持鼠标左键拖动旋转、滚轮缩放、`R` 重置和 `Esc` 退出。当前画面只用于验证解析、几何和渲染后端，不代表后续三维预览的最终视觉效果。
+> [!NOTE]
+> V0.4 和 V0.5 是三维技术验证与内部基础阶段，没有对应的用户软件包。详细原因见[常见问题](docs/FAQ.md#为什么没有-v04-和-v05-软件包)。
 
 ## 关于项目
 
@@ -160,6 +111,8 @@ V0.6 可以从二维地图选择 `1x1`、`3x3`、`5x5` 或 `8x8` 区块范围，
 ## 项目文档
 
 - [项目路线图](PROJECT_ROADMAP.md)
+- [常见问题](docs/FAQ.md)
+- [方块颜色规则](docs/方块颜色规则.md)
 - [V0.1.1 开发与验收记录](docs/progress/V0.1.1.md)
 - [V0.2 开发与验收记录](docs/progress/V0.2.md)
 - [V0.2.1 开发与验收记录](docs/progress/V0.2.1.md)

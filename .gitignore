@@ -57,6 +57,7 @@ config/
 
 # ==================== 临时文件 ====================
 .superpowers/
+docs/superpowers/
 *.tmp
 *.bak
 *.swp

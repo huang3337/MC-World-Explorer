@@ -194,7 +194,7 @@ world_preview.png
 - 全维度、全高度带预生成。
 - 三维体素浏览或任何 Minecraft 存档写入功能。
 
-完整决策见 `docs/decisions/DECISION-003.md`，设计基础见 `docs/superpowers/specs/2026-07-18-unified-dimension-layer-system-design.md`，开发状态见 `docs/progress/V0.2.1.md`。
+完整决策见 `docs/decisions/DECISION-003.md`，开发状态见 `docs/progress/V0.2.1.md`。
 
 ------
 
@@ -254,7 +254,7 @@ world_preview.png
 - 本地候选包从当前源码执行干净构建，并记录文件大小和 SHA-256。
 - 提交、标签和 GitHub Release 仍由开发者单独确认。
 
-详细设计见 `docs/superpowers/specs/2026-07-30-v0.3.1-release-polish-design.md`，开发状态见 `docs/progress/V0.3.1.md`。
+开发状态与验收结果见 `docs/progress/V0.3.1.md`。
 
 ------
 
@@ -778,4 +778,4 @@ V0.4 已于 2026-08-01 完成隔离的完整方块状态解析、单区块简化
 
 V0.5 已于 2026-08-04 正式开始，并已完成设计范围内的共享完整状态解析、二维适配、最大 `8x8` 有限多区块加载、外围边界、分层简化网格、后端无关快照、正式 LWJGL/OpenGL 资源和独立验证入口。最终干净全量测试执行 76 个套件、240 项测试，0 失败、0 错误；真实主世界、下界、末地和 Aether Mod 维度均生成非空截图，单区块、`3x3` 和 `8x8` 证据中的存档文件清单、大小、修改时间和 SHA-256 前后完全一致。Rule 16 已审查 50 个文件并修复 11 项问题，当前活动问题为 0。开发者已于 2026-08-14 完成人工审核并明确确认 V0.5 整体完成，同时分别授权创建统一提交和推送至 GitHub。V0.5 仍不接入正式主界面，也不构建或发布用户软件包。
 
-V0.6 已于 2026-08-14 完成功能开发、全量自动化、真实存档只读管线、开发者人工交互、31 个生产文件及发布版本配置的 Rule 16 审查，活动问题为 0。正式流程采用 JavaFX 二维主窗口与独立 LWJGL 三维窗口、新建 `com.mcworldexplorer.viewer` 模块、受控范围预设、非模态后台生成、唯一窗口复用、有限内存缓存、手动性能档位、完整垂直范围和局部失败隔离；交互修订见 `docs/decisions/DECISION-010.md`。Windows x64 最终软件包从确定提交 `f169ebf7330172ea6c3c1b6e5fdda922e2b94278` 重新干净构建，通过结构、SHA-256 和纯净解压启动验收，并使用标签 `v0.6.0` 和 GitHub Release 发布。
+V0.6 已于 2026-08-14 完成功能开发、全量自动化、真实存档只读管线、开发者人工交互、31 个生产文件及发布版本配置的 Rule 16 审查，活动问题为 0。正式流程采用 JavaFX 二维主窗口与独立 LWJGL 三维窗口、新建 `com.mcworldexplorer.viewer` 模块、受控范围预设、非模态后台生成、唯一窗口复用、有限内存缓存、手动性能档位、完整垂直范围和局部失败隔离；交互修订见 `docs/decisions/DECISION-010.md`。Windows x64 最终软件包当时从确定提交 `f169ebf7330172ea6c3c1b6e5fdda922e2b94278` 重新干净构建；该提交经历史清理后对应 `d58ddfca0119a9c9cb7e9a0f7e8f2fc623617866`。软件包通过结构、SHA-256 和纯净解压启动验收，并使用标签 `v0.6.0` 和 GitHub Release 发布。
