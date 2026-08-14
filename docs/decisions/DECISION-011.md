@@ -41,6 +41,8 @@
 | [`v0.3.1`](https://github.com/huang3337/MC-World-Explorer/tree/v0.3.1) | 本次清理改变提交身份，发布源码保留 | 完整提交映射仅在本地保留 |
 | [`v0.6.0`](https://github.com/huang3337/MC-World-Explorer/tree/v0.6.0) | 本次清理改变提交身份，发布源码保留 | 完整提交映射仅在本地保留 |
 
+后续内部验证工具历史清理再次改写了 `v0.6.0`，清理范围见 `docs/decisions/DECISION-012.md`；完整提交映射仅在本地保留。
+
 ## 长期影响
 
 - `docs/superpowers/` 仅作为本地开发资料存在，不再提交到 Git。
