@@ -1,8 +1,8 @@
 # Issue 编号对照清单
 
-- **更新日期**：2026-08-01
-- **当前问题总数**：84
-- **当前编号前缀数**：33
+- **更新日期**：2026-08-24
+- **当前问题总数**：95
+- **当前编号前缀数**：43
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
@@ -43,6 +43,16 @@
 | `VoxelMesher.java` | `VOXMESH` | `001` | `ISSUE-VOXMESH-001` | `ISSUE-VOXMESH-002` |
 | `measure-v04.ps1` | `V04MEASURE` | `001` | `ISSUE-V04MEASURE-001` | `ISSUE-V04MEASURE-002` |
 | `build-v04-trials.ps1` | `V04PACKAGE` | `001` | `ISSUE-V04PACKAGE-001` | `ISSUE-V04PACKAGE-002` |
+| `MeshBatch.java` | `V05-BATCH` | `001` | `ISSUE-V05-BATCH-001` | `ISSUE-V05-BATCH-002` |
+| `BlockClassifier.java` | `V05-CLASS` | `001` | `ISSUE-V05-CLASS-001` | `ISSUE-V05-CLASS-002` |
+| `RenderLayer.java` | `V05-LAYER` | `001` | `ISSUE-V05-LAYER-001` | `ISSUE-V05-LAYER-002` |
+| `VoxelAreaLoader.java` | `V05-LOAD` | `001` | `ISSUE-V05-LOAD-001` | `ISSUE-V05-LOAD-002` |
+| `LwjglV05Launcher.java` | `V05-MEM` | `001` | `ISSUE-V05-MEM-001` | `ISSUE-V05-MEM-002` |
+| `ChunkMesher.java` | `V05-MESH` | `001` | `ISSUE-V05-MESH-001` | `ISSUE-V05-MESH-002` |
+| `V05ValidationPipeline.java` | `V05-PIPE` | `001` | `ISSUE-V05-PIPE-001` | `ISSUE-V05-PIPE-002` |
+| `V05ReportWriter.java` | `V05-REPORT` | `001` | `ISSUE-V05-REPORT-001` | `ISSUE-V05-REPORT-002` |
+| `VoxelSceneBuilder.java` | `V05-SCENE` | `001` | `ISSUE-V05-SCENE-001` | `ISSUE-V05-SCENE-002` |
+| `measure-v05.ps1` | `V05-SCRIPT` | `001-002` | `ISSUE-V05-SCRIPT-002` | `ISSUE-V05-SCRIPT-003` |
 
 ## 使用规则
 
