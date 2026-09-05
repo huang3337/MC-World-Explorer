@@ -1,0 +1,26 @@
+{
+  "name": "mc-world-explorer",
+  "private": true,
+  "version": "0.7.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "build": "npm run typecheck && vite build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "vue": "^3.5.41"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "jsdom": "26.1.0",
+    "typescript": "~5.6.3",
+    "vite": "^6.4.3",
+    "vitest": "3.2.7",
+    "vue-tsc": "^2.2.12"
+  }
+}

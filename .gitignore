@@ -1,63 +1,53 @@
-# ==================== 构建输出 ====================
-build/
-out/
-bin/
+# ==================== Node / Vite / Vitest ====================
+node_modules/
+dist/
+.vite/
+.vitest/
+coverage/
+*.tsbuildinfo
+
+# ==================== Rust / Tauri ====================
+target/
+**/target/
+src-tauri/gen/schemas/
 
 # ==================== 本地打包与内部验证工具 ====================
 packaging/
 scripts/
-
-# ==================== Gradle 缓存 ====================
-.gradle/
+.superpowers/
+docs/superpowers/
 
 # ==================== Minecraft 测试数据 ====================
 MC/
 
+# ==================== 开发规则 ====================
+DEVELOPMENT_RULES.md
+
+# ==================== 应用运行数据 ====================
+cache/
+logs/
+exports/
+config/
+
+# ==================== 日志与临时文件 ====================
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
 # ==================== IDE 配置 ====================
-# IntelliJ IDEA
 .idea/
 *.iml
 *.ipr
 *.iws
-
-# VS Code
 .vscode/
 *.code-workspace
-
-# Eclipse
 .classpath
 .project
 .settings/
-
-# ==================== 开发规则 ====================
-DEVELOPMENT_RULES.md
 
 # ==================== 系统文件 ====================
 Thumbs.db
 Desktop.ini
 .DS_Store
-
-# ==================== 日志 ====================
-*.log
-logs/
-
-# ==================== 应用运行数据 ====================
-cache/
-exports/
-config/
-
-# ==================== 编译产物 ====================
-*.class
-*.jar
-!gradle/wrapper/gradle-wrapper.jar
-*.war
-*.ear
-*.nar
-
-# ==================== 临时文件 ====================
-.superpowers/
-docs/superpowers/
-*.tmp
-*.bak
-*.swp
-*~
