@@ -1,8 +1,8 @@
 # Issue 编号对照清单
 
-- **更新日期**：2026-08-24
-- **当前问题总数**：95
-- **当前编号前缀数**：43
+- **更新日期**：2026-09-05
+- **当前问题总数**：103
+- **当前编号前缀数**：49
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
@@ -10,7 +10,13 @@
 
 | 源文件 | 编号前缀 | 已使用编号 | 最后使用 | 下一编号 |
 |---|---|---:|---:|---:|
+| `src-tauri/src/storage/webview_data.rs` | `WEBVIEWDATA` | `001` | `ISSUE-WEBVIEWDATA-001` | `ISSUE-WEBVIEWDATA-002` |
+| `README.md` | `README` | `001` | `ISSUE-README-001` | `ISSUE-README-002` |
+| `src-tauri/src/lib.rs` | `TAURILIB` | `001-002` | `ISSUE-TAURILIB-002` | `ISSUE-TAURILIB-003` |
+| `package.json` | `PKGJSON` | `001` | `ISSUE-PKGJSON-001` | `ISSUE-PKGJSON-002` |
 | `App.java` | `APP` | `001-005` | `ISSUE-APP-005` | `ISSUE-APP-006` |
+| `src-tauri/build.rs` | `TAURIBUILD` | `001` | `ISSUE-TAURIBUILD-001` | `ISSUE-TAURIBUILD-002` |
+| `world_source.rs` | `WSOURCE` | `001-002` | `ISSUE-WSOURCE-002` | `ISSUE-WSOURCE-003` |
 | `build.gradle` | `BUILD` | `001` | `ISSUE-BUILD-001` | `ISSUE-BUILD-002` |
 | `PreviewCache.java` | `CACHE` | `001-002` | `ISSUE-CACHE-002` | `ISSUE-CACHE-003` |
 | `MainController.java` | `CONTROLLER` | `001-014` | `ISSUE-CONTROLLER-014` | `ISSUE-CONTROLLER-015` |

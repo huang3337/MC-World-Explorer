@@ -1,0 +1,36 @@
+:root {
+  color: #e8eef2;
+  background: #111820;
+  font-family: "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.app-shell {
+  box-sizing: border-box;
+  width: min(100%, 820px);
+  margin: 0 auto;
+  padding: 48px 24px;
+  line-height: 1.6;
+}
+
+.app-shell h1,
+.app-shell p {
+  margin: 0.5rem 0;
+}
+
+h1 { font-size: clamp(1.5rem, 4vw, 2rem); }
+h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+section { margin: 24px 0; padding: 20px; background: #1b2632; border-radius: 8px; }
+dl { margin: 0; }
+dl > div { margin: 12px 0; }
+dt { color: #b8c9d6; }
+dd { margin: 0; overflow-wrap: anywhere; }
+.error { color: #ffb7b7; overflow-wrap: anywhere; }
+.boundary { color: #b8c9d6; font-size: 0.9rem; }

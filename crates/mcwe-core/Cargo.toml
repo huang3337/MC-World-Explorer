@@ -1,0 +1,7 @@
+[package]
+name = "mcwe-core"
+version = "0.7.1"
+description = "Framework-independent read-only core for MC World Explorer"
+edition = "2021"
+
+[dependencies]

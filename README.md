@@ -2,126 +2,83 @@
   <img src="docs/assets/mc-world-explorer.png" alt="MC World Explorer 图标" width="144">
 </p>
 
-<h1 align="center">MC World Explorer</h1>
+# MC World Explorer — Tauri 迁移分支
 
-<p align="center">
-  只读的 Minecraft Java 版存档与交互地图浏览工具
-</p>
+像查看照片一样查看 Minecraft 世界：独立、严格只读的 Minecraft Java 版世界浏览工具。
 
-<p align="center">
-  <a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><img src="https://img.shields.io/github/v/release/huang3337/MC-World-Explorer?label=Release&color=2f81f7" alt="最新版本"></a>
-  <img src="https://img.shields.io/badge/Windows-x64-0078D4?logo=windows" alt="Windows x64">
-  <img src="https://img.shields.io/badge/Java-21-E76F00?logo=openjdk&logoColor=white" alt="Java 21">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-2da44e" alt="GPL-3.0 许可证"></a>
-</p>
+> 当前 `tauri-rewrite` 是内部重构分支。V0.7.1“工程与边界”已完成，但仍不能替代稳定 Java V0.6.0；此分支目前只有工程与状态验证页面，还不能扫描世界、浏览地图或显示三维存档。
 
-<p align="center">
-  <strong><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest">下载最新软件包</a></strong>
-  ·
-  <strong><a href="PROJECT_ROADMAP.md">查看项目路线图</a></strong>
-  ·
-  <strong><a href="docs/FAQ.md">常见问题</a></strong>
-  ·
-  <strong><a href="#从源码运行">从源码运行</a></strong>
-</p>
+## 稳定版与迁移版
 
-## 当前软件包
+- 稳定 Java V0.6.0 保留在 main，具备存档信息、多维度二维地图和受控范围简化三维预览。使用稳定版请查看 [V0.6.0 发布页](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.6.0)，完整解压并保留其 app/runtime 目录，不要只移动旧版 EXE。
+- V0.7 使用 Tauri 2、Rust、Vue 3、TypeScript 和 Vite 迁移 V0.6；后续三维采用 Three.js / WebGL 2，当前尚未引入。
+- V0.7.1–V0.7.6 为迁移里程碑，不创建正式标签或 Release，不自动合并 main。
+- 原版纹理、世界考古等功能不在此次框架迁移中；迁移完成后再讨论后续路线。
 
-| 最新软件包 | 支持平台 | 运行环境 |
-|---|---|---|
-| **V0.6.0** | Windows x64 | 内置 Java 21 |
+## 当前可验证内容
 
-当前便携版无需另外安装 Java，完整解压后即可运行。
+- 最小页面显示应用版本、后端连接状态和 EXE 便携目录。
+- 唯一类型化 app_status 调用、安全中文错误及异常响应检查。
+- Rust 独立只读文件核心、便携路径计算、任务标识与取消基础。
+- 前端测试、Rust 单元/文档测试和 Tauri mock IPC 测试。
 
-[下载最新软件包](https://github.com/huang3337/MC-World-Explorer/releases/latest)
+真实 Tauri 页面、IPC、WebView 便携落盘、关闭最后窗口后的主进程自然退出和目录解锁均已验证；Task 14 最终审查、问题复审和真实存档只读验收已经通过，开发者已确认 V0.7.1 完成。V0.7.2 尚未开始，详细状态见 [V0.7.1 进度](docs/progress/V0.7.1.md)。
 
-## 源码开发状态
+## 开发环境与运行
 
-| 最新完成源码 | 状态 | 当前开发阶段 | 状态 |
-|---|---|---|---|
-| **V0.6** | 小范围三维预览已完成 | **V0.7** | 尚未开始 |
+当前正式目标为 Windows x64。需准备 Node.js/npm、Rust MSVC 工具链、MSVC C++ 构建工具和 Windows SDK，以及系统 WebView2 Runtime。已使用的具体版本与测试日期见进度记录；安装或修改系统工具链需要单独确认。
 
-> [!NOTE]
-> V0.4 和 V0.5 是三维技术验证与内部基础阶段，没有对应的用户软件包。详细原因见[常见问题](docs/FAQ.md#为什么没有-v04-和-v05-软件包)。
-
-## 关于项目
-
-MC World Explorer 可以在不启动 Minecraft 的情况下扫描本地 Java 版世界、查看存档信息，并通过交互地图浏览已有区块、不同维度、玩家和传送门位置。
-
-项目坚持严格只读访问 Minecraft 存档，缓存、日志、配置和导出文件均与原存档分离。
-
-## 软件包发布路线
-
-| 版本 | 发布状态 | 主要内容 |
-|---|---|---|
-| **V0.1.1** | 已发布 | 存档扫描、基础信息展示与只读能力加固 |
-| **V0.2.1** | 已发布 | 多维度预览、地表总览、洞穴高度带与便携运行环境 |
-| **V0.3.1** | 已发布 | 整合 V0.3 交互地图能力并完成最后完善 |
-| **V0.6.0** | 当前最新软件包 | 首次加入受控范围选择和独立窗口三维预览 |
-
-> [!NOTE]
-> V0.3 是仅同步源码的开发版本，因此不列入已发布软件包版本。
-
-## 核心能力
-
-| 存档浏览 | 交互地图 | 定位与标记 |
-|---|---|---|
-| 扫描原版及版本隔离存档<br>支持游戏目录、实例和单个世界<br>显示世界信息、图标和基础坐标<br>后台加载并反馈空目录或错误 | 浏览主世界、下界、末地和可识别的 Mod 维度<br>地表总览与 32 格洞穴高度带<br>地图自由拖动与七级缩放<br>地图块缓存、缓存清理和视口 PNG 导出 | 输入 X/Z 坐标快速跳转<br>显示玩家和世界出生点<br>在已加载地图区块中标记下界传送门<br>读取多人玩家最后保存位置<br>从玩家列表跨维度定位 |
-
-## 小范围三维预览
-
-V0.6 可以从二维地图选择 `1x1`、`3x3`、`5x5` 或 `8x8` 区块范围，在后台生成简化三维场景，并在独立窗口中查看。左键拖动旋转，右键拖动平移旋转中心，滚轮缩放，`R` 恢复默认视图，`Esc` 关闭三维窗口。当前使用简化颜色和立方体几何，原版纹理与更完整的视觉资源属于后续版本范围。
-
-## 快速开始
-
-1. 打开 [Releases](https://github.com/huang3337/MC-World-Explorer/releases) 页面自行选择版本，推荐下载带有 `Latest` 标记的最新版 Windows x64 便携版 ZIP。
-2. 将 ZIP 完整解压到普通文件夹。
-3. 双击 `MC World Explorer.exe`。
-4. 点击“选择 Minecraft 目录...”，选择游戏目录、存档目录、整合包实例或单个世界。
-
-请保留 EXE、`app` 和 `runtime` 的原有目录结构，不要单独移动 EXE，也不要直接在压缩包内运行。
-
-> [!NOTE]
-> 软件包尚未进行代码签名。Windows SmartScreen 可能显示安全提示，请从本仓库的正式 Release 下载，并核对发布页提供的 SHA-256。
-
-## 存档安全
-
-程序只读访问以下 Minecraft 存档数据：
-
-- `level.dat`
-- `playerdata/*.dat`
-- `icon.png`
-- 目录元数据
-- 各维度的 Region 文件
-
-程序不会修改、移动或删除 Minecraft 存档。日志、缩略图和地图块缓存、导出图片及配置分别保存在程序根目录的 `logs/`、`cache/`、`exports/` 和 `config/`。
-
-对于重要存档，仍建议保持正常的备份习惯。
-
-## 从源码运行
-
-需要安装 JDK 21。在 Windows PowerShell 或命令提示符中进入项目根目录后运行：
+在此迁移工作树根目录执行：
 
 ```powershell
-.\gradlew.bat run
+npm ci
+npm run tauri dev
 ```
 
-首次构建需要下载 Gradle 和项目依赖。应用日志位于项目根目录 `logs/mc-world-explorer.log`；运行数据位于同一根目录下的 `cache/`、`exports/` 和 `config/`。
+首次恢复依赖需要网络。以上是供开发者执行的说明，不自动授权代理安装工具、启动程序或修改环境。
+
+`npm run dev` 只启动 Vite 前端，普通浏览器没有 Tauri IPC，会显示连接失败；这不等于 Rust 后端损坏。开发态路径根随开发 EXE 位置确定，不是固定的源码根目录。
+
+## 自动化命令
+
+```powershell
+npm test
+npm run typecheck
+npm run build
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+```
+
+`npm run build` 执行类型检查和前端资源构建，不生成桌面发布包。已有依赖缓存时 Cargo 可附加 `--offline`。三项 Windows 符号链接测试需要相应权限，默认明确忽略；真实存档集成测试同样默认忽略且必须显式提供已获批路径。完整专项验收方式与历史证据见进度记录，不将忽略视为通过。
+
+原生 no-bundle 构建、单 EXE 生命周期验证、Task 14 最终审查复审、真实存档只读验收和 V0.7.1 完成确认均已完成。本次文档同步不重新构建或启动 EXE，也不自动授权提交、推送或开始 V0.7.2。
+
+## 存档安全与便携目标
+
+Minecraft 存档始终只读，不提供编辑、修复、删除、移动或重命名能力。当前页面不读取世界；程序启动时只在 EXE 便携目录受控准备 `config/webview/`，不启用缓存、日志或导出写入。
+
+程序数据只允许位于 EXE 所在便携目录的 cache、logs、exports、config，不进入存档、AppData 或注册表。WebView 实际落盘已验证未改变既有 AppData；关闭唯一主窗口后主进程与 WebView2 子进程自然退出，便携目录锁正常释放。
+
+最终目标为一个可直接运行的 `MC-World-Explorer.exe`，无需 JVM、Node.js、sidecar、并列 DLL 或外置资源目录，但依赖系统已有 WebView2 Runtime。当前没有完成该正式发行验收，也没有发布此迁移版 EXE。
 
 ## 项目文档
 
-- [项目路线图](PROJECT_ROADMAP.md)
-- [常见问题](docs/FAQ.md)
-- [方块颜色规则](docs/方块颜色规则.md)
-- [V0.1.1 开发与验收记录](docs/progress/V0.1.1.md)
-- [V0.2 开发与验收记录](docs/progress/V0.2.md)
-- [V0.2.1 开发与验收记录](docs/progress/V0.2.1.md)
-- [V0.3 开发与验收记录](docs/progress/V0.3.md)
-- [V0.3.1 开发与验收记录](docs/progress/V0.3.1.md)
-- [V0.6 开发与验收记录](docs/progress/V0.6.md)
-- [V0.4 三维技术可行性验证记录](docs/progress/V0.4.md)
-- [重大开发决策](docs/decisions/)
+- [项目上下文](PROJECT_CONTEXT.md)
+- [V0.7 迁移路线](PROJECT_ROADMAP.md)
+- [当前项目结构](PROJECT_STRUCTURE.md)
+- [V0.7.1 进度与证据](docs/progress/V0.7.1.md)
+- [迁移决策 DECISION-013](docs/decisions/DECISION-013.md)
+- [Windows 只读边界 DECISION-014](docs/decisions/DECISION-014.md)
+- [WebView 便携数据决策 DECISION-015](docs/decisions/DECISION-015.md)
+- [WebView 关闭生命周期决策 DECISION-016](docs/decisions/DECISION-016.md)
+- [问题记录规范](docs/issues/README.md)与[编号索引](docs/issues/ISSUE_INDEX.md)
+- [Java V0.6 历史验收](docs/progress/V0.6.md)
+
+旧 FAQ、颜色规则和 V0.1–V0.6 进度仍作为 Java 历史参考保留，不代表本分支已具备相同能力。本地 DEVELOPMENT_RULES.md 与 docs/superpowers、scripts、packaging 受 Git 忽略保护，不得擅自纳入提交。
+
+每次只执行获批目标；里程碑完成、提交和推送分别确认，不自动进入下一里程碑。
 
 ## 许可证
 
-本项目基于 [GNU General Public License v3.0](LICENSE) 发布。
+[GNU General Public License v3.0](LICENSE)。

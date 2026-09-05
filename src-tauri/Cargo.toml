@@ -1,0 +1,25 @@
+[package]
+name = "mc-world-explorer"
+version = "0.7.1"
+description = "A read-only Minecraft Java world explorer"
+edition = "2021"
+
+[lib]
+name = "mc_world_explorer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+mcwe-core = { path = "../crates/mcwe-core" }
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "=0.55.0"
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+serde_json = "1"
+tauri = { version = "2", features = ["test"] }
