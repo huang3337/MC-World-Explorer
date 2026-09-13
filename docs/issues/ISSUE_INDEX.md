@@ -1,8 +1,8 @@
 # Issue 编号对照清单
 
-- **更新日期**：2026-09-05
-- **当前问题总数**：103
-- **当前编号前缀数**：49
+- **更新日期**：2026-09-12
+- **当前问题总数**：162
+- **当前编号前缀数**：76
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
@@ -12,11 +12,37 @@
 |---|---|---:|---:|---:|
 | `src-tauri/src/storage/webview_data.rs` | `WEBVIEWDATA` | `001` | `ISSUE-WEBVIEWDATA-001` | `ISSUE-WEBVIEWDATA-002` |
 | `README.md` | `README` | `001` | `ISSUE-README-001` | `ISSUE-README-002` |
-| `src-tauri/src/lib.rs` | `TAURILIB` | `001-002` | `ISSUE-TAURILIB-002` | `ISSUE-TAURILIB-003` |
+| `src-tauri/src/lib.rs` | `TAURILIB` | `001-004` | `ISSUE-TAURILIB-004` | `ISSUE-TAURILIB-005` |
 | `package.json` | `PKGJSON` | `001` | `ISSUE-PKGJSON-001` | `ISSUE-PKGJSON-002` |
 | `App.java` | `APP` | `001-005` | `ISSUE-APP-005` | `ISSUE-APP-006` |
 | `src-tauri/build.rs` | `TAURIBUILD` | `001` | `ISSUE-TAURIBUILD-001` | `ISSUE-TAURIBUILD-002` |
-| `world_source.rs` | `WSOURCE` | `001-002` | `ISSUE-WSOURCE-002` | `ISSUE-WSOURCE-003` |
+| `world_source.rs` | `WSOURCE` | `001-003` | `ISSUE-WSOURCE-003` | `ISSUE-WSOURCE-004` |
+| `limited_reader.rs` | `NBTLIMIT` | `001-002` | `ISSUE-NBTLIMIT-002` | `ISSUE-NBTLIMIT-003` |
+| `decoder.rs` | `CHUNKDEC` | `001` | `ISSUE-CHUNKDEC-001` | `ISSUE-CHUNKDEC-002` |
+| `loader.rs` | `AREA` | `001` | `ISSUE-AREA-001` | `ISSUE-AREA-002` |
+| `greedy.rs` | `GREEDY` | `001-003` | `ISSUE-GREEDY-003` | `ISSUE-GREEDY-004` |
+| `build_mesh.rs` | `BUILDMESH` | `001-002` | `ISSUE-BUILDMESH-002` | `ISSUE-BUILDMESH-003` |
+| `protocol/header.rs` | `HEADER` | `001-002` | `ISSUE-HEADER-002` | `ISSUE-HEADER-003` |
+| `protocol/surface_v1.rs` | `SURFACEPROTO` | `001-002` | `ISSUE-SURFACEPROTO-002` | `ISSUE-SURFACEPROTO-003` |
+| `protocol/mesh_v1.rs` | `MESHPROTO` | `001-002` | `ISSUE-MESHPROTO-002` | `ISSUE-MESHPROTO-003` |
+| `src/protocol/common.ts` | `TSCOMMON` | `001-002` | `ISSUE-TSCOMMON-002` | `ISSUE-TSCOMMON-003` |
+| `src/protocol/mesh-v1.ts` | `TSMESH` | `001` | `ISSUE-TSMESH-001` | `ISSUE-TSMESH-002` |
+| `src/services/backend.ts` | `BACKEND` | `001` | `ISSUE-BACKEND-001` | `ISSUE-BACKEND-002` |
+| `src/App.vue` | `APPVUE` | `001-007` | `ISSUE-APPVUE-007` | `ISSUE-APPVUE-008` |
+| `protocol/mod.rs` | `IPCID` | `001` | `ISSUE-IPCID-001` | `ISSUE-IPCID-002` |
+| `src/components/SurfaceMap.vue` | `SURFACEMAP` | `001-004` | `ISSUE-SURFACEMAP-004` | `ISSUE-SURFACEMAP-005` |
+| `PROJECT_STRUCTURE.md` | `PROJECTSTRUCT` | `001` | `ISSUE-PROJECTSTRUCT-001` | `ISSUE-PROJECTSTRUCT-002` |
+| `src/components/VoxelViewer.vue` | `VOXELVIEWER` | `001-006` | `ISSUE-VOXELVIEWER-006` | `ISSUE-VOXELVIEWER-007` |
+| `world_session.rs` | `WORLDSESSION` | `001-002` | `ISSUE-WORLDSESSION-002` | `ISSUE-WORLDSESSION-003` |
+| `commands/select_world.rs` | `SELECTWORLD` | `001-003` | `ISSUE-SELECTWORLD-003` | `ISSUE-SELECTWORLD-004` |
+| `commands/mod.rs` | `COMMANDS` | `001` | `ISSUE-COMMANDS-001` | `ISSUE-COMMANDS-002` |
+| `tasks/executor.rs` | `EXECUTOR` | `001-004` | `ISSUE-EXECUTOR-004` | `ISSUE-EXECUTOR-005` |
+| `src/composables/useWorldExplorer.ts` | `USEWORLD` | `001` | `ISSUE-USEWORLD-001` | `ISSUE-USEWORLD-002` |
+| `src/components/MapViewport.vue` | `MAPVIEWPORT` | `001-002` | `ISSUE-MAPVIEWPORT-002` | `ISSUE-MAPVIEWPORT-003` |
+| `crates/mcwe-core/src/map/mod.rs` | `RUSTMAP` | `001` | `ISSUE-RUSTMAP-001` | `ISSUE-RUSTMAP-002` |
+| `tasks/registry.rs` | `TASKREG` | `001` | `ISSUE-TASKREG-001` | `ISSUE-TASKREG-002` |
+| `src-tauri/tauri.conf.json` | `TAURICONF` | `001` | `ISSUE-TAURICONF-001` | `ISSUE-TAURICONF-002` |
+| `README.md` / 项目当前状态文档 | `PROJECTDOC` | `001` | `ISSUE-PROJECTDOC-001` | `ISSUE-PROJECTDOC-002` |
 | `build.gradle` | `BUILD` | `001` | `ISSUE-BUILD-001` | `ISSUE-BUILD-002` |
 | `PreviewCache.java` | `CACHE` | `001-002` | `ISSUE-CACHE-002` | `ISSUE-CACHE-003` |
 | `MainController.java` | `CONTROLLER` | `001-014` | `ISSUE-CONTROLLER-014` | `ISSUE-CONTROLLER-015` |
@@ -59,6 +85,7 @@
 | `V05ReportWriter.java` | `V05-REPORT` | `001` | `ISSUE-V05-REPORT-001` | `ISSUE-V05-REPORT-002` |
 | `VoxelSceneBuilder.java` | `V05-SCENE` | `001` | `ISSUE-V05-SCENE-001` | `ISSUE-V05-SCENE-002` |
 | `measure-v05.ps1` | `V05-SCRIPT` | `001-002` | `ISSUE-V05-SCRIPT-002` | `ISSUE-V05-SCRIPT-003` |
+| [V0.7.2 真实存档读取对等（已归档）](resolved/V0.7.2/real-world-parity.md) | `REALWORLD` | `001` | `ISSUE-REALWORLD-001` | `ISSUE-REALWORLD-002` |
 
 ## 使用规则
 

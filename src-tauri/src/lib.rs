@@ -1,16 +1,28 @@
 mod commands;
 pub mod error;
+pub mod protocol;
 pub mod storage;
 pub mod tasks;
+mod world_session;
 
+use std::time::Duration;
 use tauri::Manager;
+
+const SHUTDOWN_WAIT: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 pub struct StartupError;
 
-fn coordinate_main_close<P, R, E>(label: &str, prevent: P, release: R, exit: E) -> bool
+fn coordinate_main_close<P, S, R, E>(
+    label: &str,
+    prevent: P,
+    shutdown: S,
+    release: R,
+    exit: E,
+) -> bool
 where
     P: FnOnce(),
+    S: FnOnce() -> bool,
     R: FnOnce(),
     E: FnOnce(),
 {
@@ -19,6 +31,9 @@ where
     }
 
     prevent();
+    if !shutdown() {
+        return false;
+    }
     release();
     exit();
     true
@@ -43,6 +58,13 @@ pub fn run() -> Result<(), StartupError> {
                 coordinate_main_close(
                     window.label(),
                     || api.prevent_close(),
+                    || {
+                        if let Some(tasks) = window.try_state::<tasks::TaskState>() {
+                            tasks.shutdown(SHUTDOWN_WAIT)
+                        } else {
+                            true
+                        }
+                    },
                     || {
                         if let Some(lifecycle) = window.try_state::<storage::WebviewDataLifecycle>()
                         {
@@ -73,9 +95,16 @@ pub fn run() -> Result<(), StartupError> {
         .map_err(|_| StartupError)?;
 
     app.run(|app, event| {
-        if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
-            if let Some(lifecycle) = app.try_state::<storage::WebviewDataLifecycle>() {
-                lifecycle.release();
+        if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            let stopped = app
+                .try_state::<tasks::TaskState>()
+                .is_none_or(|tasks| tasks.shutdown(SHUTDOWN_WAIT));
+            if stopped {
+                if let Some(lifecycle) = app.try_state::<storage::WebviewDataLifecycle>() {
+                    lifecycle.release();
+                }
+            } else {
+                api.prevent_exit();
             }
         }
     });
@@ -93,10 +122,17 @@ mod shutdown_tests {
         assert!(coordinate_main_close(
             "main",
             || calls.lock().unwrap().push("prevent"),
+            || {
+                calls.lock().unwrap().push("shutdown");
+                true
+            },
             || calls.lock().unwrap().push("release"),
             || calls.lock().unwrap().push("exit"),
         ));
-        assert_eq!(*calls.lock().unwrap(), ["prevent", "release", "exit"]);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["prevent", "shutdown", "release", "exit"]
+        );
     }
 
     #[test]
@@ -105,7 +141,24 @@ mod shutdown_tests {
             "other",
             || panic!(),
             || panic!(),
+            || panic!(),
             || panic!()
         ));
+    }
+
+    #[test]
+    fn shutdown_timeout_keeps_data_and_process_alive() {
+        let calls = Mutex::new(Vec::new());
+        assert!(!coordinate_main_close(
+            "main",
+            || calls.lock().unwrap().push("prevent"),
+            || {
+                calls.lock().unwrap().push("shutdown");
+                false
+            },
+            || calls.lock().unwrap().push("release"),
+            || calls.lock().unwrap().push("exit"),
+        ));
+        assert_eq!(*calls.lock().unwrap(), ["prevent", "shutdown"]);
     }
 }

@@ -54,12 +54,14 @@ struct PortablePathsDto {
 #[tauri::command]
 pub(super) fn app_status<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
+    request: tauri::ipc::Request<'_>,
     state: tauri::State<'_, AppStatusState>,
 ) -> Result<AppStatusDto, AppError> {
     // 应用自定义 Command 不由 core:default 自动限制到某个窗口。
     if window.label() != "main" {
         return Err(AppError::new(ErrorCode::PermissionDenied));
     }
+    super::require_json_arguments(&request, &[])?;
     state.snapshot()
 }
 
@@ -115,22 +117,20 @@ mod tests {
         assert_eq!(
             response,
             json!({
-                "appVersion": "0.7.1", "backendStatus": "ready",
+                "appVersion": "0.7.2", "backendStatus": "ready",
                 "portablePaths": {"root": root, "cache": root.join("cache"), "logs": root.join("logs"), "exports": root.join("exports"), "config": root.join("config")}
             })
         );
-        // 多余参数不能覆盖由 Rust 管理的根路径或版本。
-        let again = get_ipc_response(
+        // 无参数 Command 不静默接受伪造路径或版本字段。
+        let error = get_ipc_response(
             &window,
             request(
                 "app_status",
                 json!({"root":"C:\\other", "appVersion":"fake"}),
             ),
         )
-        .unwrap()
-        .deserialize::<Value>()
-        .unwrap();
-        assert_eq!(response, again);
+        .unwrap_err();
+        assert_eq!(error["code"], "INVALID_ARGUMENTS");
         assert!(!root.exists());
     }
 

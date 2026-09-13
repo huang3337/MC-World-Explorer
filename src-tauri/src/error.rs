@@ -1,10 +1,11 @@
-use crate::tasks::TaskError;
+use crate::tasks::{ExecutorError, TaskError};
 use mcwe_core::CoreError;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
+    InvalidArguments,
     InvalidPath,
     ReparsePoint,
     NotDirectory,
@@ -17,6 +18,17 @@ pub enum ErrorCode {
     TaskCancelled,
     TaskOutdated,
     TaskIdExhausted,
+    InvalidNbt,
+    InvalidRegion,
+    InvalidChunk,
+    UnsupportedCompression,
+    UnsupportedChunk,
+    ResourceLimit,
+    NoActiveWorld,
+    SessionOutdated,
+    SessionIdExhausted,
+    WorkerFailed,
+    ShuttingDown,
 }
 
 /// 只能使用固定语义，不接受路径、堆栈或任意来源字符串。
@@ -38,6 +50,7 @@ pub struct AppError {
 impl AppError {
     pub(crate) fn new(code: ErrorCode) -> Self {
         let message = match code {
+            ErrorCode::InvalidArguments => "请求参数无效",
             ErrorCode::InvalidPath => "路径无效",
             ErrorCode::ReparsePoint => "路径包含不允许跟随的链接或重解析点",
             ErrorCode::NotDirectory => "来源路径不是目录",
@@ -50,6 +63,17 @@ impl AppError {
             ErrorCode::TaskCancelled => "任务已取消",
             ErrorCode::TaskOutdated => "任务结果已过期",
             ErrorCode::TaskIdExhausted => "任务编号已耗尽，无法启动新任务",
+            ErrorCode::InvalidNbt => "NBT 数据无效",
+            ErrorCode::InvalidRegion => "Region 文件结构无效",
+            ErrorCode::InvalidChunk => "区块数据无效",
+            ErrorCode::UnsupportedCompression => "数据使用了不支持的压缩方式",
+            ErrorCode::UnsupportedChunk => "区块格式不在当前版本支持范围内",
+            ErrorCode::ResourceLimit => "数据超过安全资源上限",
+            ErrorCode::NoActiveWorld => "尚未选择有效世界",
+            ErrorCode::SessionOutdated => "世界会话已过期",
+            ErrorCode::SessionIdExhausted => "世界会话编号已耗尽，无法选择新世界",
+            ErrorCode::WorkerFailed => "后台任务异常终止",
+            ErrorCode::ShuttingDown => "应用正在关闭，无法启动新任务",
         };
         Self {
             code,
@@ -75,6 +99,13 @@ impl From<CoreError> for AppError {
             CoreError::PermissionDenied => ErrorCode::PermissionDenied,
             CoreError::InUse => ErrorCode::InUse,
             CoreError::UnsupportedPlatform => ErrorCode::UnsupportedPlatform,
+            CoreError::InvalidNbt => ErrorCode::InvalidNbt,
+            CoreError::InvalidRegion => ErrorCode::InvalidRegion,
+            CoreError::InvalidChunk => ErrorCode::InvalidChunk,
+            CoreError::UnsupportedCompression => ErrorCode::UnsupportedCompression,
+            CoreError::UnsupportedChunk => ErrorCode::UnsupportedChunk,
+            CoreError::ResourceLimit => ErrorCode::ResourceLimit,
+            CoreError::Cancelled => ErrorCode::TaskCancelled,
             CoreError::Io(_) => ErrorCode::IoError,
         })
     }
@@ -87,6 +118,19 @@ impl From<TaskError> for AppError {
             TaskError::Outdated => ErrorCode::TaskOutdated,
             TaskError::IdExhausted => ErrorCode::TaskIdExhausted,
         })
+    }
+}
+
+impl From<ExecutorError> for AppError {
+    fn from(error: ExecutorError) -> Self {
+        match error {
+            ExecutorError::Task(error) => Self::from(error),
+            ExecutorError::Core(error) => Self::from(error),
+            ExecutorError::WorkerUnavailable
+            | ExecutorError::WorkerPanicked
+            | ExecutorError::ResultChannelClosed => Self::new(ErrorCode::WorkerFailed),
+            ExecutorError::ShuttingDown => Self::new(ErrorCode::ShuttingDown),
+        }
     }
 }
 
@@ -137,6 +181,19 @@ mod tests {
             (TaskError::Cancelled, "TASK_CANCELLED"),
             (TaskError::Outdated, "TASK_OUTDATED"),
             (TaskError::IdExhausted, "TASK_ID_EXHAUSTED"),
+        ] {
+            let json = serde_json::to_value(AppError::from(error)).unwrap();
+            assert_eq!(json["code"], code);
+        }
+    }
+
+    #[test]
+    fn executor_failures_have_stable_public_codes() {
+        for (error, code) in [
+            (ExecutorError::WorkerUnavailable, "WORKER_FAILED"),
+            (ExecutorError::WorkerPanicked, "WORKER_FAILED"),
+            (ExecutorError::ResultChannelClosed, "WORKER_FAILED"),
+            (ExecutorError::ShuttingDown, "SHUTTING_DOWN"),
         ] {
             let json = serde_json::to_value(AppError::from(error)).unwrap();
             assert_eq!(json["code"], code);

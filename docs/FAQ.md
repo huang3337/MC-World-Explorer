@@ -12,8 +12,8 @@ V0.4 用于验证 Minecraft 存档能否可靠转换为三维数据，并比较 
 
 V0.4 的代码位于独立试验模块，没有接入正式启动器、主窗口或二维地图。它生成过仅供验证的 Windows app-image，但不属于可发布软件包。
 
-- [V0.4 开发与验收记录](progress/V0.4.md)
-- [DECISION-007：三维渲染后端选择](decisions/DECISION-007.md)
+- [V0.4 里程碑概况](progress/V0.4.md)
+- [DECISION-005：三维渲染后端选择](decisions/java/DECISION-005.md)
 
 ### V0.5：三维数据与渲染基础
 
@@ -21,14 +21,14 @@ V0.5 将 V0.4 的试验结论整理为正式、可复用的内部基础，包括
 
 V0.5 同样没有接入正式界面，只保留源码、测试和内部验证入口，因此没有制作软件包、版本标签或 GitHub Release。
 
-- [V0.5 开发与验收记录](progress/V0.5.md)
-- [DECISION-008：V0.5 三维基础边界](decisions/DECISION-008.md)
+- [V0.5 里程碑概况](progress/V0.5.md)
+- [DECISION-006：V0.5 三维基础边界](decisions/java/DECISION-006.md)
 
 ### 第一个正式三维软件包
 
 V0.6 首次把小范围三维预览接入正式程序，也是第一个向用户发布三维功能的软件版本。因此普通用户看到的软件包版本顺序是 **V0.3.1 → V0.6.0**。
 
-- [V0.6 开发与验收记录](progress/V0.6.md)
+- [V0.6 里程碑概况](progress/V0.6.md)
 - [项目路线图](../PROJECT_ROADMAP.md)
 
 ## 三维画面中的荧光紫方块是什么？
