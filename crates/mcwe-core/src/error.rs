@@ -1,6 +1,6 @@
 use std::{fmt, io};
 
-/// 只描述当前只读边界，不包含 UI、IPC 或尚未迁移的格式错误。
+/// 核心只读、格式和资源边界错误；不包含 UI 或 IPC 细节。
 #[derive(Debug)]
 pub enum CoreError {
     InvalidPath,
@@ -11,6 +11,13 @@ pub enum CoreError {
     PermissionDenied,
     InUse,
     UnsupportedPlatform,
+    InvalidNbt,
+    InvalidRegion,
+    InvalidChunk,
+    UnsupportedCompression,
+    UnsupportedChunk,
+    ResourceLimit,
+    Cancelled,
     Io(io::Error),
 }
 
@@ -42,6 +49,13 @@ impl fmt::Display for CoreError {
             Self::PermissionDenied => "没有读取来源的权限",
             Self::InUse => "来源正被不兼容的文件操作占用",
             Self::UnsupportedPlatform => "当前平台尚未实现安全只读边界",
+            Self::InvalidNbt => "NBT 数据无效",
+            Self::InvalidRegion => "Region 文件结构无效",
+            Self::InvalidChunk => "区块数据无效",
+            Self::UnsupportedCompression => "区块使用了不支持的压缩方式",
+            Self::UnsupportedChunk => "区块格式不在当前版本支持范围内",
+            Self::ResourceLimit => "数据超过安全资源上限",
+            Self::Cancelled => "读取任务已取消",
             Self::Io(_) => "读取来源时发生 I/O 错误",
         })
     }

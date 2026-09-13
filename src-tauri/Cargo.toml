@@ -1,6 +1,6 @@
 [package]
 name = "mc-world-explorer"
-version = "0.7.1"
+version = "0.7.2"
 description = "A read-only Minecraft Java world explorer"
 edition = "2021"
 
@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 mcwe-core = { path = "../crates/mcwe-core" }
 serde = { version = "1", features = ["derive"] }
+tauri-plugin-dialog = { version = "=2.7.3", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "=0.55.0"

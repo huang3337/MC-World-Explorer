@@ -1,7 +1,10 @@
 [package]
 name = "mcwe-core"
-version = "0.7.1"
+version = "0.7.2"
 description = "Framework-independent read-only core for MC World Explorer"
 edition = "2021"
 
 [dependencies]
+fastnbt = "=2.6.3"
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
+serde = { version = "=1.0.229", features = ["derive"] }

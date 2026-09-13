@@ -4,10 +4,12 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 /// 经过文件系统校验的世界根路径，不代表已解析的 Minecraft 世界。
-/// 每次打开都重新保护路径；不持有长期目录锁，也不提供世界快照语义。
+/// 生命周期内保留世界根及祖先目录的只读保护句柄，防止会话中途被替换。
 #[derive(Debug)]
 pub struct WorldSource {
     root: PathBuf,
+    #[cfg(windows)]
+    _root_guards: Vec<File>,
 }
 
 impl WorldSource {
@@ -15,8 +17,11 @@ impl WorldSource {
         #[cfg(windows)]
         {
             let root = windows::absolute_root(root.as_ref())?;
-            windows::guard_directories(&root)?;
-            Ok(Self { root })
+            let root_guards = windows::guard_directories(&root)?;
+            Ok(Self {
+                root,
+                _root_guards: root_guards,
+            })
         }
         #[cfg(not(windows))]
         {
@@ -37,6 +42,23 @@ impl WorldSource {
             let _guards = windows::guard_directories(parent)?;
             let file = windows::open_checked(&target, false)?;
             Ok(WorldFile { file })
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (&self.root, relative);
+            Err(CoreError::UnsupportedPlatform)
+        }
+    }
+
+    /// 验证根目录下的普通相对目录存在且整条路径不含重解析点。
+    /// 只在调用期间持有额外目录句柄，不向调用方暴露文件系统能力。
+    pub fn validate_directory(&self, relative: impl AsRef<Path>) -> Result<(), CoreError> {
+        #[cfg(windows)]
+        {
+            let relative = windows::relative_file(relative.as_ref())?;
+            let target = self.root.join(relative);
+            drop(windows::guard_directories(&target)?);
+            Ok(())
         }
         #[cfg(not(windows))]
         {
@@ -411,6 +433,27 @@ mod tests {
     }
 
     #[test]
+    fn validates_only_safe_relative_directories() {
+        let mut fixture = Fixture::new();
+        fixture.dir("region");
+        fixture.file("ordinary-file", b"data");
+        let world = WorldSource::new(&fixture.root).unwrap();
+        world.validate_directory("region").unwrap();
+        assert!(matches!(
+            world.validate_directory("missing"),
+            Err(CoreError::NotFound)
+        ));
+        assert!(matches!(
+            world.validate_directory("ordinary-file"),
+            Err(CoreError::NotDirectory)
+        ));
+        assert!(matches!(
+            world.validate_directory("../outside"),
+            Err(CoreError::InvalidPath)
+        ));
+    }
+
+    #[test]
     #[ignore = "requires Windows symlink privilege; run the test binary elevated with --include-ignored"]
     fn rejects_directory_file_and_dangling_symlinks() {
         let mut fixture = Fixture::new();
@@ -456,6 +499,10 @@ mod tests {
         fixture.entries.push((junction, true));
         let world = WorldSource::new(world_root).unwrap();
         assert!(matches!(
+            world.validate_directory("junction & '测试'"),
+            Err(CoreError::ReparsePoint)
+        ));
+        assert!(matches!(
             world.open_file("junction & '测试'/secret"),
             Err(CoreError::ReparsePoint)
         ));
@@ -483,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    fn errors_and_success_do_not_retain_directory_guards() {
+    fn world_source_retains_root_guards_until_session_drop() {
         let mut fixture = Fixture::new();
         let world_root = fixture.dir("world");
         let path = fixture.file("world/file", b"data");
@@ -496,6 +543,8 @@ mod tests {
         assert!(fs::OpenOptions::new().write(true).open(&path).is_err());
         drop(reader);
         let moved = fixture.root.join("moved");
+        assert!(fs::rename(&world_root, &moved).is_err());
+        drop(world);
         fs::rename(&world_root, &moved).unwrap();
         fs::rename(&moved, &world_root).unwrap();
         fs::OpenOptions::new().write(true).open(path).unwrap();

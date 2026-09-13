@@ -1,6 +1,6 @@
-# 代码审查问题记录规范
+# Issue 记录规范
 
-本文件定义了 `docs/issues/` 目录下所有审查记录的格式标准。
+本文件定义 `docs/issues/` 中活动问题、原始审查快照和解决证据的记录方式。Issue 是项目正式文档中唯一完整保留问题发现、分析和解决过程的目录；它不替代当前技术规格、重大决策或里程碑概况。
 
 对应规则：`DEVELOPMENT_RULES.md` Rule 16。
 
@@ -10,6 +10,14 @@
 - `docs/issues/ISSUE_INDEX.md`：保存各文件编号前缀、最后使用编号和下一编号。
 - `docs/issues/resolved/Vx.x/`：保存已在对应版本完成代码验算并通过测试的问题。
 - 同一审查文件同时包含已解决和未解决问题时，必须按问题编号拆分，避免归档目录混入待办项。
+
+## 内容边界
+
+- 问题创建时保存可复核的原始审查快照，包括当时的代码、行为、判断依据和建议方向。
+- 后续调查可以补充证据，但不得回写原始快照，使其看起来像基于后来代码作出的审查。
+- 最终实现允许不同于最初建议；差异及原因写入“实际修改”，不改写原建议。
+- 当前有效的长期架构进入 `docs/decisions/`，当前详细技术契约进入 `docs/specs/`，里程碑概况进入 `docs/progress/`。Issue 只引用这些当前结论，并保留解决该问题所必需的历史。
+- 只有代码完成、相关自动化测试通过并完成必要人工验收后，Issue 才能标记为“已修复”并归档。
 
 ---
 
@@ -82,6 +90,37 @@
 `当前代码` 表示审查发现问题时的代码快照，不应在问题解决后改写成最新源码。代码已经变化时，应明确标注“审查时快照”，避免把历史片段误认为当前实现。
 
 归档前必须重新统计问题总数和严重程度，确认编号唯一、全部状态符合归档条件，并保证活动目录不再引用已解决问题。
+
+## 历史决策编号映射
+
+2026-09-13 对重大决策进行当前化整理和连续重编号。Issue 原始快照中的旧编号不改写；阅读历史引用时使用下表，不得按当前同名文件编号直接推断旧含义：
+
+| Issue 快照中的旧编号 | 当前对应 |
+|---|---|
+| Java DECISION-005（V0.3 一次性发布安排） | 不再作为重大决策；版本结论见 V0.3/V0.3.1 Progress |
+| Java DECISION-006（V0.3.1 实施与验收方案） | 不再作为重大决策；问题过程见对应 Issue，当前体验由 Java 基线和规格表达 |
+| Java DECISION-007 | Java DECISION-005 |
+| Java DECISION-008 | Java DECISION-006 |
+| Java DECISION-009 | Java DECISION-007 |
+| Java DECISION-010 | Java DECISION-008 |
+| Java DECISION-011 | Java DECISION-009 |
+| Java DECISION-012 | Java DECISION-010 |
+| Tauri DECISION-013 | Tauri DECISION-011 |
+| Tauri DECISION-014 | Tauri DECISION-012 |
+| Tauri DECISION-015 | Tauri DECISION-013 |
+| Tauri DECISION-016 | Tauri DECISION-014 |
+| Tauri DECISION-017 | Tauri DECISION-015 |
+| Tauri DECISION-018 | Tauri DECISION-016 |
+| Tauri DECISION-019（固定二维切片） | 已废止；二维当前方向见 Tauri DECISION-023 |
+| Tauri DECISION-020 | Tauri DECISION-017 |
+| Tauri DECISION-021 | Tauri DECISION-018 |
+| Tauri DECISION-022（全局单 worker） | 已废止；非地图现状见规格与源码，二维当前方向见 Tauri DECISION-023 |
+| Tauri DECISION-023 | Tauri DECISION-019 |
+| Tauri DECISION-024 | Tauri DECISION-020 |
+| Tauri DECISION-025 | Tauri DECISION-021 |
+| Tauri DECISION-026（候选验收流程） | 不再作为重大决策；验证要求见对应规格与 Issue |
+| Tauri DECISION-027 | Tauri DECISION-022 |
+| Tauri DECISION-028（V0.7.2 范围扩展） | 不再作为重大决策；当前范围见路线、规格和 Tauri DECISION-023 |
 
 ---
 

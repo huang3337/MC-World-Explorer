@@ -2,65 +2,68 @@
 
 ## 核心目标
 
-像查看照片一样查看 Minecraft 世界：不启动 Minecraft 客户端，快速、独立、严格只读地浏览 Java 版存档，帮助玩家回忆内容、定位建筑并欣赏作品。
+MC World Explorer 用于在不启动 Minecraft 客户端的情况下，快速、独立、严格只读地浏览 Java 版世界，帮助玩家回忆内容、定位建筑并欣赏作品。
 
-这是世界浏览工具，不是启动器、Mod、客户端替代品或世界编辑器。“将游戏存档变成可随时回顾的数字资产”是产品愿景；速度与资源占用需要实测，不把愿景当作已达到的性能保证。
+它是世界浏览工具，不是启动器、Mod、客户端替代品或世界编辑器。速度与资源占用必须以测量证明，不能把产品愿景当作已经达到的性能保证。
 
-## 当前定位与稳定基线
+## 当前定位
 
-- 稳定旧版为 Java V0.6.0，保留在 `main` 和 Git 历史中；发布与验收历史见 [V0.6 记录](docs/progress/V0.6.md)。
-- V0.3.1 是长期保留的二维地图行为基线。
-- 当前分支 `tauri-rewrite` 是内部迁移工程，不是面向普通用户的稳定发布版。
-- V0.7 全线用于迁移 V0.6 的核心功能，不再承接旧路线中的“原版视觉资源”开发。
-- V0.7.1“工程与边界”已完成并经开发者确认；V0.7.2 及后续里程碑均未开始，范围见 [路线图](PROJECT_ROADMAP.md)。
+- Java V0.6.0 是当前稳定版，保留在 `main` 和 Git 历史中。
+- Java V0.3.1 是二维地图行为与体验基线。
+- `tauri-rewrite` 是 V0.7 内部迁移分支，使用 Tauri、Rust、Vue 和 Three.js 重实现 V0.6 核心能力。
+- V0.7.1“工程与边界”已经完成。
+- V0.7.2 已完成世界选择、解析、有限二维、有限三维和关闭释放的端到端垂直切片。
+- 二维地图速度与完整度问题簇、可比性能和真实负载关闭预算保留为活动问题，由 V0.7.3 重新规划和解决。
+- V0.7 完成并通过对等验收前，不替代 Java 稳定版。
 
-两条本地工作树分别为 `D:\github_project\MC World Explorer`（main）和 `D:\github_project\MC-World-Explorer-Tauri`（迁移）。它们属于同一个仓库，不重建仓库，不丢弃旧历史；不得在迁移任务中修改稳定工作树。
+两条本地工作树属于同一个仓库。Java 稳定工作树只作为行为、实现和性能参考，不在 Tauri 迁移任务中修改。
 
-## 已确认技术与职责
+## 已确认技术职责
 
-- Tauri 2：Windows 桌面壳、Command、状态与权限边界。
-- Vue 3、TypeScript、Vite、npm：界面及类型化 IPC 服务。
-- Rust MSVC 与 Cargo workspace：应用协调和独立 `mcwe-core`。
-- Three.js / WebGL 2：已确认的后续内嵌三维方向，V0.7.1 不引入。
-- 正式开发、测试和最终发行目标为 Windows x64，其他平台未承诺支持。
+- Tauri 2：Windows 桌面壳、窗口、Command、权限和应用状态。
+- Rust 应用层：世界会话、任务调度、错误映射、协议编码和关闭协调。
+- `mcwe-core`：不依赖 Tauri 或前端的 Minecraft 只读解析、表采样和网格算法。
+- Vue 3 与 TypeScript：单窗口界面、前端状态和严格 IPC 解码。
+- Canvas 2D：动态二维地图和二维交互覆盖层。
+- Three.js / WebGL 2：主窗口内嵌的有限三维显示。
 
-`src/` 不直接访问 Minecraft 文件；`src-tauri/` 不承载 NBT、Region、地图或网格算法；`crates/mcwe-core/` 不依赖 Tauri 或前端。模块现状见 [项目结构](PROJECT_STRUCTURE.md)。
+前端不直接读取 Minecraft 文件；Tauri Command 不承载 NBT、Region、地图采样或网格算法；`mcwe-core` 不依赖 WebView。
 
-## 当前实际能力
+## 当前能力
 
-截至 2026-09-06，Task 5–14 及其后的真实存档只读验收已完成工程骨架、基础实现、文档同步、构建验证与真实边界验证：
+- Windows 只读世界来源使用句柄级路径保护，拒绝重解析点回绕。
+- WebView2 数据固定在 EXE 便携目录，不写入 AppData。
+- 支持选择世界、扫描常见 Java 目录布局、显示候选列表并建立唯一只读 WorldSession。
+- 支持受限读取 `level.dat`、Anvil Region、NBT、现代与较早方块状态布局。
+- 支持表面采样、初步动态地图瓦片、有限三维网格和内嵌 Three.js 显示。
+- 控制信息使用 JSON，密集二维和三维数据使用版本化二进制协议。
+- 当前重任务使用单 worker、单最新 pending 的有界执行器；该模型不能承载目标二维体验，后续按 DECISION-023 重新规划地图专用调度、渐进结果和会话缓存。
+- 三维支持 1×1、3×3、5×5、8×8 区块预设，并继承 Java DECISION-008 的有限相机交互。
 
-- 最小 Vue 页面，通过唯一的 `app_status` Command 查询版本、基础后端状态和便携路径。
-- 固定中文错误、响应字段检查及组件卸载后的迟到结果隔离。
-- Rust 应用层单槽位任务标识、协作取消与过期结果拒绝基础，尚未接入业务任务 UI。
-- `WorldSource` / `WorldFile` 只读文件抽象与 Windows 路径保护；核心尚不解析 Minecraft 格式。
-- `PortablePaths` 保持纯路径计算；Tauri 启动层会在 WebView 创建前受控准备 `EXE/config/webview/`，拒绝世界重叠、重解析点及环境/策略覆盖，不启用其他缓存、日志或导出写入。
+当前尚未达到完整 Java V0.6 功能对等。详细里程碑状态见 [V0.7.2 进度](docs/progress/V0.7.2.md)。
 
-当前不能扫描或展示世界、解析 NBT/MCA、浏览地图或生成三维场景。上述能力属于稳定 Java 版及待迁移范围，不能归为当前 Tauri 实现。
-
-真实 Tauri 页面、IPC、WebView 便携落盘、人工关闭后的自然退出、Task 14 最终审查及真实存档只读均已有带日期证据；开发者已确认 V0.7.1 完成。详细证据及后续门禁以 [V0.7.1 进度](docs/progress/V0.7.1.md) 为准；完成不自动授权提交、推送或开始 V0.7.2。
-
-## 安全和便携边界
+## 安全与便携边界
 
 1. Minecraft 存档严格只读，不提供写入、修复、删除、移动或重命名 API。
-2. 程序数据只允许位于 EXE 所在便携目录的 `cache/`、`logs/`、`exports/`、`config/`，不得写入世界、AppData 或注册表。
-3. WebView 便携初始化按 [DECISION-015](docs/decisions/DECISION-015.md) 实现并通过实际落盘验证；主窗口协调关闭按 [DECISION-016](docs/decisions/DECISION-016.md) 实现，并通过实际自然退出与目录解锁验证。
-4. 当前 Windows 核心拒绝所有重解析点，冲突句柄返回错误；可能限制链接式存档或云同步路径。读取不保证正在运行世界的跨文件一致性，详见 [DECISION-014](docs/decisions/DECISION-014.md)。
-5. 不引入 sidecar、Shell 或当前任务不需要的网络、文件系统写插件。
+2. 前端不获得任意路径、文件系统写入、Shell、sidecar 或网络能力。
+3. 程序数据只能位于 EXE 便携目录的 `cache/`、`logs/`、`exports/` 和 `config/`。
+4. 当前 Windows 核心拒绝重解析点和不兼容共享句柄；读取不保证运行中世界具备跨文件一致性。
+5. 世界切换、任务取消和关闭必须拒绝旧会话或旧代次结果并释放文件、内存、WebView 和 GPU 资源。
 
-最终发行目标是单个可直接运行的 `MC-World-Explorer.exe`，无需附带 JVM、Node.js、并列 DLL 或外置资源目录，但依赖系统已有 WebView2 Runtime。此目标尚未完成最终验收，不等于当前已提供此发布物。
+最终 Windows x64 发行目标是无需安装、不附带 JVM、Node.js、sidecar 或并列 DLL 目录的单个 EXE，并依赖系统已有的 WebView2 Runtime。该目标不等于已经获得发布授权。
 
-## 迁移原则与排除项
+## 迁移原则
 
-复用 V0.6 已验证算法的语义和测试证据，不逐类逐行翻译。先分析旧输入、输出及失败边界，再重实现、对照验证，最后接入界面。旧版疑似缺陷先记录，由开发者决定是否改变行为。
+- Java 稳定行为默认继承；框架迁移不自动授权改变用户体验、默认值、回退顺序或错误语义。
+- 缺失、不支持、损坏、取消、未知方块视觉回退和请求失败必须保持可区分。
+- 每次只实施一个明确目标，不把二维、三维和其他版本重构混在同一任务。
+- 资源上限、取消、失效和关闭顺序必须明确，不能通过无界并发、吞错或删除限制换取速度。
+- 旧版疑似缺陷先建立 Issue，由开发者决定是否改变行为。
 
-V0.7 不实现原版纹理/模型/图集、自由移动、动态区块流送、实体、天气、动态光影、完整 Mod 渲染、离线模拟或存档编辑；V0.7.1 也不提前迁移 NBT、Anvil、地图及网格算法。
+V0.7 不实现存档编辑、自由飞行、三维动态区块流送、实体、天气、动态光影、完整 Mod 模型或原版资源包渲染。
 
-世界考古、成长记录、世界差异等只保留为迁移完成后再讨论的候选方向，不分配版本或提前实现。V0.8 及以后保持未规划。
+## 文档与门禁
 
-## 规则、历史与门禁
+当前重大依据见 [重大决策目录](docs/decisions/README.md)，Tauri 决策编号为 DECISION-011 至 DECISION-023。Java 稳定行为继承以 DECISION-022 为准。
 
-重大依据为 [DECISION-013](docs/decisions/DECISION-013.md)、[DECISION-014](docs/decisions/DECISION-014.md)、[DECISION-015](docs/decisions/DECISION-015.md) 和 [DECISION-016](docs/decisions/DECISION-016.md)。旧决策的继承和替代关系以 DECISION-013 为准；历史进度与验收快照不反写。
-
-本地 `DEVELOPMENT_RULES.md` 继续生效且被 Git 忽略。每次只执行获批目标；方案、实施、完成、提交、推送、构建验证与发布等授权不得互相替代。V0.7 里程碑期间不创建阶段性版本提交，不创建标签或 Release，不合并 main，不自动进入下一里程碑。
-
+`DEVELOPMENT_RULES.md` 规定 Decisions、Specs、Issues、Progress 和 Superpowers plans 的职责。方案批准、实施完成、里程碑完成、提交、推送、构建、打包和发布是相互独立的授权。

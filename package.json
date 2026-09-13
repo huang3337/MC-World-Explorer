@@ -1,7 +1,7 @@
 {
   "name": "mc-world-explorer",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.7.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "three": "0.185.1",
     "vue": "^3.5.41"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
+    "@types/three": "0.185.4",
     "@vitejs/plugin-vue": "^5.2.4",
     "jsdom": "26.1.0",
     "typescript": "~5.6.3",
