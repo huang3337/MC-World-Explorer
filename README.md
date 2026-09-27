@@ -6,20 +6,21 @@
 
 像查看照片一样查看 Minecraft 世界：独立、严格只读的 Minecraft Java 版世界浏览工具。
 
-> `tauri-rewrite` 是内部重构分支，尚不能替代稳定 Java V0.6.0。实时开发阶段、已验证能力和下一门禁见[当前阶段状态](docs/progress/CURRENT.md)。
+> `tauri-rewrite` 是 Tauri 技术预览分支，尚不能替代稳定 Java V0.6.0。已验证能力、未完成范围和下一门禁见[当前阶段状态](docs/progress/CURRENT.md)。
 
 ## 稳定版与迁移版
 
 - 稳定 Java V0.6.0 保留在 main，具备存档信息、多维度二维地图和受控范围简化三维预览。使用稳定版请查看 [V0.6.0 发布页](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.6.0)，完整解压并保留其 app/runtime 目录，不要只移动旧版 EXE。
 - V0.7 使用 Tauri 2、Rust、Vue 3、TypeScript 和 Vite 迁移 V0.6；V0.7.2 已引入 Three.js / WebGL 2 的有限批次简化三维初版。
-- V0.7.1–V0.7.6 为迁移里程碑，不创建正式标签或 Release，不自动合并 main。
+- V0.7.1–V0.7.6 为迁移里程碑；V0.7.3 的 Tauri 技术预发行版只供试用，不代表完整迁移或正式稳定发布，不自动合并 main。
+- Windows x64 试用下载见 [Tauri V0.7.3 技术预发行版](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.3-tauri.1)；稳定版仍为上方的 Java V0.6.0。
 - 原版纹理、世界考古等功能不在此次框架迁移中；迁移完成后再讨论后续路线。
 
 ## 功能与验证状态
 
-项目提供受控世界选择、只读解析、Canvas 二维地图和有限 Three.js 三维预览。当前实现与尚待验收的范围以[唯一实时状态](docs/progress/CURRENT.md)为准；V0.7.1、V0.7.2 的已完成能力和验收结论保留在[历史 Progress](docs/progress/)中。交互、协议和模块细节分别见当前规格与项目结构，不在 README 重复维护阶段能力清单。
+项目提供受控世界选择、只读解析、Canvas 二维地图和有限 Three.js 三维预览。V0.7.3 已收口二维加载问题簇、会话内缓存与多瓦片调度，并补强有限三维正确性；完整 Java 功能对等、跨启动瓦片缓存及同条件性能比较尚未完成。当前边界以[唯一实时状态](docs/progress/CURRENT.md)为准；各阶段验收结论保留在[历史 Progress](docs/progress/)中。交互、协议和模块细节分别见当前规格与项目结构。
 
-二维地图支持定位和区块对齐选区；三维范围可选 1×1、3×3、5×5、8×8 区块，默认 3×3。点击地图可定位选区，点击“生成三维”或按 Enter/空格确认；范围越大生成时间通常越长，任务支持取消。这些是操作说明，不代表本阶段地图性能或完整度已经通过验收。
+二维地图支持定位和区块对齐选区；三维范围可选 1×1、3×3、5×5、8×8 区块，默认 3×3。点击地图可定位选区，点击“生成三维”或按 Enter/空格确认；范围越大生成时间通常越长，任务支持取消。这些操作说明不代表已完成与 Java 同条件的性能比较或完整功能对等验收。
 
 ## 开发环境与运行
 
@@ -57,7 +58,7 @@ Minecraft 存档始终只读，不提供编辑、修复、删除、移动或重�
 
 程序数据只允许位于 EXE 所在便携目录的 cache、logs、exports、config，不进入存档、AppData 或注册表。WebView 实际落盘已验证未改变既有 AppData；关闭唯一主窗口后主进程与 WebView2 子进程自然退出，便携目录锁正常释放。
 
-最终目标为一个可直接运行的 `MC-World-Explorer.exe`，无需 JVM、Node.js、sidecar、并列 DLL 或外置资源目录，但依赖系统已有 WebView2 Runtime。当前没有完成该正式发行验收，也没有发布此迁移版 EXE。
+最终目标为一个可直接运行的 `MC-World-Explorer.exe`，无需 JVM、Node.js、sidecar、并列 DLL 或外置资源目录，但依赖系统已有 WebView2 Runtime。V0.7.3 技术预发行版仅供 Windows x64 试用，不能据此认定最终单 EXE 发行验收或 Java 功能对等已经完成。
 
 ## 项目文档
 
