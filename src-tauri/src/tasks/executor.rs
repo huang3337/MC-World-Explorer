@@ -168,10 +168,18 @@ impl TaskExecutor {
     }
 
     pub fn shutdown(&self, timeout: Duration) -> bool {
-        let pending = self.begin_shutdown();
+        self.begin_shutdown();
+        self.await_shutdown(timeout)
+    }
+
+    pub(crate) fn begin_shutdown(&self) {
+        let pending = self.take_pending_for_shutdown();
         if let Some(pending) = pending {
             let _ = pending.result.send(Err(ExecutorError::ShuttingDown));
         }
+    }
+
+    pub(crate) fn await_shutdown(&self, timeout: Duration) -> bool {
         let deadline = Instant::now().checked_add(timeout);
         let mut state = lock(&self.shared.state);
         while !state.worker_exited {
@@ -191,7 +199,7 @@ impl TaskExecutor {
         self.join_worker()
     }
 
-    fn begin_shutdown(&self) -> Option<Job> {
+    fn take_pending_for_shutdown(&self) -> Option<Job> {
         let mut state = lock(&self.shared.state);
         state.shutting_down = true;
         if let Some(active) = &state.active {
@@ -217,9 +225,7 @@ impl TaskExecutor {
 
 impl Drop for TaskExecutor {
     fn drop(&mut self) {
-        if let Some(pending) = self.begin_shutdown() {
-            let _ = pending.result.send(Err(ExecutorError::ShuttingDown));
-        }
+        self.begin_shutdown();
         let _ = self.join_worker();
     }
 }

@@ -1,4 +1,5 @@
 mod header;
+mod map_batch_v1;
 mod map_tile_v1;
 mod mesh_v1;
 mod surface_v1;
@@ -6,6 +7,9 @@ mod surface_v1;
 #[cfg(test)]
 mod tests;
 
+pub use map_batch_v1::{
+    encode_map_batch_v1, MapBatchState, MAP_BATCH_MAX_BYTES, MAP_BATCH_MAX_ITEMS,
+};
 pub use map_tile_v1::encode_map_tile_v1;
 pub use mesh_v1::encode_mesh_v1;
 pub use surface_v1::encode_surface_v1;

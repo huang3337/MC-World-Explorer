@@ -3,14 +3,12 @@ import {
   buildMesh,
   cancelActiveTask,
   getAppStatus,
-  loadSurface,
   selectWorld,
   scanWorldDirectory,
   openDiscoveredWorld,
   toDisplayError,
 } from "../services/backend";
 import type { MeshData } from "../protocol/mesh-v1";
-import type { SurfaceData } from "../protocol/surface-v1";
 import type { AppStatus, ChunkRect, DisplayError, WorldSummary, WorldScan } from "../services/types";
 
 export type ExplorerPhase =
@@ -18,11 +16,7 @@ export type ExplorerPhase =
   | "selecting"
   | "selection-cancelled"
   | "selection-error"
-  | "surface-loading"
-  | "surface-ready"
-  | "surface-partial"
-  | "surface-cancelled"
-  | "surface-error"
+  | "map-ready"
   | "mesh-loading"
   | "mesh-ready"
   | "mesh-partial"
@@ -30,14 +24,13 @@ export type ExplorerPhase =
   | "mesh-error"
   | "closing";
 
-type ActiveOperation = "select" | "surface" | "mesh";
+type ActiveOperation = "select" | "mesh";
 
 export interface WorldExplorerBackend {
   getAppStatus: () => Promise<AppStatus>;
   selectWorld: () => Promise<WorldSummary | null>;
   scanWorldDirectory: () => Promise<WorldScan | null>;
   openDiscoveredWorld: (id: number) => Promise<WorldSummary | null>;
-  loadSurface: (sessionId: number) => Promise<SurfaceData>;
   buildMesh: (sessionId: number, rect: ChunkRect) => Promise<MeshData>;
   cancelActiveTask: () => Promise<boolean>;
   toDisplayError: (reason: unknown) => DisplayError;
@@ -48,20 +41,17 @@ const defaultBackend: WorldExplorerBackend = {
   selectWorld,
   scanWorldDirectory,
   openDiscoveredWorld,
-  loadSurface,
   buildMesh,
   cancelActiveTask,
   toDisplayError,
 };
 
 function cancelledPhase(operation: ActiveOperation): ExplorerPhase {
-  if (operation === "surface") return "surface-cancelled";
   if (operation === "mesh") return "mesh-cancelled";
   return "selection-cancelled";
 }
 
 function failedPhase(operation: ActiveOperation): ExplorerPhase {
-  if (operation === "surface") return "surface-error";
   if (operation === "mesh") return "mesh-error";
   return "selection-error";
 }
@@ -70,22 +60,6 @@ function isCancellation(error: DisplayError): boolean {
   return error.code === "TASK_CANCELLED"
     || error.code === "TASK_OUTDATED"
     || error.code === "SESSION_OUTDATED";
-}
-
-function surfaceBelongsToWorld(surface: SurfaceData, world: WorldSummary): boolean {
-  const surfaceSpawn = surface.metadata.worldSpawn;
-  const worldSpawn = world.worldSpawn;
-  return surface.metadata.sessionId === world.sessionId
-    && surface.metadata.centerX === world.centerX
-    && surface.metadata.centerY === world.centerY
-    && surface.metadata.centerZ === world.centerZ
-    && surface.metadata.centerSource === world.centerSource
-    && (surfaceSpawn === null) === (worldSpawn === null)
-    && (surfaceSpawn === null || worldSpawn === null || (
-      surfaceSpawn.x === worldSpawn.x
-      && surfaceSpawn.y === worldSpawn.y
-      && surfaceSpawn.z === worldSpawn.z
-    ));
 }
 
 function meshBelongsToRequest(mesh: MeshData, sessionId: number, rect: ChunkRect): boolean {
@@ -107,24 +81,16 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
   const library = ref<WorldScan | null>(null);
   const scanning = ref(false);
   const pendingWorld = ref<WorldSummary | null>(null);
-  const surface = ref<SurfaceData | null>(null);
   const mesh = ref<MeshData | null>(null);
-  const activeSessionId = ref<number | null>(null);
+  const activeMeshRect = ref<ChunkRect | null>(null);
   let generation = 0;
   let disposed = false;
 
   const busy = computed(() => operation.value !== null);
-  const cancellable = computed(() => operation.value === "surface" || operation.value === "mesh");
-  const hasRetainedView = computed(() => surface.value !== null && (
-    operation.value === "select"
-      || operation.value === "surface"
-      || (activeSessionId.value !== null && world.value?.sessionId !== activeSessionId.value)
-  ));
-  const canInteractWithSurface = computed(() => (
-    surface.value !== null
-      && operation.value === null
-      && world.value?.sessionId === activeSessionId.value
-      && phase.value !== "closing"
+  const cancellable = computed(() => operation.value === "mesh");
+  const hasRetainedView = computed(() => world.value !== null && operation.value === "select");
+  const canInteractWithMap = computed(() => (
+    world.value !== null && operation.value === null && phase.value !== "closing"
   ));
 
   async function initialize(): Promise<void> {
@@ -166,6 +132,7 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
     operation.value = "select";
     phase.value = "selecting";
     pendingWorld.value = null;
+    activeMeshRect.value = null;
     businessError.value = null;
     try {
       const selected = worldId === undefined
@@ -177,21 +144,10 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
       }
 
       pendingWorld.value = selected;
-      activeSessionId.value = selected.sessionId;
-      operation.value = "surface";
-      phase.value = "surface-loading";
-      const nextSurface = await backend.loadSurface(selected.sessionId);
-      if (disposed || current !== generation) return;
-      if (!surfaceBelongsToWorld(nextSurface, selected)) {
-        throw backend.toDisplayError({ code: "INVALID_RESPONSE" });
-      }
-
-      // 新世界的二维数据完整解码后一次性提交，并同时丢弃旧选区对应的三维。
       world.value = selected;
-      surface.value = nextSurface;
       mesh.value = null;
       pendingWorld.value = null;
-      phase.value = nextSurface.metadata.failedChunks > 0 ? "surface-partial" : "surface-ready";
+      phase.value = "map-ready";
     } catch (reason) {
       if (disposed || current !== generation) return;
       const error = backend.toDisplayError(reason);
@@ -208,10 +164,11 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
 
   async function selectRect(rect: ChunkRect): Promise<void> {
     const selectedWorld = world.value;
-    if (!selectedWorld || !canInteractWithSurface.value) return;
+    if (!selectedWorld || !canInteractWithMap.value) return;
     const requestedRect = { ...rect };
     const current = ++generation;
     operation.value = "mesh";
+    activeMeshRect.value = requestedRect;
     phase.value = "mesh-loading";
     businessError.value = null;
     try {
@@ -234,7 +191,10 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
         phase.value = "mesh-error";
       }
     } finally {
-      if (!disposed && current === generation) operation.value = null;
+      if (!disposed && current === generation) {
+        operation.value = null;
+        activeMeshRect.value = null;
+      }
     }
   }
 
@@ -243,6 +203,7 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
     if (!currentOperation) return;
     const current = ++generation;
     operation.value = null;
+    activeMeshRect.value = null;
     phase.value = cancelledPhase(currentOperation);
     businessError.value = null;
     try {
@@ -259,6 +220,7 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
     disposed = true;
     generation += 1;
     operation.value = null;
+    activeMeshRect.value = null;
     phase.value = "closing";
     void backend.cancelActiveTask().catch(() => undefined);
   }
@@ -276,10 +238,10 @@ export function useWorldExplorer(backend: WorldExplorerBackend = defaultBackend)
     scanning,
     scanDirectory,
     pendingWorld,
-    surface,
     mesh,
+    activeMeshRect,
     hasRetainedView,
-    canInteractWithSurface,
+    canInteractWithMap,
     initialize,
     chooseWorld,
     selectRect,

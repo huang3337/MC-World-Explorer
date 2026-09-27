@@ -16,4 +16,4 @@ pub mod world;
 mod world_source;
 
 pub use error::CoreError;
-pub use world_source::{WorldFile, WorldSource};
+pub use world_source::{SourceFileState, WorldFile, WorldSource};

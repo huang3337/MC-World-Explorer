@@ -175,7 +175,7 @@ pub fn build_mesh(
                     width: size_x,
                     height: size_z,
                     direction,
-                    fixed: dy,
+                    fixed: min_y + dy,
                     u_offset: 0,
                     v_offset: 0,
                 },

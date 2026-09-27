@@ -2,19 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import surfaceGoldenBase64 from "../protocol/fixtures/surface-v1.bin.gz.b64?raw";
 import meshGoldenBase64 from "../protocol/fixtures/mesh-v1.bin.gz.b64?raw";
+import mapBatchGoldenBase64 from "../protocol/fixtures/map-batch-v1.bin.gz.b64?raw";
 import {
   buildMesh,
   cancelActiveTask,
+  cancelMapViewport,
   getAppStatus,
   loadSurface,
   selectWorld,
   scanWorldDirectory,
   openDiscoveredWorld,
+  nextMapViewportBatch,
+  startMapViewport,
   toDisplayError,
 } from "./backend";
 
 const status = {
-  appVersion: "0.7.2", backendStatus: "ready",
+  appVersion: "0.7.3", backendStatus: "ready",
   portablePaths: { root: "D:\\MCWE", cache: "D:\\MCWE\\cache", logs: "D:\\MCWE\\logs", exports: "D:\\MCWE\\exports", config: "D:\\MCWE\\config" },
 };
 
@@ -28,6 +32,8 @@ const world = {
   centerZ: -33,
   centerSource: "worldSpawn",
   worldSpawn: { x: -17, y: 64, z: -33 },
+  loadAnchor: { x: -120, y: 72, z: 48 },
+  loadAnchorSource: "playerExit",
 };
 
 async function inflateGolden(encoded: string): Promise<ArrayBuffer> {
@@ -39,8 +45,39 @@ async function inflateGolden(encoded: string): Promise<ArrayBuffer> {
 
 const surfaceGolden = await inflateGolden(surfaceGoldenBase64);
 const meshGolden = await inflateGolden(meshGoldenBase64);
+const mapBatchGolden = await inflateGolden(mapBatchGoldenBase64);
 
 describe("backend", () => {
+  it("严格验证视口启动摘要并解码归属一致的批次", async () => {
+    const summary = { sessionId: 7, viewportTaskId: 9, blocksPerPixel: 1, targetCount: 2, targets: [{ tileX: -1, tileZ: 2, blocksPerPixel: 1 }, { tileX: 1, tileZ: 2, blocksPerPixel: 1 }] };
+    vi.mocked(invoke).mockResolvedValueOnce(summary).mockResolvedValueOnce(mapBatchGolden.slice(0));
+    expect(await startMapViewport(7, -1, 2, 800, 520, 1, 0.5)).toEqual(summary);
+    expect(invoke).toHaveBeenCalledWith("start_map_viewport", { sessionId: 7, centerX: -1, centerZ: 2, viewportWidth: 800, viewportHeight: 520, blocksPerPixel: 1, displayBlocksPerPixel: 0.5 });
+    const batch = await nextMapViewportBatch(7, 9);
+    expect(batch.metadata).toMatchObject({ sessionId: 7, viewportTaskId: 9, itemCount: 2 });
+  });
+
+  it("拒绝非法视口参数、重复目标和批次身份错配", async () => {
+    await expect(startMapViewport(7, 0, 0, 0, 520, 1, 1)).rejects.toMatchObject({ code: "INVALID_ARGUMENTS" });
+    vi.mocked(invoke).mockResolvedValueOnce({ sessionId: 7, viewportTaskId: 9, blocksPerPixel: 1, targetCount: 2, targets: [{ tileX: 0, tileZ: 0, blocksPerPixel: 1 }, { tileX: 0, tileZ: 0, blocksPerPixel: 1 }] });
+    await expect(startMapViewport(7, 0, 0, 800, 520, 1, 1)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    vi.mocked(invoke).mockResolvedValueOnce(mapBatchGolden.slice(0));
+    await expect(nextMapViewportBatch(7, 10)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+  it("视口请求分别校验显示倍率和瓦片倍率", async () => {
+    await expect(startMapViewport(7, 0, 0, 800, 520, 1, Number.NaN)).rejects.toMatchObject({ code: "INVALID_ARGUMENTS" });
+    await expect(startMapViewport(7, 0, 0, 800, 520, 1, 0.1)).rejects.toMatchObject({ code: "INVALID_ARGUMENTS" });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+  it("地图取消只提交会话与视口任务 ID，拒绝非法 ID", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(null);
+    await expect(cancelMapViewport(7, 9)).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenCalledWith("cancel_map_viewport", { sessionId: 7, viewportTaskId: 9 });
+    vi.mocked(invoke).mockClear();
+    await expect(cancelMapViewport(0, 9)).rejects.toMatchObject({ code: "INVALID_ARGUMENTS" });
+    await expect(cancelMapViewport(7, Number.MAX_SAFE_INTEGER + 1)).rejects.toMatchObject({ code: "INVALID_ARGUMENTS" });
+    expect(invoke).not.toHaveBeenCalled();
+  });
   it("目录扫描校验候选，打开时只发送编号", async () => {
     const entry = { id: 42, name: "雪山", group: "实例", displayPath: "D:\\World" };
     const scan = { rootPath: "D:\\versions", worlds: [entry], skipped: 0 };
@@ -97,6 +134,12 @@ describe("backend", () => {
     await expect(selectWorld()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
 
     vi.mocked(invoke).mockResolvedValue({ ...world, centerSource: "originFallback" });
+    await expect(selectWorld()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+
+    vi.mocked(invoke).mockResolvedValue({ ...world, loadAnchorSource: "worldSpawn" });
+    await expect(selectWorld()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+
+    vi.mocked(invoke).mockResolvedValue({ ...world, loadAnchor: { x: 0, y: 64, z: 0 }, loadAnchorSource: "originFallback" });
     await expect(selectWorld()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 

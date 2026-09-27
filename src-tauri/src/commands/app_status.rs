@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(
             response,
             json!({
-                "appVersion": "0.7.2", "backendStatus": "ready",
+                "appVersion": "0.7.3", "backendStatus": "ready",
                 "portablePaths": {"root": root, "cache": root.join("cache"), "logs": root.join("logs"), "exports": root.join("exports"), "config": root.join("config")}
             })
         );

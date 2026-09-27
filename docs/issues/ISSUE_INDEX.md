@@ -1,10 +1,10 @@
 # Issue 编号对照清单
 
-- **更新日期**：2026-09-12
-- **当前问题总数**：162
-- **当前编号前缀数**：76
+- **更新日期**：2026-09-27
+- **累计问题编号数**：165
+- **编号前缀数**：76
 
-本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
+本文件用于快速确定新问题应使用的编号。“累计问题编号数”包含活动与已归档记录，不表示当前待处理数量；活动问题仅查看 `docs/issues/` 根目录的审查文件。问题详情仍以活动目录和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
 ## 编号清单
 
@@ -28,11 +28,11 @@
 | `src/protocol/common.ts` | `TSCOMMON` | `001-002` | `ISSUE-TSCOMMON-002` | `ISSUE-TSCOMMON-003` |
 | `src/protocol/mesh-v1.ts` | `TSMESH` | `001` | `ISSUE-TSMESH-001` | `ISSUE-TSMESH-002` |
 | `src/services/backend.ts` | `BACKEND` | `001` | `ISSUE-BACKEND-001` | `ISSUE-BACKEND-002` |
-| `src/App.vue` | `APPVUE` | `001-007` | `ISSUE-APPVUE-007` | `ISSUE-APPVUE-008` |
+| `src/App.vue` | `APPVUE` | `001-009` | `ISSUE-APPVUE-009` | `ISSUE-APPVUE-010` |
 | `protocol/mod.rs` | `IPCID` | `001` | `ISSUE-IPCID-001` | `ISSUE-IPCID-002` |
 | `src/components/SurfaceMap.vue` | `SURFACEMAP` | `001-004` | `ISSUE-SURFACEMAP-004` | `ISSUE-SURFACEMAP-005` |
 | `PROJECT_STRUCTURE.md` | `PROJECTSTRUCT` | `001` | `ISSUE-PROJECTSTRUCT-001` | `ISSUE-PROJECTSTRUCT-002` |
-| `src/components/VoxelViewer.vue` | `VOXELVIEWER` | `001-006` | `ISSUE-VOXELVIEWER-006` | `ISSUE-VOXELVIEWER-007` |
+| `src/components/VoxelViewer.vue` | `VOXELVIEWER` | `001-007` | `ISSUE-VOXELVIEWER-007` | `ISSUE-VOXELVIEWER-008` |
 | `world_session.rs` | `WORLDSESSION` | `001-002` | `ISSUE-WORLDSESSION-002` | `ISSUE-WORLDSESSION-003` |
 | `commands/select_world.rs` | `SELECTWORLD` | `001-003` | `ISSUE-SELECTWORLD-003` | `ISSUE-SELECTWORLD-004` |
 | `commands/mod.rs` | `COMMANDS` | `001` | `ISSUE-COMMANDS-001` | `ISSUE-COMMANDS-002` |
@@ -100,3 +100,11 @@
 ## 归档说明
 
 问题从 `docs/issues/` 移入 `docs/issues/resolved/Vx.x/` 时，编号和本清单中的下一编号都不改变。归档只改变问题状态和存放位置，不改变编号历史。
+
+2026-09-26：`ISSUE-TAURILIB-004`、`ISSUE-USEWORLD-001` 和 `ISSUE-MAPVIEWPORT-001/002` 已分别移入 [关闭验收记录](resolved/V0.7.3/lib.rs.md)、[首屏链路解决记录](resolved/V0.7.3/useWorldExplorer.ts.md)和[二维视口解决记录](resolved/V0.7.3/MapViewport.vue.md)；各前缀编号与下一编号均保持不变。
+
+2026-09-27：`ISSUE-RUSTMAP-001` 经同一会话回看续载的自动化与真实存档桌面验收后移入 [地图缓存解决记录](resolved/V0.7.3/map-mod.rs.md)；`RUSTMAP` 已使用编号和下一编号保持不变。
+
+2026-09-27：`ISSUE-EXECUTOR-004` 经独立双 worker 调度的自动化与开发者桌面验收后移入 [地图调度解决记录](resolved/V0.7.3/executor.rs.md)；`EXECUTOR` 已使用编号和下一编号保持不变。
+
+2026-09-27：`ISSUE-VOXELVIEWER-007` 经六面高度回归与开发者桌面确认“三维闭合”后移入 [三维闭合解决记录](resolved/V0.7.3/VoxelViewer.vue.md)；`ISSUE-APPVUE-008` 经 3×3/8×8 状态回归与开发者确认 UI 正常后移入 [三维界面解决记录](resolved/V0.7.3/App.vue.md)。`ISSUE-APPVUE-009` 经旧固定表面边界回归与开发者确认边缘选区现可正常生成三维后，也归入同一 [三维界面解决记录](resolved/V0.7.3/App.vue.md)。编号和下一编号均不改变。

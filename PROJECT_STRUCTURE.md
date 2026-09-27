@@ -1,6 +1,6 @@
 # MC World Explorer 项目结构
 
-本页描述 tauri-rewrite 当前实际工程，不是 Java V0.6 结构或未来目录草案。V0.7.2 已具备世界选择、解析、有限二维和有限三维主链路；当前二维地图仍使用单任务执行边界，后续架构只以重大决策和活动 Issue 为准。
+本页只描述 `tauri-rewrite` 的实际工程结构和模块职责，不承担阶段进度记录。已验证能力、未验收内容和下一门禁只见[当前阶段状态](docs/progress/CURRENT.md)；Java V0.6 结构和未来目录草案不在本页。
 
 ## 正式工程
 
@@ -25,7 +25,7 @@ MC-World-Explorer-Tauri/
 │  ├─ styles.css                       业务视图、状态与保留态样式
 │  ├─ components/                      Canvas 2D 与 Three.js 有限视图
 │  ├─ composables/                     页面状态机、Canvas 和 Three.js 生命周期
-│  ├─ protocol/                        surface/mesh/map-tile v1 解码与协议测试
+│  ├─ protocol/                        surface/mesh/map-tile/map-batch v1 解码与协议测试
 │  ├─ services/
 │  │  ├─ types.ts                      IPC DTO 和前端错误类型
 │  │  ├─ backend.ts                    唯一生产 invoke 入口及响应检查
@@ -46,18 +46,21 @@ MC-World-Explorer-Tauri/
 │     │  ├─ select_world.rs           官方目录选择、后台候选校验与只读会话替换
 │     │  ├─ world_library.rs          目录扫描、候选编号与列表打开命令
 │     │  ├─ load_surface.rs           精确 1024×1024 方块表面任务
-│     │  ├─ load_map_tile.rs          当前 256×256 地图瓦片任务
+│     │  ├─ load_map_tile.rs          独立地图瓦片兼容命令
+│     │  ├─ map_viewport.rs           视口目标与增量批次命令
 │     │  ├─ build_mesh.rs             最大 8×8 网格任务与累计解码预算
 │     │  └─ cancel_task.rs            幂等取消当前任务
-│     ├─ protocol/                    surface/mesh/map-tile v1 二进制编码
+│     ├─ protocol/                    surface/mesh/map-tile/map-batch v1 二进制编码
 │     ├─ storage/
 │     │  ├─ mod.rs
 │     │  ├─ portable_paths.rs         EXE 便携路径派生及测试
 │     │  ├─ webview_data.rs           WebView 便携目录准备、保护及覆盖检测
 │     │  └─ webview_lifecycle.rs      保护句柄的幂等、并发安全释放
 │     ├─ tasks/
-│     │  ├─ mod.rs / registry.rs      单槽位标识、取消与接纳
-│     │  └─ executor.rs               单 worker、单最新 pending 执行器
+│     │  ├─ mod.rs / registry.rs      通用任务标识、取消与接纳
+│     │  ├─ executor.rs               非地图重任务的单 worker 执行器
+│     │  └─ map_scheduler.rs / map_poll.rs / map_results.rs
+│     │                                二维双 worker、有界调度与增量结果
 │     └─ world_session.rs             单个只读世界会话及代次
 ├─ crates/mcwe-core/
 │  ├─ Cargo.toml                      fastnbt、flate2 与 serde 边界
@@ -66,15 +69,15 @@ MC-World-Explorer-Tauri/
 │  │  ├─ world_source.rs              Windows 只读边界及测试
 │  │  ├─ world/ / nbt/ / anvil/      世界目录布局扫描、元数据、受限 NBT 与 Region 读取
 │  │  ├─ chunk/ / area/ / surface/   Palette 解码、方块边界与表面采样
-│  │  ├─ map/                        动态地图瓦片生成
+│  │  ├─ map/                        动态地图瓦片生成与会话内缓存
 │  │  └─ mesh/                        分类、邻接与确定性贪心合并
 │  └─ tests/
 │     ├─ level_dat.rs / anvil_region.rs / chunk_decode.rs
-│     ├─ surface_slice.rs / mesh_slice.rs
+│     ├─ surface_slice.rs / mesh_slice.rs / map_cache.rs
 │     └─ real_world_readonly.rs       默认忽略的真实存档只读集成测试
 └─ docs/
    ├─ assets/                         项目图标等既有文档资源
-   ├─ progress/                       各里程碑当前概况
+   ├─ progress/                       唯一实时状态与历史里程碑快照
    ├─ specs/                          版本化协议与实现规格
    ├─ issues/                         活动问题、README、ISSUE_INDEX
    │  └─ resolved/                    按版本归档
@@ -84,16 +87,16 @@ MC-World-Explorer-Tauri/
       └─ tauri/                      V0.7 Tauri 迁移决策
 ```
 
-旧 FAQ 等辅助材料仍保留，适用 Java 历史基线，不能单独作为 Tauri 已实现功能说明。V0.7.2 已新增世界解析，并完成当前 Canvas 地图、Three.js 简化三维及单窗口状态机；二维专用调度和缓存尚未实施，其问题边界记录在活动 Issue 中，后续方案必须重新规划。
+旧 FAQ 等辅助材料仍保留，适用 Java 历史基线，不能单独作为 Tauri 已实现功能说明。目录中的源码存在不等于真实存档验收通过；完成程度只在当前阶段状态中概括。
 
 ## 调用与职责边界
 
-当前启动链路先派生 PortablePaths、拒绝 WebView2 外部覆盖并准备 `EXE/config/webview/`，再从配置显式创建唯一 main 窗口。关闭 main 时先协调后台任务和会话释放，再幂等释放目录保护句柄并请求 Tauri 正常退出。业务链路为 App.vue → services/backend.ts → 专用 Commands → WorldSession/TaskExecutor → mcwe-core；控制信息使用 JSON，表面、地图瓦片和网格使用受限 raw ArrayBuffer。
+启动链路先派生 PortablePaths、拒绝 WebView2 外部覆盖并准备 `EXE/config/webview/`，再从配置显式创建唯一 main 窗口。关闭 main 时先协调后台任务和会话释放，再幂等释放目录保护句柄并请求 Tauri 正常退出。业务链路为 App.vue → services/backend.ts → 专用 Commands → WorldSession/有界任务域 → mcwe-core；控制信息使用 JSON，表面、地图瓦片、视口批次和网格使用受限 raw ArrayBuffer。
 
 - 前端只消费 DTO，不调用文件系统；普通浏览器没有 Tauri 时显示 IPC 错误。
 - 应用层协调权限、错误、会话、任务和协议编码，不承担 NBT、Chunk、表面或网格算法；所有业务 Command 均检查 main 窗口与本地来源并拒绝额外参数。
 - mcwe-core 独立于 Tauri，WorldFile 只暴露 Read/Seek，不暴露原始 File 或写接口；解析分配、坐标和网格规模均有固定上限。世界读取边界见 [DECISION-012](docs/decisions/tauri/DECISION-012.md)，WebView 数据准备和关闭生命周期见 [DECISION-013](docs/decisions/tauri/DECISION-013.md) 与 [DECISION-014](docs/decisions/tauri/DECISION-014.md)。
-- TaskRegistry 与单 worker TaskExecutor 已接入世界候选校验及 surface/mesh Command；新请求替换待执行任务，任务、会话和页面代次共同拒绝迟到结果。页面只在新 surface 完整解码后原子切换世界快照，保留的旧视图不可交互。PortablePaths 仍不是任意写入授权。
+- TaskRegistry 与单 worker TaskExecutor 用于非地图重任务；二维视口使用独立双 worker 有界调度、结果队列和增量轮询。新请求按任务域替换或重新绑定工作，并由任务、会话和页面代次拒绝迟到结果。PortablePaths 仍不是任意写入授权。
 - Tauri 当前 capability 仅 core:default，无 Shell、文件系统写插件或 sidecar；生产 CSP 限制本地资源与 IPC 连接，devCsp 为 null，不能据此宣称最终安全验收完成。
 
 Rust 单元测试位于相应源文件的 cfg(test) 模块，核心另有编译失败文档测试和必须显式提供真实路径的默认忽略集成测试；Vue 与服务测试与源码相邻。没有继续沿用 Java 的 src/test/java 布局。
@@ -112,4 +115,4 @@ Rust 单元测试位于相应源文件的 cfg(test) 模块，核心另有编译�
 
 相邻 main 工作树保留 Java 21 / Gradle / JavaFX / LWJGL V0.6，旧源码也保存在 Git 历史中。迁移工作树已移除旧 Java/Gradle 工程入口，不长期并存两个应用骨架。
 
-[重大决策目录](docs/decisions/README.md) 规定 Java 与 Tauri 分类及全局连续编号。DECISION-011 至 DECISION-023 约束当前迁移技术栈、只读来源、便携数据、关闭、世界发现、解析、网格、IPC、会话、Canvas、Java 行为继承和二维地图调度架构。实际完成状态以 [V0.7.2 进度](docs/progress/V0.7.2.md) 为准。
+[重大决策目录](docs/decisions/README.md) 规定 Java 与 Tauri 分类及全局连续编号；实际完成状态以 [CURRENT](docs/progress/CURRENT.md) 为准。

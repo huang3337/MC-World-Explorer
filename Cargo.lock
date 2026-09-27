@@ -1779,7 +1779,7 @@ dependencies = [
 
 [[package]]
 name = "mc-world-explorer"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "mcwe-core",
  "serde",
@@ -1793,7 +1793,7 @@ dependencies = [
 
 [[package]]
 name = "mcwe-core"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "fastnbt",
  "flate2",

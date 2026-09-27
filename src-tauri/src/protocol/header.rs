@@ -85,6 +85,7 @@ fn validate_sections(kind: u16, sections: &[Section]) -> Result<(), CoreError> {
         1 => &[(1, 4), (2, 5), (3, 1)],
         2 => &[(10, 6), (11, 6), (12, 4), (13, 4)],
         3 => &[(1, 4), (2, 5), (3, 1)],
+        4 => &[(20, 4), (21, 4), (22, 5), (23, 1)],
         _ => return Err(CoreError::InvalidChunk),
     };
     if sections.len() != expected.len() {

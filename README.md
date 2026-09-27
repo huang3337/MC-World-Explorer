@@ -6,7 +6,7 @@
 
 像查看照片一样查看 Minecraft 世界：独立、严格只读的 Minecraft Java 版世界浏览工具。
 
-> 当前 `tauri-rewrite` 是内部重构分支，尚不能替代稳定 Java V0.6.0。V0.7.2 已完成目录发现、世界选择、有限二维表面和最大 8×8 区块简化三维的端到端垂直切片；二维地图速度与完整度问题簇以及真实负载关闭预算保留为活动问题，由 V0.7.3 重新规划和解决。
+> `tauri-rewrite` 是内部重构分支，尚不能替代稳定 Java V0.6.0。实时开发阶段、已验证能力和下一门禁见[当前阶段状态](docs/progress/CURRENT.md)。
 
 ## 稳定版与迁移版
 
@@ -15,15 +15,11 @@
 - V0.7.1–V0.7.6 为迁移里程碑，不创建正式标签或 Release，不自动合并 main。
 - 原版纹理、世界考古等功能不在此次框架迁移中；迁移完成后再讨论后续路线。
 
-## 当前可验证内容
+## 功能与验证状态
 
-- 单窗口页面显示世界摘要、`1024×1024` 二维表面、区块对齐选区和有限批次简化三维。
-- 三维范围可选 1×1、3×3、5×5、8×8 区块，默认 3×3；点击地图定位，点击“生成三维”或按 Enter/空格确认。范围越大生成时间通常越长，支持取消。
-- 类型化状态/控制 IPC 与 surface/mesh 二进制 IPC、安全中文错误、响应身份和畸形数据检查。
-- Rust 独立只读解析核心、便携路径、单世界会话、协作取消和过期结果隔离。当前通用单 worker 不能承载目标二维调度，已确认由有界专用地图 worker 替代二维路径。
-- Canvas/Three.js 生命周期测试、Rust 单元/集成/文档测试和 Tauri mock IPC 测试。
+项目提供受控世界选择、只读解析、Canvas 二维地图和有限 Three.js 三维预览。当前实现与尚待验收的范围以[唯一实时状态](docs/progress/CURRENT.md)为准；V0.7.1、V0.7.2 的已完成能力和验收结论保留在[历史 Progress](docs/progress/)中。交互、协议和模块细节分别见当前规格与项目结构，不在 README 重复维护阶段能力清单。
 
-V0.7.1 已完成，概况见 [V0.7.1 进度](docs/progress/V0.7.1.md)。V0.7.2 已完成核心垂直链路、真实存档只读和基础资源释放验证；当前二维限制及后续活动问题详见 [V0.7.2 进度](docs/progress/V0.7.2.md)。
+二维地图支持定位和区块对齐选区；三维范围可选 1×1、3×3、5×5、8×8 区块，默认 3×3。点击地图可定位选区，点击“生成三维”或按 Enter/空格确认；范围越大生成时间通常越长，任务支持取消。这些是操作说明，不代表本阶段地图性能或完整度已经通过验收。
 
 ## 开发环境与运行
 
@@ -36,7 +32,7 @@ npm ci
 npm run tauri dev
 ```
 
-首次恢复依赖需要网络。以上是供开发者执行的说明，不自动授权代理安装工具、启动程序或修改环境。
+首次恢复依赖需要网络。
 
 `npm run dev` 只启动 Vite 前端，普通浏览器没有 Tauri IPC，会显示连接失败；这不等于 Rust 后端损坏。开发态路径根随开发 EXE 位置确定，不是固定的源码根目录。
 
@@ -65,34 +61,12 @@ Minecraft 存档始终只读，不提供编辑、修复、删除、移动或重�
 
 ## 项目文档
 
-- [项目上下文](PROJECT_CONTEXT.md)
-- [V0.7 迁移路线](PROJECT_ROADMAP.md)
-- [当前项目结构](PROJECT_STRUCTURE.md)
-- [V0.7.1 里程碑概况](docs/progress/V0.7.1.md)
-- [V0.7.2 进度](docs/progress/V0.7.2.md)
-- [里程碑 Progress 记录规范](docs/progress/README.md)
-- [当前技术规格索引](docs/specs/README.md)
-- [V0.7.2 二进制 IPC 协议](docs/specs/V0.7.2-binary-protocol.md)
-- [重大决策分类与编号规则](docs/decisions/README.md)
-- [迁移技术栈决策 DECISION-011](docs/decisions/tauri/DECISION-011.md)
-- [Windows 只读边界 DECISION-012](docs/decisions/tauri/DECISION-012.md)
-- [WebView 便携数据决策 DECISION-013](docs/decisions/tauri/DECISION-013.md)
-- [WebView 关闭生命周期决策 DECISION-014](docs/decisions/tauri/DECISION-014.md)
-- [世界目录选择决策 DECISION-015](docs/decisions/tauri/DECISION-015.md)
-- [Rust NBT 基础决策 DECISION-016](docs/decisions/tauri/DECISION-016.md)
-- [当前存档解析兼容决策 DECISION-017](docs/decisions/tauri/DECISION-017.md)
-- [Rust 核心三维网格决策 DECISION-018](docs/decisions/tauri/DECISION-018.md)
-- [混合 IPC 决策 DECISION-019](docs/decisions/tauri/DECISION-019.md)
-- [单个只读 WorldSession 决策 DECISION-020](docs/decisions/tauri/DECISION-020.md)
-- [Canvas 2D 动态瓦片视口决策 DECISION-021](docs/decisions/tauri/DECISION-021.md)
-- [Java 稳定行为继承决策 DECISION-022](docs/decisions/tauri/DECISION-022.md)
-- [二维地图有界渐进调度决策 DECISION-023](docs/decisions/tauri/DECISION-023.md)
-- [问题记录规范](docs/issues/README.md)与[编号索引](docs/issues/ISSUE_INDEX.md)
+- [当前阶段状态](docs/progress/CURRENT.md)与[历史 Progress](docs/progress/)
+- [项目上下文](PROJECT_CONTEXT.md)、[V0.7 迁移路线](PROJECT_ROADMAP.md)、[实际工程结构](PROJECT_STRUCTURE.md)
+- [当前技术规格](docs/specs/README.md)、[重大决策](docs/decisions/README.md)、[问题记录](docs/issues/README.md)
 - [Java V0.6 历史验收](docs/progress/V0.6.md)
 
-旧 FAQ、颜色规则和 V0.1–V0.6 里程碑概况作为 Java 基线参考保留，不代表本分支已具备相同能力。本地 `DEVELOPMENT_RULES.md` 与 `docs/superpowers/`、`scripts/`、`packaging/` 受 Git 忽略保护，不得擅自纳入提交。
-
-每次只执行获批目标；里程碑完成、提交和推送分别确认，不自动进入下一里程碑。
+旧 FAQ、颜色规则和 V0.1–V0.6 里程碑概况作为 Java 基线参考保留，不代表本分支已具备相同能力。
 
 ## 许可证
 

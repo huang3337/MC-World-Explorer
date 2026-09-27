@@ -11,9 +11,6 @@ MC World Explorer 用于在不启动 Minecraft 客户端的情况下，快速、
 - Java V0.6.0 是当前稳定版，保留在 `main` 和 Git 历史中。
 - Java V0.3.1 是二维地图行为与体验基线。
 - `tauri-rewrite` 是 V0.7 内部迁移分支，使用 Tauri、Rust、Vue 和 Three.js 重实现 V0.6 核心能力。
-- V0.7.1“工程与边界”已经完成。
-- V0.7.2 已完成世界选择、解析、有限二维、有限三维和关闭释放的端到端垂直切片。
-- 二维地图速度与完整度问题簇、可比性能和真实负载关闭预算保留为活动问题，由 V0.7.3 重新规划和解决。
 - V0.7 完成并通过对等验收前，不替代 Java 稳定版。
 
 两条本地工作树属于同一个仓库。Java 稳定工作树只作为行为、实现和性能参考，不在 Tauri 迁移任务中修改。
@@ -29,18 +26,9 @@ MC World Explorer 用于在不启动 Minecraft 客户端的情况下，快速、
 
 前端不直接读取 Minecraft 文件；Tauri Command 不承载 NBT、Region、地图采样或网格算法；`mcwe-core` 不依赖 WebView。
 
-## 当前能力
+## 阶段状态与历史能力
 
-- Windows 只读世界来源使用句柄级路径保护，拒绝重解析点回绕。
-- WebView2 数据固定在 EXE 便携目录，不写入 AppData。
-- 支持选择世界、扫描常见 Java 目录布局、显示候选列表并建立唯一只读 WorldSession。
-- 支持受限读取 `level.dat`、Anvil Region、NBT、现代与较早方块状态布局。
-- 支持表面采样、初步动态地图瓦片、有限三维网格和内嵌 Three.js 显示。
-- 控制信息使用 JSON，密集二维和三维数据使用版本化二进制协议。
-- 当前重任务使用单 worker、单最新 pending 的有界执行器；该模型不能承载目标二维体验，后续按 DECISION-023 重新规划地图专用调度、渐进结果和会话缓存。
-- 三维支持 1×1、3×3、5×5、8×8 区块预设，并继承 Java DECISION-008 的有限相机交互。
-
-当前尚未达到完整 Java V0.6 功能对等。详细里程碑状态见 [V0.7.2 进度](docs/progress/V0.7.2.md)。
+当前已实现能力、未验收内容及下一门禁只在 [当前阶段状态](docs/progress/CURRENT.md) 更新。V0.7.1 和 V0.7.2 的完成事实、既有只读世界来源、便携 WebView 数据、世界选择与解析、有限二维/三维、混合 IPC 和三维范围预设的验收概况保留在 [历史 Progress](docs/progress/)；本页不另写一份随阶段变化的能力清单。
 
 ## 安全与便携边界
 
@@ -64,6 +52,6 @@ V0.7 不实现存档编辑、自由飞行、三维动态区块流送、实体、
 
 ## 文档与门禁
 
-当前重大依据见 [重大决策目录](docs/decisions/README.md)，Tauri 决策编号为 DECISION-011 至 DECISION-023。Java 稳定行为继承以 DECISION-022 为准。
+重大依据见 [重大决策目录](docs/decisions/README.md)。Java 稳定行为继承以 DECISION-022 为准。
 
 `DEVELOPMENT_RULES.md` 规定 Decisions、Specs、Issues、Progress 和 Superpowers plans 的职责。方案批准、实施完成、里程碑完成、提交、推送、构建、打包和发布是相互独立的授权。

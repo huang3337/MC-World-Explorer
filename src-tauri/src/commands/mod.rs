@@ -3,6 +3,7 @@ mod build_mesh;
 mod cancel_task;
 mod load_map_tile;
 mod load_surface;
+mod map_viewport;
 mod select_world;
 mod world_library;
 
@@ -47,6 +48,9 @@ pub(crate) fn configure<R: tauri::Runtime>(
             world_library::open_discovered_world,
             load_surface::load_surface,
             load_map_tile::load_map_tile,
+            map_viewport::start_map_viewport,
+            map_viewport::next_map_viewport_batch,
+            map_viewport::cancel_map_viewport,
             build_mesh::build_mesh_for_selection,
             cancel_task::cancel_active_task
         ])

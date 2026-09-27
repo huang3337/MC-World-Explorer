@@ -31,6 +31,8 @@ export interface WorldSummary {
   centerZ: number;
   centerSource: "playerRespawn" | "worldSpawn" | "originFallback";
   worldSpawn: WorldPosition | null;
+  loadAnchor: WorldPosition;
+  loadAnchorSource: "playerExit" | "worldSpawn" | "originFallback";
 }
 
 export interface DiscoveredWorld {
@@ -57,6 +59,20 @@ export interface ChunkRect {
   minZ: number;
   width: number;
   depth: number;
+}
+
+export interface MapViewportTarget {
+  tileX: number;
+  tileZ: number;
+  blocksPerPixel: 1 | 2 | 4 | 8 | 16;
+}
+
+export interface MapViewportSummary {
+  sessionId: number;
+  viewportTaskId: number;
+  blocksPerPixel: 1 | 2 | 4 | 8 | 16;
+  targetCount: number;
+  targets: MapViewportTarget[];
 }
 
 /** 对应 Rust AppError。 */

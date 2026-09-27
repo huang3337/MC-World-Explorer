@@ -15,6 +15,15 @@ pub struct DecodedChunk {
     pub sections: BTreeMap<i8, ChunkSection>,
 }
 impl DecodedChunk {
+    pub fn storage_budget_bytes(&self) -> usize {
+        self.sections
+            .values()
+            .map(ChunkSection::storage_budget_bytes)
+            .sum::<usize>()
+            + self.sections.len() * 64
+            + 128
+    }
+
     pub fn block(&self, x: u8, world_y: i32, z: u8) -> Option<&BlockState> {
         let sy = world_y.div_euclid(16);
         let sy = i8::try_from(sy).ok()?;

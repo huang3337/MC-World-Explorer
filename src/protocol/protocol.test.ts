@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import surfaceGoldenBase64 from "./fixtures/surface-v1.bin.gz.b64?raw";
 import meshGoldenBase64 from "./fixtures/mesh-v1.bin.gz.b64?raw";
+import mapBatchGoldenBase64 from "./fixtures/map-batch-v1.bin.gz.b64?raw";
+import { decodeMapBatch } from "./map-batch-v1";
 import { decodeMesh } from "./mesh-v1";
 import { decodeSurface } from "./surface-v1";
 import { MAX_METADATA_BYTES } from "./common";
@@ -49,8 +51,10 @@ function fnv1a64(buffer: ArrayBuffer): bigint {
 
 const surfaceGoldenBytes = await inflateGolden(surfaceGoldenBase64);
 const meshGoldenBytes = await inflateGolden(meshGoldenBase64);
+const mapBatchGoldenBytes = await inflateGolden(mapBatchGoldenBase64);
 const surfaceGolden = () => clone(surfaceGoldenBytes);
 const meshGolden = () => clone(meshGoldenBytes);
+const mapBatchGolden = () => clone(mapBatchGoldenBytes);
 
 describe("Rust 黄金向量", () => {
   it("解码 Rust surface v1 并匹配 Rust FNV-1a", () => {
@@ -91,6 +95,38 @@ describe("Rust 黄金向量", () => {
       vertexCount: 4,
       indexCount: 6,
       batchCount: 1,
+    });
+  });
+
+  it("解码 Rust map viewport batch v1 并匹配 Rust FNV-1a", () => {
+    const buffer = mapBatchGolden();
+    const batch = decodeMapBatch(buffer);
+    expect(fnv1a64(buffer)).toBe(15_154_743_704_573_164_615n);
+    expect(batch.metadata).toEqual({
+      sessionId: 7,
+      viewportTaskId: 9,
+      batchSequence: 1,
+      itemCount: 2,
+      terminalItemCount: 1,
+      hasMore: false,
+      state: "items",
+    });
+    expect(batch.items[0]).toMatchObject({
+      kind: "partial",
+      tileX: -1,
+      tileZ: 2,
+      revision: 0x1_0000_0003,
+      pixelX: 8,
+      pixelZ: 16,
+      width: 2,
+      height: 1,
+    });
+    expect(batch.items[1]).toEqual({
+      kind: "failed",
+      tileX: 1,
+      tileZ: 2,
+      blocksPerPixel: 1,
+      failure: "readFailed",
     });
   });
 });
