@@ -41,13 +41,36 @@ impl Fixture {
         let source = WorldSource::new(&self.root)?;
         read_world_info(&source, cancel)
     }
+
+    fn player(&self, name: &str, bytes: &[u8]) {
+        fs::create_dir_all(self.root.join("playerdata")).unwrap();
+        fs::write(self.root.join("playerdata").join(name), bytes).unwrap();
+    }
 }
 
 impl Drop for Fixture {
     fn drop(&mut self) {
+        if let Ok(files) = fs::read_dir(self.root.join("playerdata")) {
+            for file in files.flatten() {
+                let _ = fs::remove_file(file.path());
+            }
+        }
+        let _ = fs::remove_dir(self.root.join("playerdata"));
         let _ = fs::remove_file(self.root.join("level.dat"));
         let _ = fs::remove_dir(&self.root);
     }
+}
+
+fn player_nbt(x: f64, y: f64, z: f64, dimension: &str) -> Vec<u8> {
+    use fastnbt::Value;
+    fastnbt::to_bytes(&HashMap::from([
+        (
+            "Pos".to_owned(),
+            Value::List(vec![Value::Double(x), Value::Double(y), Value::Double(z)]),
+        ),
+        ("Dimension".to_owned(), Value::String(dimension.to_owned())),
+    ]))
+    .unwrap()
 }
 
 fn valid_nbt() -> Vec<u8> {
@@ -126,6 +149,62 @@ fn preview_center_matches_java_respawn_world_spawn_origin_order() {
         mcwe_core::world::PreviewCenterSource::PlayerRespawn
     );
     assert_eq!(info.world_spawn.unwrap().x, 256);
+}
+
+#[test]
+fn one_player_uses_last_exit_but_multiplayer_uses_world_spawn() {
+    let fixture = Fixture::new(&valid_nbt());
+    fixture.player(
+        "00000000-0000-0000-0000-000000000001.dat",
+        &compressed(&player_nbt(-12.75, 70.5, 31.9, "minecraft:overworld"), true),
+    );
+    let info = fixture.read(&NeverCancel).unwrap();
+    assert_eq!(
+        (
+            info.map_load_anchor.position.x,
+            info.map_load_anchor.position.z
+        ),
+        (-13, 31)
+    );
+    assert_eq!(
+        info.map_load_anchor.source,
+        mcwe_core::world::MapLoadAnchorSource::PlayerExit
+    );
+
+    fixture.player(
+        "00000000-0000-0000-0000-000000000002.dat",
+        &compressed(&player_nbt(900.0, 80.0, 900.0, "minecraft:overworld"), true),
+    );
+    let info = fixture.read(&NeverCancel).unwrap();
+    assert_eq!(
+        (
+            info.map_load_anchor.position.x,
+            info.map_load_anchor.position.z
+        ),
+        (-17, -33)
+    );
+    assert_eq!(
+        info.map_load_anchor.source,
+        mcwe_core::world::MapLoadAnchorSource::WorldSpawn
+    );
+}
+
+#[test]
+fn unusable_single_player_data_falls_back_to_world_spawn() {
+    let fixture = Fixture::new(&valid_nbt());
+    fixture.player(
+        "00000000-0000-0000-0000-000000000001.dat",
+        &compressed(&player_nbt(12.0, 70.0, 31.0, "minecraft:the_nether"), true),
+    );
+    let info = fixture.read(&NeverCancel).unwrap();
+    assert_eq!(
+        (
+            info.map_load_anchor.position.x,
+            info.map_load_anchor.position.z
+        ),
+        (-17, -33)
+    );
+    assert_eq!(info.player_exit, None);
 }
 
 #[test]

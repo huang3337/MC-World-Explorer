@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppStatus, ChunkRect, DisplayError, ErrorCode, WorldSummary, WorldScan } from "./types";
+import type { AppStatus, ChunkRect, DisplayError, ErrorCode, MapViewportSummary, WorldSummary, WorldScan } from "./types";
 import { decodeSurface, type SurfaceData } from "../protocol/surface-v1";
 import { decodeMesh, type MeshData } from "../protocol/mesh-v1";
 import { decodeMapTile, type MapTileData, type MapTileZoom } from "../protocol/map-tile-v1";
+import { decodeMapBatch, type MapBatch } from "../protocol/map-batch-v1";
 
 const messages: Record<ErrorCode | "IPC_ERROR" | "INVALID_RESPONSE", string> = {
   INVALID_ARGUMENTS: "请求参数无效",
@@ -82,14 +83,26 @@ function isWorldSummary(value: unknown): value is WorldSummary {
     || !isInteger(value.centerY, -0x8000_0000, 0x7fff_ffff)
     || !isInteger(value.centerZ, -0x8000_0000, 0x7fff_ffff)
     || !["playerRespawn", "worldSpawn", "originFallback"].includes(value.centerSource as string)
-    || !(value.worldSpawn === null || isWorldPosition(value.worldSpawn))) {
+    || !(value.worldSpawn === null || isWorldPosition(value.worldSpawn))
+    || !isWorldPosition(value.loadAnchor)
+    || !["playerExit", "worldSpawn", "originFallback"].includes(value.loadAnchorSource as string)) {
     return false;
   }
   const expected = [
     "sessionId", "name", "displayPath", "dataVersion", "centerX", "centerY", "centerZ", "centerSource", "worldSpawn",
+    "loadAnchor", "loadAnchorSource",
   ];
   if (Object.keys(value).length !== expected.length
     || !expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))) return false;
+  const loadAnchor = value.loadAnchor;
+  if (!isRecord(loadAnchor)) return false;
+  if (value.loadAnchorSource === "originFallback"
+    && (loadAnchor.x !== 0 || loadAnchor.y !== 0 || loadAnchor.z !== 0)) return false;
+  if (value.loadAnchorSource === "worldSpawn") {
+    const spawn = value.worldSpawn;
+    if (!isRecord(spawn)
+      || spawn.x !== loadAnchor.x || spawn.y !== loadAnchor.y || spawn.z !== loadAnchor.z) return false;
+  }
   if (value.centerSource === "originFallback") {
     return value.centerX === 0 && value.centerY === 0 && value.centerZ === 0;
   }
@@ -200,6 +213,78 @@ export async function loadMapTile(
     return decodeMapTile(await invoke<ArrayBuffer>("load_map_tile", {
       sessionId, tileX, tileZ, blocksPerPixel,
     }));
+  } catch (error) {
+    throw error instanceof Error ? toDisplayError({ code: "INVALID_RESPONSE" }) : toDisplayError(error);
+  }
+}
+
+export async function startMapViewport(
+  sessionId: number,
+  centerX: number,
+  centerZ: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  blocksPerPixel: MapTileZoom,
+  displayBlocksPerPixel: number,
+): Promise<MapViewportSummary> {
+  if (!validSessionId(sessionId)
+    || !Number.isFinite(centerX) || !Number.isFinite(centerZ)
+    || !isInteger(viewportWidth, 1, 16_384)
+    || !isInteger(viewportHeight, 1, 16_384)
+    || ![1, 2, 4, 8, 16].includes(blocksPerPixel)
+    || !Number.isFinite(displayBlocksPerPixel)
+    || displayBlocksPerPixel < 0.25 || displayBlocksPerPixel > 16) throw invalidArguments();
+  try {
+    const value: unknown = await invoke("start_map_viewport", {
+      sessionId, centerX, centerZ, viewportWidth, viewportHeight, blocksPerPixel, displayBlocksPerPixel,
+    });
+    if (!isRecord(value)
+      || Object.keys(value).length !== 5
+      || !validSessionId(value.sessionId as number)
+      || value.sessionId !== sessionId
+      || !validSessionId(value.viewportTaskId as number)
+      || value.blocksPerPixel !== blocksPerPixel
+      || !isInteger(value.targetCount, 1, 64)
+      || !Array.isArray(value.targets)
+      || value.targets.length !== value.targetCount) throw new Error("INVALID_RESPONSE");
+    const identities = new Set<string>();
+    for (const target of value.targets) {
+      if (!isRecord(target) || Object.keys(target).length !== 3
+        || !isInteger(target.tileX, -0x8000_0000, 0x7fff_ffff)
+        || !isInteger(target.tileZ, -0x8000_0000, 0x7fff_ffff)
+        || target.blocksPerPixel !== blocksPerPixel) throw new Error("INVALID_RESPONSE");
+      const identity = `${blocksPerPixel}:${target.tileX}:${target.tileZ}`;
+      if (identities.has(identity)) throw new Error("INVALID_RESPONSE");
+      identities.add(identity);
+    }
+    return value as unknown as MapViewportSummary;
+  } catch (error) {
+    throw error instanceof Error ? toDisplayError({ code: "INVALID_RESPONSE" }) : toDisplayError(error);
+  }
+}
+
+export async function nextMapViewportBatch(
+  sessionId: number,
+  viewportTaskId: number,
+): Promise<MapBatch> {
+  if (!validSessionId(sessionId) || !validSessionId(viewportTaskId)) throw invalidArguments();
+  try {
+    const batch = decodeMapBatch(await invoke<ArrayBuffer>("next_map_viewport_batch", {
+      sessionId, viewportTaskId,
+    }));
+    if (batch.metadata.sessionId !== sessionId
+      || batch.metadata.viewportTaskId !== viewportTaskId) throw new Error("INVALID_RESPONSE");
+    return batch;
+  } catch (error) {
+    throw error instanceof Error ? toDisplayError({ code: "INVALID_RESPONSE" }) : toDisplayError(error);
+  }
+}
+
+export async function cancelMapViewport(sessionId: number, viewportTaskId: number): Promise<void> {
+  if (!validSessionId(sessionId) || !validSessionId(viewportTaskId)) throw invalidArguments();
+  try {
+    const response: unknown = await invoke("cancel_map_viewport", { sessionId, viewportTaskId });
+    if (response !== null) throw new Error("INVALID_RESPONSE");
   } catch (error) {
     throw error instanceof Error ? toDisplayError({ code: "INVALID_RESPONSE" }) : toDisplayError(error);
   }

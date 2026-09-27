@@ -29,7 +29,12 @@ pub(super) async fn load_map_tile<R: tauri::Runtime>(
     map_request.bounds().map_err(AppError::from)?;
     let session = sessions.get(session_id)?;
     let receipt = tasks.submit(session.id, move |worker| {
-        mcwe_core::map::load_map_tile(&session.source, map_request, &worker)
+        mcwe_core::map::load_map_tile_cached(
+            &session.source,
+            &session.map_cache,
+            map_request,
+            &worker,
+        )
     })?;
     let task_id = receipt.task_id();
     let tile = tauri::async_runtime::spawn_blocking(move || receipt.wait())

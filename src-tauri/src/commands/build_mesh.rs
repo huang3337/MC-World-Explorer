@@ -56,10 +56,6 @@ pub(super) async fn build_mesh_for_selection<R: tauri::Runtime>(
     };
     rect.validate()?;
     let session = sessions.get(session_id)?;
-    rect.validate_for_preview(
-        session.info.preview_center.position.x,
-        session.info.preview_center.position.z,
-    )?;
     let neighborhood_coordinates = rect.neighborhood_coordinates()?;
     let receipt = tasks.submit(session.id, move |worker| {
         worker.check()?;

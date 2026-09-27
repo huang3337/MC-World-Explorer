@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nearestDisplayZoom, tileZoom, visibleTiles, zoomAt } from "./mapViewportMath";
+import { displayZoomLabel, isTemporaryScale, nearestDisplayZoom, tileZoom, visibleTiles, wheelVisualZoom, zoomAt } from "./mapViewportMath";
 
 describe("Java 地图视口数学", () => {
   it("光标锚定缩放保持指向的世界坐标不变", () => {
@@ -18,4 +18,21 @@ describe("Java 地图视口数学", () => {
     expect(tiles.map(tile => [tile.tileX, tile.tileZ])).toEqual(expect.arrayContaining([[-1, -1], [0, 0]]));
     expect(tiles[0]).toMatchObject({ tileX: -1, tileZ: -1 });
   });
+
+  it("滚轮先执行 Java 等价的连续视觉缩放，未过阈值时不切换瓦片倍率", () => {
+    const visual = wheelVisualZoom(2, 100);
+    expect(visual).toBeCloseTo(2 * Math.pow(2, 100 / 240));
+    expect(tileZoom(nearestDisplayZoom(visual))).toBe(2);
+    expect(wheelVisualZoom(.25, -120)).toBe(.25);
+    expect(wheelVisualZoom(16, 120)).toBe(16);
+  });
+});
+
+it("稳定的像素放大保持锐利并明确区分显示与数据倍率", () => {
+  expect(isTemporaryScale(0.5, 0.5)).toBe(false);
+  expect(isTemporaryScale(0.63, 0.5)).toBe(true);
+  expect(displayZoomLabel(0.25)).toBe("显示：4 像素/方块；数据：1 方块/像素");
+  expect(displayZoomLabel(0.5)).toBe("显示：2 像素/方块；数据：1 方块/像素");
+  expect(displayZoomLabel(4)).toBe("显示与数据：4 方块/像素");
+  expect(displayZoomLabel(2.5, 2)).toBe("显示：2.50 方块/像素；数据：2 方块/像素");
 });

@@ -12,6 +12,14 @@ fn chunk(
     coordinate: ChunkCoordinate,
     blocks: &[(u8, u8, u8, &str)],
 ) -> mcwe_core::chunk::DecodedChunk {
+    chunk_in_section(coordinate, 0, blocks)
+}
+
+fn chunk_in_section(
+    coordinate: ChunkCoordinate,
+    section_y: i8,
+    blocks: &[(u8, u8, u8, &str)],
+) -> mcwe_core::chunk::DecodedChunk {
     let mut names = vec!["minecraft:air"];
     for (_, _, _, name) in blocks {
         if !names.contains(name) {
@@ -37,7 +45,7 @@ fn chunk(
         words[slot / 16] |= (index as u64) << ((slot % 16) * 4);
     }
     let section = Value::Compound(HashMap::from([
-        ("Y".to_owned(), Value::Byte(0)),
+        ("Y".to_owned(), Value::Byte(section_y)),
         (
             "block_states".to_owned(),
             Value::Compound(HashMap::from([
@@ -132,6 +140,37 @@ fn one_block_has_six_faces_and_axis_aligned_buffers() {
         .all(|value| [-1.0, 0.0, 1.0].contains(value)));
     assert_eq!((mesh.origin_world_x, mesh.origin_world_z), (0, 0));
     assert_eq!(mesh.bounds.unwrap().max_y, 1.0);
+}
+
+#[test]
+fn top_and_bottom_faces_share_the_side_faces_world_height() {
+    for (section_y, local_y, expected_bottom) in [(9, 9, 153.0), (-4, 0, -64.0)] {
+        let coordinate = ChunkCoordinate { x: 0, z: 0 };
+        let mesh = build_mesh(
+            &neighborhood(vec![chunk_in_section(
+                coordinate,
+                section_y,
+                &[(0, local_y, 0, "minecraft:stone")],
+            )]),
+            rect(0, 0, 1, 1),
+            &NeverCancel,
+        )
+        .unwrap();
+        assert_eq!(mesh.face_count, 6);
+        assert!(
+            mesh.positions
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .all(|position| position[1] == expected_bottom
+                    || position[1] == expected_bottom + 1.0)
+        );
+        let bounds = mesh.bounds.unwrap();
+        assert_eq!(
+            (bounds.min_y, bounds.max_y),
+            (expected_bottom, expected_bottom + 1.0)
+        );
+    }
 }
 
 #[test]

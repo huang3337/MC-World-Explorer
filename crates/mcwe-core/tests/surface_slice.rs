@@ -7,7 +7,10 @@ use mcwe_core::{
     cancel::{Cancellation, NeverCancel},
     chunk::decode_chunk,
     surface::{block_color, sample_chunk},
-    world::{PreviewCenter, PreviewCenterSource, WorldInfo, WorldPosition},
+    world::{
+        MapLoadAnchor, MapLoadAnchorSource, PreviewCenter, PreviewCenterSource, WorldInfo,
+        WorldPosition,
+    },
     CoreError, WorldSource,
 };
 use std::{
@@ -117,9 +120,14 @@ fn world(spawn_x: i32, spawn_z: i32) -> WorldInfo {
         name: String::new(),
         world_spawn: Some(position.clone()),
         player_respawn: None,
+        player_exit: None,
         preview_center: PreviewCenter {
-            position,
+            position: position.clone(),
             source: PreviewCenterSource::WorldSpawn,
+        },
+        map_load_anchor: MapLoadAnchor {
+            position,
+            source: MapLoadAnchorSource::WorldSpawn,
         },
     }
 }

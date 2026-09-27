@@ -6,7 +6,7 @@ use crate::{
 use mcwe_core::cancel::NeverCancel;
 use mcwe_core::{
     cancel::Cancellation,
-    world::{read_world_info, PreviewCenterSource, WorldInfo},
+    world::{read_world_info, MapLoadAnchorSource, PreviewCenterSource, WorldInfo},
     CoreError, WorldSource,
 };
 use serde::Serialize;
@@ -19,6 +19,7 @@ pub struct WorldSession {
     pub id: u64,
     pub source: WorldSource,
     pub info: WorldInfo,
+    pub map_cache: mcwe_core::map::MapSessionCache,
     display_path: PathBuf,
 }
 pub struct WorldSessionState {
@@ -48,6 +49,8 @@ pub struct WorldSummary {
     pub center_z: i32,
     pub center_source: &'static str,
     pub world_spawn: Option<PositionSummary>,
+    pub load_anchor: PositionSummary,
+    pub load_anchor_source: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,6 +87,7 @@ impl WorldSessionState {
             id,
             source: candidate.source,
             info: candidate.info,
+            map_cache: mcwe_core::map::MapSessionCache::default(),
             display_path: candidate.display_path,
         });
         let summary = session.summary();
@@ -115,6 +119,21 @@ impl WorldSessionState {
             .current
             .as_ref()
             .is_some_and(|s| s.id == id)
+    }
+    pub(crate) fn with_current<T>(
+        &self,
+        id: u64,
+        action: impl FnOnce() -> T,
+    ) -> Result<T, AppError> {
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        let current = inner
+            .current
+            .as_ref()
+            .ok_or_else(|| AppError::new(ErrorCode::NoActiveWorld))?;
+        if current.id != id {
+            return Err(AppError::new(ErrorCode::SessionOutdated));
+        }
+        Ok(action())
     }
     #[cfg(test)]
     pub(crate) fn clear_for_test(&self) {
@@ -169,6 +188,7 @@ fn comparable_windows_path(path: &Path) -> String {
 impl WorldSession {
     fn summary(&self) -> WorldSummary {
         let center = &self.info.preview_center;
+        let load_anchor = &self.info.map_load_anchor;
         WorldSummary {
             session_id: self.id,
             name: self.info.name.clone(),
@@ -191,6 +211,16 @@ impl WorldSession {
                     y: position.y,
                     z: position.z,
                 }),
+            load_anchor: PositionSummary {
+                x: load_anchor.position.x,
+                y: load_anchor.position.y,
+                z: load_anchor.position.z,
+            },
+            load_anchor_source: match load_anchor.source {
+                MapLoadAnchorSource::PlayerExit => "playerExit",
+                MapLoadAnchorSource::WorldSpawn => "worldSpawn",
+                MapLoadAnchorSource::OriginFallback => "originFallback",
+            },
         }
     }
 }
@@ -340,6 +370,10 @@ mod tests {
             assert_eq!(second_summary.session_id, 2);
             assert_eq!(second_summary.center_x, 31);
             assert_eq!(second_summary.world_spawn.unwrap().x, 31);
+            assert_eq!(second_summary.load_anchor.x, 31);
+            assert_eq!(second_summary.load_anchor.y, 64);
+            assert_eq!(second_summary.load_anchor.z, -8);
+            assert_eq!(second_summary.load_anchor_source, "worldSpawn");
             assert_eq!(
                 error_code(sessions.get(1).err().unwrap()),
                 "SESSION_OUTDATED"
@@ -424,6 +458,34 @@ mod tests {
             drop(sessions);
             fs::rename(&second, &moved_second).unwrap();
             fs::rename(&moved_second, &second).unwrap();
+        }
+
+        #[test]
+        fn successful_world_switch_starts_with_an_isolated_empty_map_cache() {
+            let mut fixture = Fixture::new();
+            let first = fixture.world("first", "第一个世界", 0);
+            let second = fixture.world("second", "第二个世界", 16);
+            let sessions = state();
+            let first_summary = sessions.replace_candidate(first).unwrap();
+            let first_session = sessions.get(first_summary.session_id).unwrap();
+            mcwe_core::map::load_map_tile_cached(
+                &first_session.source,
+                &first_session.map_cache,
+                mcwe_core::map::MapTileRequest {
+                    tile_x: 0,
+                    tile_z: 0,
+                    blocks_per_pixel: 1,
+                },
+                &NeverCancel,
+            )
+            .unwrap();
+            assert_eq!(first_session.map_cache.stats().tile_entries, 1);
+
+            let second_summary = sessions.replace_candidate(second).unwrap();
+            let second_session = sessions.get(second_summary.session_id).unwrap();
+            assert_eq!(second_session.map_cache.stats().tile_entries, 0);
+            assert_eq!(second_session.map_cache.stats().chunk_entries, 0);
+            assert_eq!(first_session.map_cache.stats().tile_entries, 1);
         }
     }
 }

@@ -3,9 +3,11 @@ use crate::{tasks::TaskState, world_session::WorldSessionState};
 use mcwe_core::cancel::Cancellation;
 use serde_json::{json, Value};
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
+    time::{Duration, Instant},
 };
 use tauri::{
     ipc::{CallbackFn, InvokeBody, InvokeResponseBody},
@@ -71,10 +73,19 @@ impl WorldFixture {
     fn path(&self) -> &Path {
         &self.root
     }
+
+    fn add_far_chunk(&self) {
+        fs::write(
+            self.root.join("region/r.2.0.mca"),
+            region_with_stone_at(64, 0),
+        )
+        .unwrap();
+    }
 }
 
 impl Drop for WorldFixture {
     fn drop(&mut self) {
+        let _ = fs::remove_file(self.root.join("region/r.2.0.mca"));
         let _ = fs::remove_file(self.root.join("region/r.0.0.mca"));
         let _ = fs::remove_file(self.root.join("level.dat"));
         let _ = fs::remove_dir(self.root.join("region"));
@@ -108,11 +119,11 @@ fn valid_level() -> Vec<u8> {
     bytes
 }
 
-fn stone_chunk() -> Vec<u8> {
+fn stone_chunk_at(chunk_x: i32, chunk_z: i32) -> Vec<u8> {
     let mut bytes = vec![10, 0, 0];
-    for name in ["xPos", "zPos"] {
+    for (name, coordinate) in [("xPos", chunk_x), ("zPos", chunk_z)] {
         named(&mut bytes, 3, name);
-        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        bytes.extend_from_slice(&coordinate.to_be_bytes());
     }
     named(&mut bytes, 9, "sections");
     bytes.push(10);
@@ -130,8 +141,12 @@ fn stone_chunk() -> Vec<u8> {
 }
 
 fn region_with_stone() -> Vec<u8> {
+    region_with_stone_at(0, 0)
+}
+
+fn region_with_stone_at(chunk_x: i32, chunk_z: i32) -> Vec<u8> {
     const SECTOR: usize = 4096;
-    let payload = stone_chunk();
+    let payload = stone_chunk_at(chunk_x, chunk_z);
     let mut bytes = vec![0_u8; SECTOR * 3];
     bytes[0..4].copy_from_slice(&[0, 0, 2, 1]);
     let start = SECTOR * 2;
@@ -211,6 +226,107 @@ fn surface_and_mesh_commands_return_raw_protocol_payloads() {
 }
 
 #[test]
+fn mesh_selection_can_use_a_loaded_chunk_outside_the_legacy_surface() {
+    let fixture = WorldFixture::new();
+    fixture.add_far_chunk();
+    let app = app();
+    let session_id = select_world(&app, &fixture);
+    let window = main_window(&app);
+
+    let response = get_ipc_response(
+        &window,
+        request(
+            "build_mesh_for_selection",
+            json!({
+                "sessionId": session_id,
+                "chunkRect": {"minX": 64, "minZ": 0, "width": 1, "depth": 1}
+            }),
+        ),
+    )
+    .unwrap();
+    let mesh = assert_raw(response, 2);
+    assert!(String::from_utf8_lossy(&mesh).contains(r#""minX":64"#));
+
+    app.state::<WorldSessionState>().clear_for_test();
+    drop(window);
+    drop(app);
+}
+
+#[test]
+fn map_viewport_starts_without_surface_and_streams_until_ended() {
+    let fixture = WorldFixture::new();
+    let app = app();
+    let session_id = select_world(&app, &fixture);
+    let window = main_window(&app);
+    let summary = get_ipc_response(
+        &window,
+        request(
+            "start_map_viewport",
+            json!({
+                "sessionId": session_id,
+                "centerX": 128.0,
+                "centerZ": 128.0,
+                "viewportWidth": 1,
+                "viewportHeight": 1,
+                "blocksPerPixel": 1,
+                "displayBlocksPerPixel": 1.0
+            }),
+        ),
+    )
+    .unwrap()
+    .deserialize::<Value>()
+    .unwrap();
+    assert_eq!(summary["sessionId"], session_id);
+    assert_eq!(summary["targetCount"], 1);
+    assert_eq!(summary["targets"][0]["tileX"], 0);
+    let viewport_id = summary["viewportTaskId"].as_u64().unwrap();
+    let mut ended = false;
+    for _ in 0..16 {
+        let bytes = assert_raw(
+            get_ipc_response(
+                &window,
+                request(
+                    "next_map_viewport_batch",
+                    json!({"sessionId": session_id, "viewportTaskId": viewport_id}),
+                ),
+            )
+            .unwrap(),
+            4,
+        );
+        let metadata_offset = u32::from_le_bytes(bytes[16..20].try_into().unwrap()) as usize;
+        let metadata: Value = serde_json::from_slice(&bytes[metadata_offset..]).unwrap();
+        if metadata["state"] == "ended" {
+            assert_eq!(metadata["terminalItemCount"], 1);
+            ended = true;
+            break;
+        }
+    }
+    assert!(ended);
+    let session = app.state::<WorldSessionState>().get(session_id).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while session.map_cache.stats().tile_entries <= 1 && Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+    assert!(session.map_cache.stats().tile_entries > 1);
+    let repeated = assert_raw(
+        get_ipc_response(
+            &window,
+            request(
+                "next_map_viewport_batch",
+                json!({"sessionId": session_id, "viewportTaskId": viewport_id}),
+            ),
+        )
+        .unwrap(),
+        4,
+    );
+    let metadata_offset = u32::from_le_bytes(repeated[16..20].try_into().unwrap()) as usize;
+    let metadata: Value = serde_json::from_slice(&repeated[metadata_offset..]).unwrap();
+    assert_eq!(metadata["state"], "ended");
+    assert_eq!(metadata["itemCount"], 0);
+    app.state::<WorldSessionState>().clear_for_test();
+}
+
+#[test]
 fn cancel_command_is_json_and_idempotent() {
     let app = app();
     let window = main_window(&app);
@@ -257,6 +373,14 @@ fn old_session_ids_are_errors_instead_of_empty_raw_successes() {
             "load_map_tile",
             json!({"sessionId": old_session_id, "tileX": 0, "tileZ": 0, "blocksPerPixel": 1}),
         ),
+        (
+            "start_map_viewport",
+            json!({"sessionId": old_session_id, "centerX": 0, "centerZ": 0, "viewportWidth": 800, "viewportHeight": 520, "blocksPerPixel": 1, "displayBlocksPerPixel": 1.0}),
+        ),
+        (
+            "next_map_viewport_batch",
+            json!({"sessionId": old_session_id, "viewportTaskId": 1}),
+        ),
     ] {
         let error = get_ipc_response(&window, request(command, body)).unwrap_err();
         assert_eq!(error["code"], "SESSION_OUTDATED", "{command}");
@@ -293,6 +417,18 @@ fn strict_arguments_reject_extra_outer_nested_and_raw_fields() {
         (
             "load_map_tile",
             json!({"sessionId": 1, "tileX": 0, "tileZ": 0, "blocksPerPixel": 1, "path": "C:\\untrusted"}),
+        ),
+        (
+            "start_map_viewport",
+            json!({"sessionId": 1, "centerX": 0, "centerZ": 0, "viewportWidth": 800, "viewportHeight": 520, "blocksPerPixel": 1, "displayBlocksPerPixel": 1.0, "path": "C:\\untrusted"}),
+        ),
+        (
+            "next_map_viewport_batch",
+            json!({"sessionId": 1, "viewportTaskId": 1, "path": "C:\\untrusted"}),
+        ),
+        (
+            "cancel_map_viewport",
+            json!({"sessionId": 1, "viewportTaskId": 1, "path": "C:\\untrusted"}),
         ),
     ] {
         let error = get_ipc_response(&window, request(command, body)).unwrap_err();
@@ -352,6 +488,52 @@ fn domain_failures_are_json_errors_not_empty_raw_successes() {
     )
     .unwrap_err();
     assert_eq!(mesh["code"], "NO_ACTIVE_WORLD");
+    for (command, body) in [
+        (
+            "start_map_viewport",
+            json!({"sessionId": 1, "centerX": 0, "centerZ": 0, "viewportWidth": 800, "viewportHeight": 520, "blocksPerPixel": 1, "displayBlocksPerPixel": 1.0}),
+        ),
+        (
+            "next_map_viewport_batch",
+            json!({"sessionId": 1, "viewportTaskId": 1}),
+        ),
+    ] {
+        let error = get_ipc_response(&window, request(command, body)).unwrap_err();
+        assert_eq!(error["code"], "NO_ACTIVE_WORLD", "{command}");
+    }
+}
+
+#[test]
+fn map_viewport_cancellation_is_idempotent_and_validates_both_ids() {
+    let app = app();
+    let window = main_window(&app);
+    let tasks = app.state::<TaskState>();
+    let viewport_id = tasks.begin_map_viewport(1, &HashSet::new()).unwrap();
+    tasks.track_map_viewport(1, viewport_id, 1, Vec::new());
+    let poll = tasks.begin_map_poll(1, viewport_id).unwrap();
+    for _ in 0..2 {
+        let response = get_ipc_response(
+            &window,
+            request(
+                "cancel_map_viewport",
+                json!({"sessionId": 1, "viewportTaskId": viewport_id}),
+            ),
+        )
+        .unwrap();
+        assert!(matches!(response, InvokeResponseBody::Json(value) if value == "null"));
+    }
+    assert!(matches!(
+        poll.wait(Duration::ZERO),
+        Err(crate::tasks::MapPollError::Outdated)
+    ));
+    for body in [
+        json!({"sessionId": 0, "viewportTaskId": 1}),
+        json!({"sessionId": 1, "viewportTaskId": 0}),
+        json!({"sessionId": 9_007_199_254_740_992_u64, "viewportTaskId": 1}),
+    ] {
+        let error = get_ipc_response(&window, request("cancel_map_viewport", body)).unwrap_err();
+        assert_eq!(error["code"], "INVALID_ARGUMENTS");
+    }
 }
 
 #[test]
@@ -369,6 +551,18 @@ fn every_business_command_rejects_other_windows_and_remote_origins() {
         (
             "load_map_tile",
             json!({"sessionId": 1, "tileX": 0, "tileZ": 0, "blocksPerPixel": 1}),
+        ),
+        (
+            "start_map_viewport",
+            json!({"sessionId": 1, "centerX": 0, "centerZ": 0, "viewportWidth": 800, "viewportHeight": 520, "blocksPerPixel": 1, "displayBlocksPerPixel": 1.0}),
+        ),
+        (
+            "next_map_viewport_batch",
+            json!({"sessionId": 1, "viewportTaskId": 1}),
+        ),
+        (
+            "cancel_map_viewport",
+            json!({"sessionId": 1, "viewportTaskId": 1}),
         ),
         (
             "build_mesh_for_selection",

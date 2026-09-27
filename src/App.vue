@@ -7,7 +7,7 @@ import { useWorldExplorer } from "./composables/useWorldExplorer";
 const explorer = useWorldExplorer();
 const {
   status, statusError, businessError, phase, operation, busy, cancellable,
-  world, pendingWorld, surface, mesh, hasRetainedView, canInteractWithSurface,
+  world, pendingWorld, mesh, activeMeshRect, hasRetainedView, canInteractWithMap,
   initialize, chooseWorld, selectRect, cancel, close,
   library, scanning, scanDirectory,
 } = explorer;
@@ -21,12 +21,10 @@ const phaseText = computed(() => ({
   selecting: "正在选择并验证世界目录…",
   "selection-cancelled": "未选择新的世界；现有完整视图保持不变。",
   "selection-error": "世界目录选择或验证失败。",
-  "surface-loading": "正在只读加载主世界默认中心周围固定 1024×1024 方块…",
-  "surface-ready": "二维表面已完整加载。",
-  "surface-partial": `二维表面已部分加载：${surface.value?.metadata.successfulChunks ?? 0} 个区块成功，${surface.value?.metadata.failedChunks ?? 0} 个区块失败。`,
-  "surface-cancelled": "二维加载已取消或结果已过期；未提交半成品。",
-  "surface-error": "二维加载失败；未提交半成品。",
-  "mesh-loading": "正在生成最大 8×8 区块的简化三维…",
+  "map-ready": "世界会话已建立，二维地图按当前视口渐进加载。",
+  "mesh-loading": activeMeshRect.value
+    ? `正在生成 ${activeMeshRect.value.width}×${activeMeshRect.value.depth} 区块的简化三维…`
+    : "正在生成简化三维…",
   "mesh-ready": "简化三维已生成。",
   "mesh-partial": `简化三维已部分生成：${meshTargetFailureCount.value} 个目标区块读取失败。`,
   "mesh-cancelled": "三维生成已取消或结果已过期；原有完整三维保持不变。",
@@ -41,7 +39,7 @@ onUnmounted(close);
 <template>
   <main class="app-shell">
     <header class="app-header">
-      <div><h1>MC World Explorer</h1><p>V0.7.2 只读世界浏览</p></div>
+      <div><h1>MC World Explorer</h1><p>V0.7.3 只读世界浏览</p></div>
       <span class="scope-badge">只读 · 主世界</span>
     </header>
     <section class="workspace" aria-labelledby="world-heading">
@@ -66,14 +64,14 @@ onUnmounted(close);
       </section>
       <p role="status" aria-live="polite" class="phase-status" :data-phase="phase">{{ phaseText }}</p>
       <p v-if="businessError" role="alert" class="error">{{ businessError.message }}（{{ businessError.code }}）</p>
-      <p v-if="pendingWorld" class="pending-world">{{ operation === "surface" ? "正在处理" : "本次未提交" }}：<strong>{{ pendingWorld.name || "未命名世界" }}</strong></p>
+      <p v-if="pendingWorld" class="pending-world">正在提交：<strong>{{ pendingWorld.name || "未命名世界" }}</strong></p>
       <template v-if="world">
-        <p><strong>{{world.name||"未命名世界"}}</strong> · 默认中心 {{world.centerX}}, {{world.centerY}}, {{world.centerZ}}</p>
+        <p><strong>{{world.name||"未命名世界"}}</strong> · 加载中心 {{world.loadAnchor.x}}, {{world.loadAnchor.y}}, {{world.loadAnchor.z}}</p>
         <p v-if="world.worldSpawn">世界出生点 {{world.worldSpawn.x}}, {{world.worldSpawn.y}}, {{world.worldSpawn.z}}</p>
         <p class="path">{{world.displayPath}}</p>
       </template>
       <p v-if="hasRetainedView" class="retained-notice">下方为上一次完整结果，仅保留显示；新世界完成提交前不可交互。</p>
-      <MapViewport v-if="surface" :data="surface" :disabled="!canInteractWithSurface" @select="selectRect"/>
+      <MapViewport v-if="world" :world="world" :disabled="!canInteractWithMap" @select="selectRect"/>
       <VoxelViewer v-if="mesh" :data="mesh" :disabled="hasRetainedView" @close="mesh = null"/>
     </section>
     <details class="backend-status" :aria-busy="!status && !statusError">

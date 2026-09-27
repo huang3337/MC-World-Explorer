@@ -1,6 +1,6 @@
 [package]
 name = "mcwe-core"
-version = "0.7.2"
+version = "0.7.3"
 description = "Framework-independent read-only core for MC World Explorer"
 edition = "2021"
 

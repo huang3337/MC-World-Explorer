@@ -1,7 +1,15 @@
 use crate::CoreError;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceFileState {
+    Missing,
+    File { len: u64, modified: SystemTime },
+}
 
 /// 经过文件系统校验的世界根路径，不代表已解析的 Minecraft 世界。
 /// 生命周期内保留世界根及祖先目录的只读保护句柄，防止会话中途被替换。
@@ -50,6 +58,23 @@ impl WorldSource {
         }
     }
 
+    /// 返回安全相对文件的只读来源状态，用于缓存失效；不暴露实际路径。
+    pub fn source_file_state(
+        &self,
+        relative: impl AsRef<Path>,
+    ) -> Result<SourceFileState, CoreError> {
+        let file = match self.open_file(relative) {
+            Ok(file) => file,
+            Err(CoreError::NotFound) => return Ok(SourceFileState::Missing),
+            Err(error) => return Err(error),
+        };
+        let metadata = file.file.metadata()?;
+        Ok(SourceFileState::File {
+            len: metadata.len(),
+            modified: metadata.modified()?,
+        })
+    }
+
     /// 验证根目录下的普通相对目录存在且整条路径不含重解析点。
     /// 只在调用期间持有额外目录句柄，不向调用方暴露文件系统能力。
     pub fn validate_directory(&self, relative: impl AsRef<Path>) -> Result<(), CoreError> {
@@ -63,6 +88,42 @@ impl WorldSource {
         #[cfg(not(windows))]
         {
             let _ = (&self.root, relative);
+            Err(CoreError::UnsupportedPlatform)
+        }
+    }
+
+    /// 枚举安全相对目录中的普通文件名。结果不包含路径，且受调用方给出的数量上限约束。
+    pub fn list_regular_file_names(
+        &self,
+        relative: impl AsRef<Path>,
+        max_entries: usize,
+    ) -> Result<Vec<OsString>, CoreError> {
+        if max_entries == 0 {
+            return Err(CoreError::ResourceLimit);
+        }
+        #[cfg(windows)]
+        {
+            let relative = windows::relative_file(relative.as_ref())?;
+            let target = self.root.join(relative);
+            let _guards = windows::guard_directories(&target)?;
+            let mut names = Vec::new();
+            for entry in std::fs::read_dir(target)? {
+                let entry = entry?;
+                if names.len() >= max_entries {
+                    return Err(CoreError::ResourceLimit);
+                }
+                let name = entry.file_name();
+                windows::validate_name(&name)?;
+                if entry.file_type()?.is_file() {
+                    names.push(name);
+                }
+            }
+            names.sort();
+            Ok(names)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (&self.root, relative, max_entries);
             Err(CoreError::UnsupportedPlatform)
         }
     }
@@ -112,7 +173,7 @@ mod windows {
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 
-    fn validate_name(name: &OsStr) -> Result<(), CoreError> {
+    pub(super) fn validate_name(name: &OsStr) -> Result<(), CoreError> {
         let units: Vec<_> = name.encode_wide().collect();
         if units.is_empty()
             || units
