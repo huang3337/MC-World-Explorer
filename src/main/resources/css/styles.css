@@ -1,3 +1,189 @@
+.root {
+    -fx-font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background: #f4f6f8;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-base-color: #243140;
+    -fx-accent: #2365c7;
+    -fx-focus-color: #2365c7;
+    -fx-faint-focus-color: #2365c722;
+}
+
+.workspace {
+    -fx-padding: 0;
+    -fx-background-color: #f4f6f8;
+}
+
+.split-pane > .split-pane-divider {
+    -fx-padding: 0 2 0 0;
+    -fx-background-color: #dce2e9;
+}
+
+.world-sidebar, .world-workspace, .world-header, .map-toolbar {
+    -fx-background-color: #ffffff;
+}
+
+.sidebar-header {
+    -fx-padding: 20 14 14 14;
+}
+
+.section-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #243140;
+}
+
+.muted-text, .detail-label {
+    -fx-text-fill: #647383;
+    -fx-font-size: 12px;
+}
+
+.sidebar-status {
+    -fx-padding: 12 14 4 14;
+    -fx-border-color: #e5eaf0;
+    -fx-border-width: 1 0 0 0;
+}
+
+.sidebar-footnote {
+    -fx-padding: 4 14 14 14;
+    -fx-font-size: 11px;
+    -fx-text-fill: #647383;
+}
+
+.tree-view {
+    -fx-padding: 4 7 12 7;
+    -fx-background-insets: 0;
+    -fx-background-color: #ffffff;
+    -fx-border-width: 0;
+}
+
+.tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #243140;
+}
+
+.tree-cell:filled:hover {
+    -fx-background-color: #f1f5fa;
+    -fx-background-radius: 5;
+}
+
+.tree-cell:filled:selected {
+    -fx-background-color: #eaf2ff;
+    -fx-background-radius: 5;
+    -fx-text-fill: #1e58a4;
+}
+
+.world-header {
+    -fx-padding: 15 16 10 16;
+}
+
+.button, .toggle-button, .menu-button {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 5;
+    -fx-border-color: #d7dfe9;
+    -fx-border-radius: 5;
+    -fx-padding: 7 11 7 11;
+    -fx-text-fill: #243140;
+}
+
+.button:hover, .toggle-button:hover, .menu-button:hover {
+    -fx-background-color: #f0f4f9;
+}
+
+.button:focused, .toggle-button:focused, .menu-button:focused {
+    -fx-border-color: #2365c7;
+}
+
+.toggle-button:selected {
+    -fx-background-color: #eaf2ff;
+    -fx-border-color: #90b5ed;
+    -fx-text-fill: #1e58a4;
+}
+
+.primary-action, .primary-action:hover {
+    -fx-background-color: #2365c7;
+    -fx-border-color: #2365c7;
+    -fx-text-fill: #ffffff;
+}
+
+.primary-action:selected {
+    -fx-background-color: #174c9a;
+    -fx-border-color: #174c9a;
+    -fx-text-fill: #ffffff;
+}
+
+.quiet-button {
+    -fx-padding: 6 9 6 9;
+}
+
+.combo-box-base, .text-field {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d7dfe9;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+}
+
+.text-field:focused {
+    -fx-border-color: #2365c7;
+}
+
+.context-menu {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 7;
+    -fx-border-color: #dce2e9;
+    -fx-border-radius: 7;
+    -fx-padding: 6;
+}
+
+.custom-menu-item:focused {
+    -fx-background-color: transparent;
+}
+
+.popover-content {
+    -fx-padding: 9;
+}
+
+.map-toolbar {
+    -fx-padding: 0 16 12 16;
+    -fx-border-color: #dce2e9;
+    -fx-border-width: 0 0 1 0;
+}
+
+.map-overlay-control {
+    -fx-effect: dropshadow(gaussian, #14203433, 6, 0, 0, 1);
+}
+
+.map-status {
+    -fx-background-color: #ffffff;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 11px;
+    -fx-text-fill: #647383;
+    -fx-border-color: #dce2e9;
+    -fx-border-width: 1 0 0 0;
+}
+
+.details-panel, .details-panel > .viewport {
+    -fx-background-color: #ffffff;
+}
+
+.details-panel {
+    -fx-border-color: #dce2e9;
+    -fx-border-width: 0 0 0 1;
+    -fx-effect: dropshadow(gaussian, #14203422, 12, 0, -3, 0);
+}
+
+.map-placeholder {
+    -fx-padding: 24;
+}
+
+.map-placeholder .label {
+    -fx-text-fill: #d8e2ec;
+}
+
+.map-placeholder-title {
+    -fx-font-size: 20px;
+}
+
 .toolbar {
     -fx-background-color: #f4f4f4;
     -fx-border-color: #dddddd;
@@ -5,13 +191,13 @@
 }
 
 .world-name {
-    -fx-font-size: 28px;
+    -fx-font-size: 20px;
     -fx-font-weight: bold;
 }
 
 .detail-label {
-    -fx-font-weight: bold;
-    -fx-text-fill: #555555;
+    -fx-font-weight: normal;
+    -fx-text-fill: #647383;
 }
 
 .detail-value {
@@ -20,12 +206,12 @@
 
 .tree-cell-group {
     -fx-font-weight: bold;
-    -fx-padding: 5 0 5 0;
+    -fx-padding: 10 0 6 0;
 }
 
 .tree-cell-world {
     -fx-font-weight: normal;
-    -fx-padding: 2 0 2 0;
+    -fx-padding: 8 0 8 0;
 }
 
 .preview-surface {
@@ -50,7 +236,7 @@
     -fx-background-color: #eef5fb;
     -fx-border-color: #9db9d0;
     -fx-border-width: 1;
-    -fx-padding: 7 8 7 8;
+    -fx-padding: 10 16 10 16;
 }
 
 .map-viewport {
@@ -105,4 +291,49 @@
 
 .marker-toggle-portal:selected .marker-toggle-portal-swatch {
     -fx-fill: #bd5cff;
+}
+
+/* Current-session 3D regions; overlay keeps the map viewport stable. */
+.viewer-area-panel {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 10;
+    -fx-border-color: #DCE2E9;
+    -fx-border-radius: 10;
+    -fx-padding: 12;
+    -fx-effect: dropshadow(gaussian, rgba(24, 44, 70, 0.14), 12, 0, 0, 3);
+}
+.viewer-area-scroll, .viewer-area-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+.viewer-area-card {
+    -fx-padding: 10;
+    -fx-background-color: #F4F6F8;
+    -fx-background-radius: 7;
+}
+.viewer-area-open {
+    -fx-text-fill: #2365C7;
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #D7DFE9;
+}
+
+.viewer-area-remove {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: #647383;
+    -fx-font-size: 17px;
+    -fx-padding: 0;
+    -fx-min-width: 22;
+    -fx-pref-width: 22;
+    -fx-max-width: 22;
+    -fx-min-height: 22;
+    -fx-pref-height: 22;
+    -fx-max-height: 22;
+}
+.viewer-area-remove:hover {
+    -fx-background-color: #EAF2FF;
+    -fx-text-fill: #2365C7;
+}
+.viewer-area-remove:focused {
+    -fx-border-color: #2365C7;
 }

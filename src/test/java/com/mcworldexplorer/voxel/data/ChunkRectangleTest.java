@@ -29,9 +29,14 @@ class ChunkRectangleTest {
     @Test
     void enforcesTargetLimitAndCoordinateOverflow() {
         assertThrows(IllegalArgumentException.class,
-                () -> ChunkRectangle.centered(0, 0, 9, 1));
+                () -> ChunkRectangle.centered(0, 0, 33, 1));
         assertThrows(ArithmeticException.class,
                 () -> ChunkRectangle.centered(Integer.MAX_VALUE, 0, 2, 1));
+        assertThrows(IllegalArgumentException.class,
+                () -> ChunkRectangle.centered(0, 0, 17, 16));
+        assertThrows(IllegalArgumentException.class,
+                () -> ChunkRectangle.target(Integer.MIN_VALUE, 0, Integer.MIN_VALUE, 0));
+        assertEquals(256, ChunkRectangle.centered(0, 0, 16, 16).coordinates().size());
         assertThrows(ArithmeticException.class,
                 () -> new ChunkCoordinate(Integer.MAX_VALUE, 0).offset(1, 0));
         assertTrue(ChunkRectangle.target(-2, -3, 5, 4)

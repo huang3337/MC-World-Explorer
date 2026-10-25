@@ -4,7 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public record ChunkRectangle(int minX, int minZ, int maxX, int maxZ) {
-    public static final int MAX_TARGET_SIZE = 8;
+    public static final int MAX_TARGET_SIZE = 32;
+    public static final int MAX_TARGET_CHUNKS = 256;
 
     public ChunkRectangle {
         if (maxX < minX || maxZ < minZ) {
@@ -14,8 +15,8 @@ public record ChunkRectangle(int minX, int minZ, int maxX, int maxZ) {
 
     public static ChunkRectangle target(int minX, int minZ, int maxX, int maxZ) {
         ChunkRectangle rectangle = new ChunkRectangle(minX, minZ, maxX, maxZ);
-        if (rectangle.width() > MAX_TARGET_SIZE || rectangle.depth() > MAX_TARGET_SIZE) {
-            throw new IllegalArgumentException("target chunk rectangle must not exceed 8x8");
+        if (!rectangle.isSupportedTarget()) {
+            throw new IllegalArgumentException("target must fit within 32 chunks per side and 256 chunks total");
         }
         return rectangle;
     }
@@ -26,7 +27,7 @@ public record ChunkRectangle(int minX, int minZ, int maxX, int maxZ) {
             int width,
             int depth) {
         if (width < 1 || width > MAX_TARGET_SIZE || depth < 1 || depth > MAX_TARGET_SIZE) {
-            throw new IllegalArgumentException("target width and depth must be between 1 and 8");
+            throw new IllegalArgumentException("target width and depth must be between 1 and 32");
         }
         int minX = Math.subtractExact(centerX, (width - 1) / 2);
         int minZ = Math.subtractExact(centerZ, (depth - 1) / 2);
@@ -35,6 +36,15 @@ public record ChunkRectangle(int minX, int minZ, int maxX, int maxZ) {
                 minZ,
                 Math.addExact(minX, width - 1),
                 Math.addExact(minZ, depth - 1));
+    }
+
+    public boolean isSupportedTarget() {
+        long width = (long) maxX - minX + 1;
+        long depth = (long) maxZ - minZ + 1;
+        return width <= MAX_TARGET_SIZE && depth <= MAX_TARGET_SIZE
+                && width * depth <= MAX_TARGET_CHUNKS
+                && minX > Integer.MIN_VALUE && minZ > Integer.MIN_VALUE
+                && maxX < Integer.MAX_VALUE && maxZ < Integer.MAX_VALUE;
     }
 
     public int width() {

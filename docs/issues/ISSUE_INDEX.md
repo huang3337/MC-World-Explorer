@@ -1,8 +1,8 @@
 # Issue 编号对照清单
 
-- **更新日期**：2026-08-24
-- **当前问题总数**：95
-- **当前编号前缀数**：43
+- **更新日期**：2026-10-25
+- **当前问题总数**：102
+- **当前编号前缀数**：47
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
@@ -13,9 +13,10 @@
 | `App.java` | `APP` | `001-005` | `ISSUE-APP-005` | `ISSUE-APP-006` |
 | `build.gradle` | `BUILD` | `001` | `ISSUE-BUILD-001` | `ISSUE-BUILD-002` |
 | `PreviewCache.java` | `CACHE` | `001-002` | `ISSUE-CACHE-002` | `ISSUE-CACHE-003` |
-| `MainController.java` | `CONTROLLER` | `001-014` | `ISSUE-CONTROLLER-014` | `ISSUE-CONTROLLER-015` |
+| `MainController.java` | `CONTROLLER` | `001-016` | `ISSUE-CONTROLLER-016` | `ISSUE-CONTROLLER-017` |
 | `WorldDimensionDiscovery.java` | `DISCOVERY` | `001-002` | `ISSUE-DISCOVERY-002` | `ISSUE-DISCOVERY-003` |
-| `main.fxml` | `FXML` | `001-004` | `ISSUE-FXML-004` | `ISSUE-FXML-005` |
+| `main.fxml` | `FXML` | `001-005` | `ISSUE-FXML-005` | `ISSUE-FXML-006` |
+| `map-view.fxml` | `MAPFXML` | `001` | `ISSUE-MAPFXML-001` | `ISSUE-MAPFXML-002` |
 | `PreviewGenerator.java` | `GENERATOR` | `001-002` | `ISSUE-GENERATOR-002` | `ISSUE-GENERATOR-003` |
 | `DimensionHeightResolver.java` | `HEIGHT` | `001-002` | `ISSUE-HEIGHT-002` | `ISSUE-HEIGHT-003` |
 | `PreviewLayer.java` | `LAYER` | `001` | `ISSUE-LAYER-001` | `ISSUE-LAYER-002` |
@@ -53,6 +54,9 @@
 | `V05ReportWriter.java` | `V05-REPORT` | `001` | `ISSUE-V05-REPORT-001` | `ISSUE-V05-REPORT-002` |
 | `VoxelSceneBuilder.java` | `V05-SCENE` | `001` | `ISSUE-V05-SCENE-001` | `ISSUE-V05-SCENE-002` |
 | `measure-v05.ps1` | `V05-SCRIPT` | `001-002` | `ISSUE-V05-SCRIPT-002` | `ISSUE-V05-SCRIPT-003` |
+| `VoxelPreviewCoordinator.java` | `VCOORD` | `001` | `ISSUE-VCOORD-001` | `ISSUE-VCOORD-002` |
+| `ViewerAreaList.java` | `VAREALIST` | `001` | `ISSUE-VAREALIST-001` | `ISSUE-VAREALIST-002` |
+| `ViewerAreaThumbnail.java` | `VTHUMB` | `001` | `ISSUE-VTHUMB-001` | `ISSUE-VTHUMB-002` |
 
 ## 使用规则
 

@@ -48,10 +48,17 @@ public final class ViewerSceneCache {
             ViewerAreaKey key,
             VoxelSceneSnapshot snapshot,
             RegionSourceSignature signature) {
+        return put(key, snapshot, signature, Optional.empty(), 0);
+    }
+
+    public synchronized boolean put(ViewerAreaKey key, VoxelSceneSnapshot snapshot,
+                                    RegionSourceSignature signature,
+                                    Optional<ViewerAreaThumbnail> thumbnail, int failedChunks) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(signature, "signature");
-        long bytes = estimatedBytes(snapshot);
+        ViewerCachedArea preview = new ViewerCachedArea(key, thumbnail, failedChunks);
+        long bytes = Math.addExact(estimatedBytes(snapshot), thumbnail.map(ViewerAreaThumbnail::estimatedBytes).orElse(0L));
         if (bytes > maxBytes) {
             remove(key);
             return false;
@@ -60,7 +67,7 @@ public final class ViewerSceneCache {
         if (previous != null) {
             currentBytes -= previous.estimatedBytes();
         }
-        entries.put(key, new Entry(snapshot, signature, bytes));
+        entries.put(key, new Entry(snapshot, signature, bytes, preview));
         currentBytes += bytes;
         evictToLimits();
         return entries.containsKey(key);
@@ -80,6 +87,10 @@ public final class ViewerSceneCache {
 
     public synchronized List<ViewerAreaKey> keys() {
         return List.copyOf(entries.keySet());
+    }
+
+    public synchronized List<ViewerCachedArea> previews() {
+        return entries.values().stream().map(Entry::preview).toList().reversed();
     }
 
     public synchronized int size() {
@@ -118,6 +129,7 @@ public final class ViewerSceneCache {
     private record Entry(
             VoxelSceneSnapshot snapshot,
             RegionSourceSignature signature,
-            long estimatedBytes) {
+            long estimatedBytes,
+            ViewerCachedArea preview) {
     }
 }

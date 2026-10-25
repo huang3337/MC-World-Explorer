@@ -22,15 +22,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MainControllerTest {
     @Test
     void formatsMinecraftTicksAsReadableRealTime() {
-        assertEquals("0m", MainController.formatGameTime(0));
-        assertEquals("1m", MainController.formatGameTime(1_200));
-        assertEquals("1h 1m", MainController.formatGameTime(73_200));
-        assertEquals("1d 1h 1m", MainController.formatGameTime(1_801_200));
+        assertEquals("0 分钟", MainController.formatGameTime(0));
+        assertEquals("1 分钟", MainController.formatGameTime(1_200));
+        assertEquals("1 小时 1 分钟", MainController.formatGameTime(73_200));
+        assertEquals("1 天 1 小时 1 分钟", MainController.formatGameTime(1_801_200));
     }
 
     @Test
     void clampsNegativeGameTimeToZero() {
-        assertEquals("0m", MainController.formatGameTime(-1));
+        assertEquals("0 分钟", MainController.formatGameTime(-1));
     }
 
     @Test

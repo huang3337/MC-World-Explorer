@@ -59,6 +59,25 @@ class ViewerSceneCacheTest {
         assertEquals(2, cache.size());
     }
 
+    @Test
+    void thumbnailsAndPartialStatusFollowCacheEvictionInvalidationAndByteBudget() {
+        ViewerSceneCache cache = new ViewerSceneCache(1, 32);
+        ViewerAreaThumbnail image = new ViewerAreaThumbnail(2, 2, new int[4]);
+        assertTrue(cache.put(key(0), EMPTY_SCENE, SIGNATURE, java.util.Optional.of(image), 1));
+        assertEquals(16, cache.currentBytes());
+        assertEquals(1, cache.previews().getFirst().failedChunks());
+        cache.put(key(1), EMPTY_SCENE, SIGNATURE, java.util.Optional.of(image), 0);
+        assertEquals(java.util.List.of(key(1)), cache.previews().stream().map(ViewerCachedArea::key).toList());
+        var changed = new RegionSourceSignature(java.util.List.of(
+                new RegionFileStamp(Path.of("different"), false, -1, -1)));
+        assertTrue(cache.get(key(1), changed).isEmpty());
+        assertTrue(cache.previews().isEmpty());
+        assertEquals(0, cache.currentBytes());
+        assertFalse(cache.put(key(2), EMPTY_SCENE, SIGNATURE,
+                java.util.Optional.of(new ViewerAreaThumbnail(4, 4, new int[16])), 0));
+        assertTrue(cache.previews().isEmpty());
+    }
+
     private static ViewerAreaKey key(int x) {
         return new ViewerAreaKey(
                 Path.of("world"), "minecraft:overworld",

@@ -8,7 +8,7 @@ import com.mcworldexplorer.preview.WorldDimension;
 import com.mcworldexplorer.world.PlayerLocation;
 import com.mcworldexplorer.world.WorldInfo;
 import com.mcworldexplorer.viewer.ViewerPerformanceProfile;
-import com.mcworldexplorer.viewer.ViewerRangePreset;
+import com.mcworldexplorer.viewer.ViewerRangeOption;
 import com.mcworldexplorer.voxel.data.ChunkRectangle;
 import org.junit.jupiter.api.Test;
 
@@ -100,9 +100,9 @@ class MapViewerControllerTest {
     @Test
     void basicAndEnhancedProfilesExposeTheirConfirmedRanges() {
         assertEquals(
-                java.util.List.of(ViewerRangePreset.ONE, ViewerRangePreset.THREE),
+                java.util.List.of(ViewerRangeOption.ONE, ViewerRangeOption.THREE, ViewerRangeOption.FREE),
                 MapViewerController.viewerRangesForProfile(ViewerPerformanceProfile.BASIC));
-        assertEquals(java.util.List.of(ViewerRangePreset.values()),
+        assertEquals(java.util.List.of(ViewerRangeOption.values()),
                 MapViewerController.viewerRangesForProfile(ViewerPerformanceProfile.ENHANCED));
     }
 

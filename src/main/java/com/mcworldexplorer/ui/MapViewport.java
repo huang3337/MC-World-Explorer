@@ -9,6 +9,7 @@ import com.mcworldexplorer.map.MapTileKey;
 import com.mcworldexplorer.map.MapViewportState;
 import com.mcworldexplorer.map.MapZoomLevel;
 import com.mcworldexplorer.viewer.ViewerRangePreset;
+import com.mcworldexplorer.viewer.ViewerPerformanceProfile;
 import com.mcworldexplorer.voxel.data.ChunkRectangle;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -84,6 +85,11 @@ public final class MapViewport extends Region {
     private MapTileKey pressedFailedKey;
     private String highlightedPlayerIdentifier;
     private boolean viewerSelectionMode;
+    private boolean viewerFreeSelection;
+    private boolean secondaryPanning;
+    private ChunkRectangle viewerDragStart;
+    private ViewerPerformanceProfile viewerProfile = ViewerPerformanceProfile.BASIC;
+    private Consumer<ChunkRectangle> viewerSelectionChanged = ignored -> {};
     private ViewerRangePreset viewerRangePreset = ViewerRangePreset.THREE;
     private ChunkRectangle viewerCandidate;
     private ChunkRectangle viewerLockedSelection;
@@ -103,6 +109,13 @@ public final class MapViewport extends Region {
         zoomSettle.setOnFinished(event -> settleVisualZoom());
         canvas.setOnMousePressed(event -> {
             hideMarkerTooltip();
+            if (event.getButton() == MouseButton.SECONDARY && viewerSelectionMode && viewerFreeSelection) {
+                secondaryPanning = true;
+                dragX = event.getX();
+                dragY = event.getY();
+                canvas.setCursor(Cursor.CLOSED_HAND);
+                return;
+            }
             if (event.getButton() == MouseButton.PRIMARY) {
                 DisplayMapMarker marker = viewerSelectionMode
                         ? null
@@ -122,12 +135,36 @@ public final class MapViewport extends Region {
                 pressedFailedKey = viewerSelectionMode
                         ? null
                         : failedTileAt(event.getX(), event.getY());
-                canvas.setCursor(pressedFailedKey == null ? Cursor.CLOSED_HAND : Cursor.HAND);
+                if (viewerSelectionMode && viewerFreeSelection && state != null) {
+                    zoomAnimation.stop();
+                    viewerLockedSelection = null;
+                    viewerDragStart = viewerSelectionAt(state, pressX, pressY,
+                            canvas.getWidth(), canvas.getHeight(), ViewerRangePreset.ONE);
+                    updateViewerCandidate(pressX, pressY);
+                    requestFocus();
+                    draw();
+                }
+                canvas.setCursor(viewerSelectionMode && viewerFreeSelection ? Cursor.CROSSHAIR
+                        : pressedFailedKey == null ? Cursor.CLOSED_HAND : Cursor.HAND);
             }
         });
         canvas.setOnMouseDragged(event -> {
             hideMarkerTooltip();
+            if (state != null && secondaryPanning && event.isSecondaryButtonDown()) {
+                state.panPixels(event.getX() - dragX, event.getY() - dragY);
+                dragX = event.getX();
+                dragY = event.getY();
+                draw();
+                viewportChanged.run();
+                return;
+            }
             if (state == null || !event.isPrimaryButtonDown() || !primaryPressed) {
+                return;
+            }
+            if (viewerSelectionMode && viewerFreeSelection && viewerDragStart != null) {
+                dragging = true;
+                updateViewerCandidate(event.getX(), event.getY());
+                draw();
                 return;
             }
             if (!dragging) {
@@ -147,11 +184,16 @@ public final class MapViewport extends Region {
             viewportChanged.run();
         });
         canvas.setOnMouseReleased(event -> {
+            if (event.getButton() == MouseButton.PRIMARY && primaryPressed
+                    && viewerSelectionMode && viewerFreeSelection && viewerDragStart != null) {
+                updateViewerCandidate(event.getX(), event.getY());
+            }
             if (event.getButton() == MouseButton.PRIMARY
                     && primaryPressed
-                    && !dragging
+                    && (!dragging || viewerFreeSelection)
                     && viewerSelectionMode
-                    && viewerCandidate != null) {
+                    && viewerCandidate != null
+                    && viewerProfile.allows(viewerCandidate)) {
                 viewerLockedSelection = viewerCandidate;
                 viewerSelectionLocked.accept(viewerLockedSelection);
                 requestFocus();
@@ -165,6 +207,8 @@ public final class MapViewport extends Region {
                             event.getY() - pressY)) {
                 retryRequested.accept(pressedFailedKey);
             }
+            secondaryPanning = false;
+            viewerDragStart = null;
             primaryPressed = false;
             dragging = false;
             pressedFailedKey = null;
@@ -173,7 +217,7 @@ public final class MapViewport extends Region {
         });
         canvas.setOnScroll(event -> {
             hideMarkerTooltip();
-            if (state == null || event.getDeltaY() == 0) {
+            if (state == null || event.getDeltaY() == 0 || (viewerFreeSelection && primaryPressed)) {
                 return;
             }
             zoomAnimation.stop();
@@ -223,7 +267,7 @@ public final class MapViewport extends Region {
         canvas.setOnMouseExited(event -> {
             pointerInside = false;
             hideMarkerTooltip();
-            if (viewerSelectionMode && viewerLockedSelection == null) {
+            if (viewerSelectionMode && viewerLockedSelection == null && !primaryPressed) {
                 viewerCandidate = null;
                 draw();
             }
@@ -283,6 +327,9 @@ public final class MapViewport extends Region {
     }
 
     public void setViewerSelectionMode(boolean enabled) {
+        primaryPressed = false;
+        secondaryPanning = false;
+        viewerDragStart = null;
         viewerSelectionMode = enabled;
         if (!enabled) {
             viewerCandidate = null;
@@ -300,14 +347,27 @@ public final class MapViewport extends Region {
         return viewerSelectionMode;
     }
 
+    public void setOnViewerSelectionChanged(Consumer<ChunkRectangle> changed) {
+        viewerSelectionChanged = java.util.Objects.requireNonNull(changed);
+    }
+
+    public void setViewerFreeSelection(boolean free, ViewerPerformanceProfile profile) {
+        viewerFreeSelection = free;
+        viewerProfile = java.util.Objects.requireNonNull(profile);
+        clearViewerLockedSelection();
+    }
+
     public void setViewerRangePreset(ViewerRangePreset preset) {
         viewerRangePreset = java.util.Objects.requireNonNull(preset, "preset");
-        viewerLockedSelection = null;
-        updateViewerCandidateFromPointer();
+        clearViewerLockedSelection();
         draw();
     }
 
     public void clearViewerLockedSelection() {
+        primaryPressed = false;
+        secondaryPanning = false;
+        viewerDragStart = null;
+        viewerCandidate = null;
         viewerLockedSelection = null;
         updateViewerCandidateFromPointer();
         draw();
@@ -395,6 +455,8 @@ public final class MapViewport extends Region {
     }
 
     public void clearTiles() {
+        secondaryPanning = false;
+        viewerDragStart = null;
         tiles.clear();
         tileMarkers.clear();
         partialTiles.clear();
@@ -610,8 +672,10 @@ public final class MapViewport extends Region {
             drawViewerRectangle(
                     graphics,
                     active,
-                    locked ? Color.rgb(47, 128, 237, 0.22) : Color.rgb(47, 128, 237, 0.13),
-                    locked ? Color.rgb(47, 128, 237, 1.0) : Color.rgb(105, 171, 255, 0.9),
+                    !viewerProfile.allows(active) ? Color.rgb(220, 65, 65, 0.16)
+                            : locked ? Color.rgb(47, 128, 237, 0.22) : Color.rgb(47, 128, 237, 0.13),
+                    !viewerProfile.allows(active) ? Color.rgb(220, 65, 65)
+                            : locked ? Color.rgb(47, 128, 237, 1.0) : Color.rgb(105, 171, 255, 0.9),
                     locked ? 3 : 2);
         }
     }
@@ -649,6 +713,16 @@ public final class MapViewport extends Region {
         if (!viewerSelectionMode || state == null || viewerLockedSelection != null) {
             return;
         }
+        if (viewerFreeSelection) {
+            if (viewerDragStart == null) {
+                return;
+            }
+            ChunkRectangle end = viewerSelectionAt(state, screenX, screenY,
+                    canvas.getWidth(), canvas.getHeight(), ViewerRangePreset.ONE);
+            viewerCandidate = rectangleBetween(viewerDragStart, end);
+            viewerSelectionChanged.accept(viewerCandidate);
+            return;
+        }
         viewerCandidate = viewerSelectionAt(
                 state,
                 screenX,
@@ -656,6 +730,12 @@ public final class MapViewport extends Region {
                 canvas.getWidth(),
                 canvas.getHeight(),
                 viewerRangePreset);
+    }
+
+    static ChunkRectangle rectangleBetween(ChunkRectangle start, ChunkRectangle end) {
+        return new ChunkRectangle(Math.min(start.minX(), end.minX()),
+                Math.min(start.minZ(), end.minZ()), Math.max(start.maxX(), end.maxX()),
+                Math.max(start.maxZ(), end.maxZ()));
     }
 
     static ChunkRectangle viewerSelectionAt(

@@ -1,5 +1,6 @@
 package com.mcworldexplorer.viewer;
 
+import com.mcworldexplorer.voxel.data.ChunkRectangle;
 import java.util.Locale;
 import java.util.Set;
 
@@ -29,6 +30,15 @@ public enum ViewerPerformanceProfile {
 
     public boolean allows(ViewerRangePreset preset) {
         return allowedRanges.contains(preset);
+    }
+
+    public int maxTargetChunks() {
+        return this == BASIC ? 9 : ChunkRectangle.MAX_TARGET_CHUNKS;
+    }
+
+    public boolean allows(ChunkRectangle target) {
+        return target != null && target.isSupportedTarget()
+                && (long) target.width() * target.depth() <= maxTargetChunks();
     }
 
     public Set<ViewerRangePreset> allowedRanges() {
