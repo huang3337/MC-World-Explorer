@@ -63,6 +63,93 @@ class VoxelPreviewCoordinatorTest {
     }
 
     @Test
+    void rectangularSelectionGeneratesAndReusesTheExactCachedArea() throws Exception {
+        FakeWindow window = new FakeWindow();
+        AtomicInteger loads = new AtomicInteger();
+        coordinator = coordinator(window, (request, cancellation, monitor) -> {
+            loads.incrementAndGet();
+            return area(request.target());
+        });
+        ViewerRequest rectangle = new ViewerRequest(Path.of("world"), "Test",
+                WorldDimension.OVERWORLD_ID, "主世界", ChunkRectangle.target(-8, -4, 7, 3),
+                ViewerPerformanceProfile.ENHANCED,
+                new ViewerMapReturnState(0, 0, 2, PreviewLayer.surfaceOverview()));
+        RecordingListener first = new RecordingListener();
+        coordinator.start(rectangle, first);
+        assertFalse(first.success.get(3, TimeUnit.SECONDS).fromCache());
+        RecordingListener second = new RecordingListener();
+        coordinator.start(rectangle, second);
+        assertTrue(second.success.get(3, TimeUnit.SECONDS).fromCache());
+        assertEquals(1, loads.get());
+        assertEquals(2, window.shown.get());
+    }
+
+    @Test
+    void overlapDoesNotReuseTheMeshOfADifferentRectangle() throws Exception {
+        FakeWindow window = new FakeWindow();
+        AtomicInteger loads = new AtomicInteger();
+        coordinator = coordinator(window, (request, cancellation, monitor) -> {
+            loads.incrementAndGet();
+            return area(request.target());
+        });
+        for (int minX : new int[]{0, 1}) {
+            ViewerRequest request = new ViewerRequest(Path.of("world"), "Test", WorldDimension.OVERWORLD_ID,
+                    "主世界", ChunkRectangle.target(minX, 0, minX + 2, 2), ViewerPerformanceProfile.BASIC,
+                    new ViewerMapReturnState(0, 0, 2, PreviewLayer.surfaceOverview()));
+            RecordingListener listener = new RecordingListener();
+            coordinator.start(request, listener);
+            assertFalse(listener.success.get(3, TimeUnit.SECONDS).fromCache());
+        }
+        assertEquals(2, loads.get(), "虽然重叠 6 个区块，目前仍按完整区域重建");
+        assertEquals(2, coordinator.validateCachedPreviews().size());
+        assertTrue(coordinator.validateCachedPreviews().stream().allMatch(area -> area.thumbnail().isPresent()));
+    }
+
+    @Test
+    void deletingAreaRemovesItsSceneAndThumbnailAndNextOpenRebuilds() throws Exception {
+        AtomicInteger loads = new AtomicInteger();
+        coordinator = coordinator(new FakeWindow(), (request, cancellation, monitor) -> {
+            loads.incrementAndGet();
+            return area(request.target());
+        });
+        RecordingListener first = new RecordingListener();
+        coordinator.start(request(0), first);
+        first.success.get(3, TimeUnit.SECONDS);
+        assertEquals(1, coordinator.validateCachedPreviews().size());
+        coordinator.removeCachedArea(request(0).areaKey(VoxelPreviewCoordinator.RENDER_VERSION));
+        assertTrue(coordinator.cachedAreas().isEmpty());
+        assertTrue(coordinator.validateCachedPreviews().isEmpty());
+        RecordingListener next = new RecordingListener();
+        coordinator.start(request(0), next);
+        assertFalse(next.success.get(3, TimeUnit.SECONDS).fromCache());
+        assertEquals(2, loads.get());
+    }
+
+    @Test
+    void deletingAnAreaDuringPreparationCannotResurrectIt() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService executor = singleExecutor();
+        FakeWindow window = new FakeWindow();
+        coordinator = new VoxelPreviewCoordinator(window, new ViewerSceneCache(ViewerPerformanceProfile.BASIC),
+                (request, cancellation, monitor) -> {
+                    entered.countDown();
+                    release.await(3, TimeUnit.SECONDS);
+                    return area(request.target());
+                }, (area, cancellation, monitor) -> scene(area.target()), key -> SIGNATURE, executor);
+        RecordingListener listener = new RecordingListener();
+        coordinator.start(request(0), listener);
+        assertTrue(entered.await(3, TimeUnit.SECONDS));
+        coordinator.removeCachedArea(request(0).areaKey(VoxelPreviewCoordinator.RENDER_VERSION));
+        release.countDown();
+        executor.submit(() -> {}).get(3, TimeUnit.SECONDS);
+        assertEquals(1, listener.cancelled.get(3, TimeUnit.SECONDS));
+        assertTrue(coordinator.cachedAreas().isEmpty());
+        assertEquals(0, window.shown.get());
+        assertFalse(listener.success.isDone());
+    }
+
+    @Test
     void cachedSceneSkipsAreaLoader() throws Exception {
         FakeWindow window = new FakeWindow();
         ViewerSceneCache cache = new ViewerSceneCache(ViewerPerformanceProfile.BASIC);

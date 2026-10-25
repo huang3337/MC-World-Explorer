@@ -12,7 +12,8 @@ MC-World-Explorer/
 ├─ gradle/wrapper/                Gradle Wrapper 配置与运行文件
 ├─ run-app.bat                    Windows 应用启动脚本
 ├─ docs/
-│  ├─ progress/                   CURRENT.md 当前状态、各版本进度与历史验收记录
+│  ├─ UI_DESIGN_GUIDE.md          已确认的界面风格与后续设计规范
+│  ├─ progress/                   CURRENT.md 当前状态、各版本进度/验收清单与历史记录
 │  ├─ issues/                     活动问题、编号清单和问题记录规范
 │  │  └─ resolved/                各版本已解决问题与逐文件验算记录
 │  ├─ decisions/                  已确认的重大技术决策
@@ -24,13 +25,13 @@ MC-World-Explorer/
    │  ├─ java/com/mcworldexplorer/
    │  │  ├─ App.java              JavaFX 应用入口
    │  │  ├─ experimental/         V0.4/V0.5 隔离验证入口，不由正式主界面调用
-   │  │  ├─ map/                  地图块、五级缓存、调度、标记、视口协调与导出
+   │  │  ├─ map/                  地图块、五级缓存、调度、标记、区域缩略图与导出
    │  │  ├─ nbt/                  level.dat 与多人 playerdata 解析
    │  │  ├─ preview/              维度发现、图层请求及共享地表/高度带采样
    │  │  ├─ region/               Region 文件头、区块定位与基础解压
    │  │  ├─ storage/              严格便携的程序根目录、运行数据路径与配置
-   │  │  ├─ ui/                   控制器和存档树 UI
-   │  │  ├─ viewer/               V0.6 三维请求、任务、内存缓存、环绕相机与唯一窗口
+   │  │  ├─ ui/                   控制器、存档树与已加载区域卡片 UI
+   │  │  ├─ viewer/               三维范围/请求、任务、场景与缩略图内存缓存、相机及唯一窗口
    │  │  ├─ voxel/                共享方块状态、有限区域加载、简化网格与 OpenGL 资源
    │  │  └─ world/                存档模型、扫描和游戏模式
    │  └─ resources/               FXML、CSS、日志和界面文本
@@ -51,3 +52,5 @@ V0.2/V0.2.1 使用 `storage/PortablePaths.java` 将日志、缓存、导出和�
 的 `logs/`、`cache/`、`exports/` 和 `config/`。这些目录受 `.gitignore` 保护，不属于
 源码目录，也不得写入 Minecraft 存档目录。V0.3 地图块缓存和多人玩家读取继续复用同一
 便携、只读边界。
+
+V0.7 已按确认的 UI 与配套优化范围完成源码收口（0.7.0），软件包仍为 V0.6.0。下一阶段 V0.7.1 的任务与验收见 docs/progress/V0.7.1.md，优先级确认见 DECISION-015；尚未新增纹理资源运行时模块。

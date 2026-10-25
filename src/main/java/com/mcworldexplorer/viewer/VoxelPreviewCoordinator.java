@@ -113,6 +113,13 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         return cache.keys();
     }
 
+    public synchronized void removeCachedArea(ViewerAreaKey key) {
+        requireOpen();
+        Objects.requireNonNull(key, "key");
+        if (active != null && active.request().areaKey(RENDER_VERSION).equals(key)) cancel();
+        cache.remove(key);
+    }
+
     public List<ViewerAreaKey> validateCachedAreas() {
         List<ViewerAreaKey> valid = new ArrayList<>();
         for (ViewerAreaKey key : cache.keys()) {
@@ -128,6 +135,11 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         return List.copyOf(valid);
     }
 
+    public List<ViewerCachedArea> validateCachedPreviews() {
+        var valid = java.util.Set.copyOf(validateCachedAreas());
+        return cache.previews().stream().filter(preview -> valid.contains(preview.key())).toList();
+    }
+
     private void prepare(ActiveRequest request) {
         try {
             if (!isCurrent(request)) {
@@ -139,7 +151,9 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             RegionSourceSignature before = signatureProvider.capture(key);
             var cached = cache.get(key, before);
             if (cached.isPresent()) {
-                show(request, cached.orElseThrow(), true, 0);
+                int failedChunks = cache.previews().stream().filter(preview -> preview.key().equals(key))
+                        .mapToInt(ViewerCachedArea::failedChunks).findFirst().orElse(0);
+                show(request, cached.orElseThrow(), true, failedChunks);
                 return;
             }
 
@@ -177,6 +191,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             }
             VoxelSceneSnapshot snapshot = scene.snapshot().orElseThrow(() ->
                     new IOException("所选区域没有可渲染的三维几何"));
+            ViewerAreaThumbnail thumbnail = ViewerAreaThumbnail.fromArea(area, request);
             RegionSourceSignature after = signatureProvider.capture(key);
             if (!before.equals(after)) {
                 throw new IOException("生成期间存档 Region 文件发生变化，请重新生成");
@@ -184,7 +199,10 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             int failedChunks = (int) scene.targetStatuses().values().stream()
                     .filter(status -> status != ChunkLoadStatus.SUCCESS)
                     .count();
-            cache.put(key, snapshot, after);
+            synchronized (this) {
+                if (!isCurrentLocked(request)) return;
+                cache.put(key, snapshot, after, java.util.Optional.of(thumbnail), failedChunks);
+            }
             show(request, snapshot, false, failedChunks);
         } catch (Throwable failure) {
             failIfCurrent(request, failure);
@@ -263,7 +281,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
                 request.dimensionName(),
                 request.centerBlockX(),
                 request.centerBlockZ(),
-                request.rangePreset());
+                request.rangeDescription());
     }
 
     private void requireOpen() {

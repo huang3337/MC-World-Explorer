@@ -14,8 +14,15 @@ import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.layout.VBox;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.stage.DirectoryChooser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,20 +40,32 @@ import java.util.Map;
 
 public class MainController {
     private static final Logger LOGGER = LoggerFactory.getLogger(MainController.class);
-    private static final String UNKNOWN = "Unknown";
+    private static final String UNKNOWN = "未知";
     private static final String NOT_AVAILABLE = "-";
-    private static final String NO_SELECTION = "Select a World";
+    private static final String NO_SELECTION = "选择一个世界";
     private static final String PARSE_FAILED = "解析失败";
-    private static final String CHOOSE_FOLDER_TITLE = "Select Minecraft Folder";
-    private static final String SCANNING = "Scanning...";
-    private static final String NO_WORLDS = "No worlds found";
-    private static final String SCAN_FAILED = "Scan failed";
-    private static final String FOLDER_NOT_FOUND = "Folder not found";
+    private static final String CHOOSE_FOLDER_TITLE = "选择 Minecraft 目录";
+    private static final String SCANNING = "正在查找世界…";
+    private static final String NO_WORLDS = "未找到可识别的世界，请选择其他目录";
+    private static final String SCAN_FAILED = "世界扫描失败，请重新选择目录";
+    private static final String FOLDER_NOT_FOUND = "目录不存在，请选择 Minecraft 目录";
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     private final PortableSettings portableSettings = new PortableSettings();
     private Path selectedRootPath;
     private String pendingScanWarning;
+    private double sidebarPosition = 0.23;
+
+    @FXML
+    private SplitPane workspaceSplitPane;
+    @FXML
+    private VBox worldSidebar;
+    @FXML
+    private ToggleButton detailsToggleButton;
+    @FXML
+    private ScrollPane detailsPane;
+    @FXML
+    private Label worldSummaryLabel;
 
     @FXML
     private TreeView<WorldTreeNode> worldTreeView;
@@ -85,6 +104,14 @@ public class MainController {
 
     @FXML
     public void initialize() {
+        detailsPane.visibleProperty().bind(detailsToggleButton.selectedProperty());
+        detailsPane.managedProperty().bind(detailsToggleButton.selectedProperty());
+        workspaceSplitPane.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ESCAPE && detailsToggleButton.isSelected()) {
+                handleCloseDetails(null);
+                event.consume();
+            }
+        });
         clearDetails();
         worldTreeView.setCellFactory(treeView -> new WorldTreeCell());
         worldTreeView.getSelectionModel().selectedItemProperty().addListener(
@@ -133,7 +160,7 @@ public class MainController {
             showWorlds(groupedWorlds);
             int worldCount = countWorlds(groupedWorlds);
             setScanState(false, withScanWarning(
-                    worldCount == 0 ? NO_WORLDS : worldCount + " worlds"));
+                    worldCount == 0 ? NO_WORLDS : "已找到 " + worldCount + " 个世界"));
         });
         scanTask.setOnFailed(event -> {
             LOGGER.error("Failed to scan selected Minecraft folder {}", rootPath, scanTask.getException());
@@ -182,6 +209,23 @@ public class MainController {
     }
 
     @FXML
+    private void handleToggleSidebar(ActionEvent event) {
+        if (workspaceSplitPane.getItems().contains(worldSidebar)) {
+            sidebarPosition = workspaceSplitPane.getDividerPositions()[0];
+            workspaceSplitPane.getItems().remove(worldSidebar);
+        } else {
+            workspaceSplitPane.getItems().add(0, worldSidebar);
+            workspaceSplitPane.setDividerPositions(sidebarPosition);
+        }
+    }
+
+    @FXML
+    private void handleCloseDetails(ActionEvent event) {
+        detailsToggleButton.setSelected(false);
+        detailsToggleButton.requestFocus();
+    }
+
+    @FXML
     public void handleChooseFolder(ActionEvent event) {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle(CHOOSE_FOLDER_TITLE);
@@ -211,7 +255,12 @@ public class MainController {
             return;
         }
         worldNameLabel.setText(info.getLevelName());
-        versionLabel.setText(info.getVersionName());
+        worldNameLabel.setTooltip(new Tooltip(info.getLevelName()));
+        String version = "Unknown".equals(info.getVersionName()) ? UNKNOWN : info.getVersionName();
+        versionLabel.setText(version);
+        worldSummaryLabel.setText(version + " · "
+                + (info.isParsed() ? "只读浏览" : PARSE_FAILED) + " · " + info.getFolderPath());
+        worldSummaryLabel.setTooltip(new Tooltip(info.getFolderPath().toString()));
         if (!info.isParsed()) {
             gameModeLabel.setText(PARSE_FAILED);
             folderCreationTimeLabel.setText(PARSE_FAILED);
@@ -222,8 +271,13 @@ public class MainController {
             playerPosLabel.setText(PARSE_FAILED);
             return;
         }
-        String mode = info.getGameType().getDisplayName();
-        gameModeLabel.setText(info.isHardcore() ? mode + " (Hardcore)" : mode);
+        String mode = switch (info.getGameType()) {
+            case SURVIVAL -> "生存";
+            case CREATIVE -> "创造";
+            case ADVENTURE -> "冒险";
+            case SPECTATOR -> "旁观";
+        };
+        gameModeLabel.setText(info.isHardcore() ? mode + "（极限）" : mode);
         folderCreationTimeLabel.setText(info.isFolderCreationTimeAvailable()
                 ? DATE_FORMAT.format(new Date(info.getFolderCreationTime()))
                 : UNKNOWN);
@@ -248,6 +302,9 @@ public class MainController {
             mapViewerController.clear();
         }
         worldNameLabel.setText(NO_SELECTION);
+        worldNameLabel.setTooltip(null);
+        worldSummaryLabel.setText("无需启动 Minecraft，即可浏览已有世界");
+        worldSummaryLabel.setTooltip(null);
         versionLabel.setText(NOT_AVAILABLE);
         gameModeLabel.setText(NOT_AVAILABLE);
         folderCreationTimeLabel.setText(NOT_AVAILABLE);
@@ -332,12 +389,12 @@ public class MainController {
         long hours = totalMinutes % (24 * 60) / 60;
         long minutes = totalMinutes % 60;
         if (days > 0) {
-            return String.format("%dd %dh %dm", days, hours, minutes);
+            return String.format("%d 天 %d 小时 %d 分钟", days, hours, minutes);
         }
         if (hours > 0) {
-            return String.format("%dh %dm", hours, minutes);
+            return String.format("%d 小时 %d 分钟", hours, minutes);
         }
-        return String.format("%dm", minutes);
+        return String.format("%d 分钟", minutes);
     }
 
     static record DimensionPreviewState(

@@ -65,6 +65,28 @@ public final class SurfaceSampler {
         return ParsedChunkSections.read(input).sectionRange();
     }
 
+    /** Samples normalized raw chunk data through the same 2D surface rules, without 3D materials. */
+    public void forEachSurfaceColumn(com.mcworldexplorer.voxel.data.VoxelChunk chunk,
+                                     SurfaceColumnConsumer consumer) throws SurfaceSamplingException {
+        java.util.Objects.requireNonNull(chunk, "chunk");
+        java.util.Objects.requireNonNull(consumer, "consumer");
+        // Internal accumulator only; the original storage layout is irrelevant to decoded columns.
+        ChunkSurface surface = new ChunkSurface(ChunkSurfaceLayout.MODERN_ROOT);
+        for (var section : chunk.sections().reversed()) {
+            fillSurface(surface, new ChunkSectionView(section));
+            if (surface.getPopulatedColumnCount() == 256) break;
+        }
+        for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+            var column = surface.getColumn(x, z);
+            if (column.isPresent()) consumer.accept(x, z, column.orElseThrow());
+        }
+    }
+
+    @FunctionalInterface
+    public interface SurfaceColumnConsumer {
+        void accept(int localX, int localZ, SurfaceColumn column);
+    }
+
     private static void fillSurface(ChunkSurface surface, ChunkSectionView section)
             throws SurfaceSamplingException {
         for (int localY = 15; localY >= 0; localY--) {

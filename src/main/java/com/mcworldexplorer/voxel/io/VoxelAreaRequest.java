@@ -12,9 +12,8 @@ public record VoxelAreaRequest(Path world, String dimensionId, ChunkRectangle ta
         Objects.requireNonNull(target, "target");
         world = world.toAbsolutePath().normalize();
         dimensionId = WorldDimension.normalizeId(dimensionId);
-        if (target.width() > ChunkRectangle.MAX_TARGET_SIZE
-                || target.depth() > ChunkRectangle.MAX_TARGET_SIZE) {
-            throw new IllegalArgumentException("target chunk rectangle must not exceed 8x8");
+        if (!target.isSupportedTarget()) {
+            throw new IllegalArgumentException("target must fit within 32 chunks per side and 256 chunks total, including halo coordinates");
         }
     }
 }

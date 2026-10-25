@@ -22,18 +22,13 @@ public record ViewerRequest(
         worldName = requireText(worldName, "worldName");
         dimensionId = requireText(dimensionId, "dimensionId");
         dimensionName = requireText(dimensionName, "dimensionName");
-        if (target.width() != target.depth()) {
-            throw new IllegalArgumentException("viewer target must be square");
-        }
-        ViewerRangePreset preset = ViewerRangePreset.fromChunks(target.width());
-        if (!profile.allows(preset)) {
-            throw new IllegalArgumentException(
-                    profile.displayName() + " does not allow " + preset);
+        if (!profile.allows(target)) {
+            throw new IllegalArgumentException(profile.displayName() + " does not allow target rectangle");
         }
     }
 
-    public ViewerRangePreset rangePreset() {
-        return ViewerRangePreset.fromChunks(target.width());
+    public String rangeDescription() {
+        return target.width() + " x " + target.depth();
     }
 
     public ViewerAreaKey areaKey(String renderVersion) {
