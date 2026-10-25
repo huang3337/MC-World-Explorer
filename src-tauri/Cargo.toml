@@ -1,6 +1,6 @@
 [package]
 name = "mc-world-explorer"
-version = "0.7.3"
+version = "0.1.0"
 description = "A read-only Minecraft Java world explorer"
 edition = "2021"
 

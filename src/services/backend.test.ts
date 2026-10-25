@@ -18,7 +18,7 @@ import {
 } from "./backend";
 
 const status = {
-  appVersion: "0.7.3", backendStatus: "ready",
+  appVersion: "0.1.0", backendStatus: "ready",
   portablePaths: { root: "D:\\MCWE", cache: "D:\\MCWE\\cache", logs: "D:\\MCWE\\logs", exports: "D:\\MCWE\\exports", config: "D:\\MCWE\\config" },
 };
 
