@@ -12,7 +12,7 @@ MC-World-Explorer/
 ├─ gradle/wrapper/                Gradle Wrapper 配置与运行文件
 ├─ run-app.bat                    Windows 应用启动脚本
 ├─ docs/
-│  ├─ progress/                   各版本开发进度与验收记录
+│  ├─ progress/                   CURRENT.md 当前状态、各版本进度与历史验收记录
 │  ├─ issues/                     活动问题、编号清单和问题记录规范
 │  │  └─ resolved/                各版本已解决问题与逐文件验算记录
 │  ├─ decisions/                  已确认的重大技术决策
