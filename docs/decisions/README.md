@@ -28,7 +28,7 @@
 
 | 编号 | 决策 |
 |---|---|
-| DECISION-011 | V0.7 采用 Tauri、Rust、Vue 和 Three.js 重构 V0.6 |
+| DECISION-011 | 采用 Tauri、Rust、Vue 和 Three.js 进行技术实验 |
 | DECISION-012 | Windows 只读来源使用逐级目录句柄保护 |
 | DECISION-013 | WebView 数据固定使用 EXE 便携目录 |
 | DECISION-014 | 关闭主窗口时协调释放资源并退出应用 |

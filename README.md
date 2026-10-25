@@ -2,23 +2,23 @@
   <img src="docs/assets/mc-world-explorer.png" alt="MC World Explorer 图标" width="144">
 </p>
 
-# MC World Explorer — Tauri 迁移分支
+# MC World Explorer — Tauri 技术实验
 
 像查看照片一样查看 Minecraft 世界：独立、严格只读的 Minecraft Java 版世界浏览工具。
 
-> `tauri-rewrite` 是 Tauri 技术预览分支，尚不能替代稳定 Java V0.6.0。已验证能力、未完成范围和下一门禁见[当前阶段状态](docs/progress/CURRENT.md)。
+> `tauri-rewrite` 仅作为 Tauri 技术实验保留，当前源码版本为 `0.1.0`；主线开发回到 Java，从稳定版 V0.6.0 接续。已验证能力、未完成范围和下一门禁见[当前阶段状态](docs/progress/CURRENT.md)。
 
-## 稳定版与迁移版
+## Java 正式版与 Tauri 实验版
 
 - 稳定 Java V0.6.0 保留在 main，具备存档信息、多维度二维地图和受控范围简化三维预览。使用稳定版请查看 [V0.6.0 发布页](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.6.0)，完整解压并保留其 app/runtime 目录，不要只移动旧版 EXE。
-- V0.7 使用 Tauri 2、Rust、Vue 3、TypeScript 和 Vite 迁移 V0.6；V0.7.2 已引入 Three.js / WebGL 2 的有限批次简化三维初版。
-- V0.7.1–V0.7.6 为迁移里程碑；V0.7.3 的 Tauri 技术预发行版只供试用，不代表完整迁移或正式稳定发布，不自动合并 main。
-- Windows x64 试用下载见 [Tauri V0.7.3 技术预发行版](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.3-tauri.1)；稳定版仍为上方的 Java V0.6.0。
-- 原版纹理、世界考古等功能不在此次框架迁移中；迁移完成后再讨论后续路线。
+- Tauri 实验使用 Tauri 2、Rust、Vue 3、TypeScript、Vite 和 Three.js / WebGL 2，独立于 Java 正式版本序列。
+- T1–T6 是实验阶段编号；已完成至 T3，T4–T6 暂停，保留原计划供参考。
+- Windows x64 试用下载见 [Tauri 历史技术预发行版](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.3-tauri.1)；其 EXE 内部版本仍为旧编号 `0.7.3`，不是当前源码 `0.1.0` 的构建。
+- 正式版本接续与旧编号对照见[版本冲突修正说明](docs/VERSION_NUMBERING.md)；Java 后续功能和版本安排由 Java 主线独立确定。
 
 ## 功能与验证状态
 
-项目提供受控世界选择、只读解析、Canvas 二维地图和有限 Three.js 三维预览。V0.7.3 已收口二维加载问题簇、会话内缓存与多瓦片调度，并补强有限三维正确性；完整 Java 功能对等、跨启动瓦片缓存及同条件性能比较尚未完成。当前边界以[唯一实时状态](docs/progress/CURRENT.md)为准；各阶段验收结论保留在[历史 Progress](docs/progress/)中。交互、协议和模块细节分别见当前规格与项目结构。
+项目提供受控世界选择、只读解析、Canvas 二维地图和有限 Three.js 三维预览。T3 已收口二维加载问题簇、会话内缓存与多瓦片调度，并补强有限三维正确性；完整 Java 功能对等、跨启动瓦片缓存及同条件性能比较尚未完成。当前边界以[唯一实时状态](docs/progress/CURRENT.md)为准；各阶段验收结论保留在[历史 Progress](docs/progress/)中。交互、协议和模块细节分别见当前规格与项目结构。
 
 二维地图支持定位和区块对齐选区；三维范围可选 1×1、3×3、5×5、8×8 区块，默认 3×3。点击地图可定位选区，点击“生成三维”或按 Enter/空格确认；范围越大生成时间通常越长，任务支持取消。这些操作说明不代表已完成与 Java 同条件的性能比较或完整功能对等验收。
 
@@ -26,7 +26,7 @@
 
 当前正式目标为 Windows x64。需准备 Node.js/npm、Rust MSVC 工具链、MSVC C++ 构建工具和 Windows SDK，以及系统 WebView2 Runtime。已使用的具体版本与测试日期见进度记录；安装或修改系统工具链需要单独确认。
 
-在此迁移工作树根目录执行：
+在此实验工作树根目录执行：
 
 ```powershell
 npm ci
@@ -50,7 +50,7 @@ cargo test --workspace --locked
 
 `npm run build` 执行类型检查和前端资源构建，不生成桌面发布包。已有依赖缓存时 Cargo 可附加 `--offline`。三项 Windows 符号链接测试需要相应权限，默认明确忽略；真实存档集成测试同样默认忽略且必须显式提供已获批路径。完整专项验收方式与历史证据见进度记录，不将忽略视为通过。
 
-V0.7.1 已完成原生 no-bundle 构建、单 EXE 生命周期、最终审查和真实存档只读验收，并已同步至 `origin/tauri-rewrite`。这些结果不自动授权合并、标签或发布。
+T1 已完成原生 no-bundle 构建、单 EXE 生命周期、最终审查和真实存档只读验收，并已同步至 `origin/tauri-rewrite`。这些结果不自动授权合并、标签或发布。
 
 ## 存档安全与便携目标
 
@@ -58,12 +58,12 @@ Minecraft 存档始终只读，不提供编辑、修复、删除、移动或重�
 
 程序数据只允许位于 EXE 所在便携目录的 cache、logs、exports、config，不进入存档、AppData 或注册表。WebView 实际落盘已验证未改变既有 AppData；关闭唯一主窗口后主进程与 WebView2 子进程自然退出，便携目录锁正常释放。
 
-最终目标为一个可直接运行的 `MC-World-Explorer.exe`，无需 JVM、Node.js、sidecar、并列 DLL 或外置资源目录，但依赖系统已有 WebView2 Runtime。V0.7.3 技术预发行版仅供 Windows x64 试用，不能据此认定最终单 EXE 发行验收或 Java 功能对等已经完成。
+最终目标为一个可直接运行的 `MC-World-Explorer.exe`，无需 JVM、Node.js、sidecar、并列 DLL 或外置资源目录，但依赖系统已有 WebView2 Runtime。T3 阶段的历史技术预发行版仅供 Windows x64 试用，不能据此认定最终单 EXE 发行验收或 Java 功能对等已经完成。
 
 ## 项目文档
 
 - [当前阶段状态](docs/progress/CURRENT.md)与[历史 Progress](docs/progress/)
-- [项目上下文](PROJECT_CONTEXT.md)、[V0.7 迁移路线](PROJECT_ROADMAP.md)、[实际工程结构](PROJECT_STRUCTURE.md)
+- [项目上下文](PROJECT_CONTEXT.md)、[Tauri 实验路线](PROJECT_ROADMAP.md)、[实际工程结构](PROJECT_STRUCTURE.md)
 - [当前技术规格](docs/specs/README.md)、[重大决策](docs/decisions/README.md)、[问题记录](docs/issues/README.md)
 - [Java V0.6 历史验收](docs/progress/V0.6.md)
 

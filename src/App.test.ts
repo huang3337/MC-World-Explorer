@@ -22,7 +22,7 @@ function mount() {
 }
 
 const status = {
-  appVersion: "0.7.3", backendStatus: "ready",
+  appVersion: "0.1.0", backendStatus: "ready",
   portablePaths: { root: "D:\\便携目录", cache: "D:\\便携目录\\cache", logs: "D:\\便携目录\\logs", exports: "D:\\便携目录\\exports", config: "D:\\便携目录\\config" },
 };
 
@@ -105,7 +105,7 @@ it("从加载状态进入就绪，显示版本及五个路径", async () => {
   expect(host.textContent).toContain("正在连接后端");
   resolve(status);
   await vi.waitFor(() => expect(host.textContent).toContain("后端就绪"));
-  expect(host.textContent).toContain("0.7.3");
+  expect(host.textContent).toContain("0.1.0");
   for (const path of Object.values(status.portablePaths)) expect(host.textContent).toContain(path);
   expect(host.textContent).toContain("程序启动时只会在 EXE 所在便携目录准备 WebView 数据");
 });

@@ -6,8 +6,8 @@
 
 | 文件 | 范围 | 契约状态 |
 |---|---|---|
-| `V0.7.2-binary-protocol.md` | Rust 与 TypeScript 的二进制 IPC envelope、载荷与黄金向量 | 当前有效 |
-| `V0.7.3-map-viewport.md` | 二维视口任务、渐进瓦片、状态、完整度与增量 IPC | 当前有效 |
+| [T2-binary-protocol.md](T2-binary-protocol.md) | Rust 与 TypeScript 的二进制 IPC envelope、载荷与黄金向量 | 当前有效 |
+| [T3-map-viewport.md](T3-map-viewport.md) | 二维视口任务、渐进瓦片、状态、完整度与增量 IPC | 当前有效 |
 
 ## 维护规则
 

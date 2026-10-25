@@ -76,15 +76,16 @@ MC-World-Explorer-Tauri/
 │     ├─ surface_slice.rs / mesh_slice.rs / map_cache.rs
 │     └─ real_world_readonly.rs       默认忽略的真实存档只读集成测试
 └─ docs/
+   ├─ VERSION_NUMBERING.md            版本冲突修正与历史编号对照
    ├─ assets/                         项目图标等既有文档资源
    ├─ progress/                       唯一实时状态与历史里程碑快照
-   ├─ specs/                          版本化协议与实现规格
+   ├─ specs/                          协议与实现规格（T2/T3 实验阶段）
    ├─ issues/                         活动问题、README、ISSUE_INDEX
    │  └─ resolved/                    按版本归档
    └─ decisions/                      全局连续编号的重大决策
       ├─ README.md                    分类与编号规则
       ├─ java/                       Java V0.1–V0.6 历史决策
-      └─ tauri/                      V0.7 Tauri 迁移决策
+      └─ tauri/                      Tauri 技术实验决策
 ```
 
 旧 FAQ 等辅助材料仍保留，适用 Java 历史基线，不能单独作为 Tauri 已实现功能说明。目录中的源码存在不等于真实存档验收通过；完成程度只在当前阶段状态中概括。
@@ -103,7 +104,7 @@ Rust 单元测试位于相应源文件的 cfg(test) 模块，核心另有编译�
 
 ## 受忽略保护的本地内容
 
-- `DEVELOPMENT_RULES.md`：本地 V0.7 规则。
+- `DEVELOPMENT_RULES.md`：本地 Tauri 实验规则。
 - `docs/superpowers/`：设计与实施过程文档。
 - `scripts/`、`packaging/`：本地验证和打包工具，不是用户发布物。
 - `node_modules/`、`dist/`、`target/`、`.vite/`、`.vitest/`、`coverage/`、`src-tauri/gen/schemas/`：依赖或生成物。
@@ -113,6 +114,6 @@ Rust 单元测试位于相应源文件的 cfg(test) 模块，核心另有编译�
 
 ## 稳定旧版与历史
 
-相邻 main 工作树保留 Java 21 / Gradle / JavaFX / LWJGL V0.6，旧源码也保存在 Git 历史中。迁移工作树已移除旧 Java/Gradle 工程入口，不长期并存两个应用骨架。
+相邻 main 工作树承接 Java 21 / Gradle / JavaFX / LWJGL 正式开发，当前稳定基线为 V0.6.0。Tauri 实验工作树不包含 Java/Gradle 工程入口；两条技术线各自维护，不将 Java 主线冻结在该历史基线。
 
 [重大决策目录](docs/decisions/README.md) 规定 Java 与 Tauri 分类及全局连续编号；实际完成状态以 [CURRENT](docs/progress/CURRENT.md) 为准。

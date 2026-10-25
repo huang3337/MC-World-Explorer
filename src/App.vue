@@ -39,7 +39,7 @@ onUnmounted(close);
 <template>
   <main class="app-shell">
     <header class="app-header">
-      <div><h1>MC World Explorer</h1><p>V0.7.3 只读世界浏览</p></div>
+      <div><h1>MC World Explorer</h1><p>Tauri 实验版 0.1.0 · 只读世界浏览</p></div>
       <span class="scope-badge">只读 · 主世界</span>
     </header>
     <section class="workspace" aria-labelledby="world-heading">
