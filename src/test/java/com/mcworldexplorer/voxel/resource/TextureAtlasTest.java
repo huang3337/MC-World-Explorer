@@ -28,7 +28,7 @@ class TextureAtlasTest {
                 for(var e:entries.entrySet()){output.putNextEntry(new ZipEntry(e.getKey()));output.write(e.getValue().getBytes(StandardCharsets.UTF_8));output.closeEntry();}
             }
             try(var archive=ClientResourceArchive.open(jar,"1.21.1")) {
-                var textures=BlockTextureSet.load(archive,com.mcworldexplorer.voxel.io.CancellationSignal.NONE);
+                var textures=BlockTextureSet.load(archive,List.of(new com.mcworldexplorer.voxel.data.BlockState("minecraft:stone",Map.of())),com.mcworldexplorer.voxel.io.CancellationSignal.NONE);
                 var state=new com.mcworldexplorer.voxel.data.BlockState("minecraft:stone",Map.of());
                 assertNull(textures.surfaces(state));assertTrue(textures.fallbackReason(state).contains("PNG"));
             }
@@ -38,7 +38,8 @@ class TextureAtlasTest {
         assertEquals(16, TextureAtlas.decode(png(16,16)).getWidth());
         assertThrows(IOException.class, () -> TextureAtlas.decode(new byte[64]));
         assertThrows(IOException.class, () -> TextureAtlas.decode(png(257,257)));
-        assertThrows(IOException.class, () -> TextureAtlas.decode(png(16,32)));
+        assertEquals(16,TextureAtlas.decode(png(16,32)).getHeight());
+        assertThrows(IOException.class, () -> TextureAtlas.decode(png(16,31)));
         byte[] truncated = java.util.Arrays.copyOf(png(16,16), 35);
         assertThrows(IOException.class, () -> TextureAtlas.decode(truncated));
     }
@@ -53,12 +54,12 @@ class TextureAtlasTest {
         assertEquals(0xFFFF0000, pixels[0]); assertEquals(0xFF00FF00, pixels[3]);
         assertEquals(0xFF0000FF, pixels[3*atlas.width()]);
         pixels[0] = 0; assertEquals(0xFFFF0000, atlas.pixels()[0]);
-        assertTrue(atlas.estimatedBytes() <= 4L*1024*1024);
-        for (int i=1; i<128; i++) builder.add("x"+i,image);
+        assertTrue(atlas.estimatedBytes() <= 4L*TextureAtlas.MAX_SIZE*TextureAtlas.MAX_SIZE);
+        for (int i=1; i<TextureAtlas.MAX_TILES; i++) builder.add("x"+i,image);
         assertThrows(IOException.class, () -> builder.add("overflow",image));
         var large = new TextureAtlas.Builder();
         BufferedImage big = new BufferedImage(256,256,BufferedImage.TYPE_INT_ARGB);
-        for (int i=0; i<9; i++) large.add("large"+i,big);
+        for (int i=0; i<49; i++) large.add("large"+i,big);
         assertThrows(IOException.class, () -> large.add("no-space",big));
     }
     @Test void compositesTintedGrassWithoutChangingItsOpaqueBase() throws Exception {
@@ -69,7 +70,7 @@ class TextureAtlasTest {
         overlay.setRGB(0,0,0x00FFFFFF);
         assertEquals(0xFF806040, BlockTextureSet.composite(base,-1,overlay,0).getRGB(0,0));
         base.setRGB(0,0,0x00806040);
-        assertThrows(IOException.class, () -> BlockTextureSet.composite(base,-1,null,-1));
+        assertEquals(0x00806040, BlockTextureSet.composite(base,-1,null,-1).getRGB(0,0));
     }
     private static byte[] png(int w,int h) throws IOException {
         var output = new ByteArrayOutputStream();

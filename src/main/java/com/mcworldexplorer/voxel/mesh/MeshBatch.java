@@ -11,9 +11,12 @@ public record MeshBatch(
         float[] positions,
         float[] normals,
         int[] indices,
-        float[] textureCoordinates) {
+        float[] textureCoordinates, boolean shaded) {
     public MeshBatch(RenderLayer layer, int rgb, float alpha, int blockCount, float[] positions, float[] normals, int[] indices) {
-        this(layer, rgb, alpha, blockCount, positions, normals, indices, new float[0]);
+        this(layer, rgb, alpha, blockCount, positions, normals, indices, new float[0],true);
+    }
+    public MeshBatch(RenderLayer layer,int rgb,float alpha,int blockCount,float[] positions,float[] normals,int[] indices,float[] uv) {
+        this(layer,rgb,alpha,blockCount,positions,normals,indices,uv,true);
     }
     public MeshBatch {
         Objects.requireNonNull(layer, "layer");

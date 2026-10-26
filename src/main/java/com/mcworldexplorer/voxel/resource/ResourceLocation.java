@@ -32,7 +32,8 @@ public record ResourceLocation(String namespace, String path) {
     public enum Kind {
         BLOCKSTATE("blockstates/", ".json", 1024 * 1024),
         MODEL("models/", ".json", 1024 * 1024),
-        TEXTURE("textures/", ".png", 8 * 1024 * 1024);
+        TEXTURE("textures/", ".png", 8 * 1024 * 1024),
+        BANNER_PATTERN("banner_pattern/", ".json", 64*1024);
 
         private final String folder;
         private final String extension;
@@ -49,7 +50,7 @@ public record ResourceLocation(String namespace, String path) {
 
     public String entryName(Kind kind) {
         Objects.requireNonNull(kind, "kind");
-        return "assets/" + namespace + "/" + kind.folder + path + kind.extension;
+        return (kind==Kind.BANNER_PATTERN?"data/":"assets/") + namespace + "/" + kind.folder + path + kind.extension;
     }
 
     @Override public String toString() { return namespace + ":" + path; }

@@ -21,6 +21,8 @@ public final class OpenGlMeshResources implements AutoCloseable {
     private final int rgb;
     private final float alpha;
     private final boolean textured;
+    private final boolean shaded;
+    private final org.joml.Vector3f center;
     private final float offsetX;
     private final float offsetZ;
     private final int indexCount;
@@ -39,6 +41,12 @@ public final class OpenGlMeshResources implements AutoCloseable {
         this.rgb = batch.rgb();
         this.alpha = batch.alpha();
         this.textured = batch.textured();
+        this.shaded = batch.shaded();
+        float[] p=batch.positions();
+        org.joml.Vector3f sum=new org.joml.Vector3f();
+        for(int i=0;i<p.length;i+=3)sum.add(p[i],p[i+1],p[i+2]);
+        if(p.length>0)sum.div(p.length/3);
+        this.center=sum.add(offsetX,0,offsetZ);
         this.offsetX = offsetX;
         this.offsetZ = offsetZ;
         this.indexCount = batch.indices().length;
@@ -119,6 +127,8 @@ public final class OpenGlMeshResources implements AutoCloseable {
     }
 
     public boolean textured() { return textured; }
+    public boolean shaded() { return shaded; }
+    public float projectedDepth(org.joml.Matrix4f transform) {return transform.transformProject(new org.joml.Vector3f(center)).z;}
 
     public float alpha() {
         return alpha;

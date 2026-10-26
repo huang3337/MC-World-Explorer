@@ -54,3 +54,8 @@ V0.2/V0.2.1 使用 `storage/PortablePaths.java` 将日志、缓存、导出和�
 便携、只读边界。
 
 V0.7 已按确认的 UI 与配套优化范围完成源码收口（0.7.0），软件包仍为 V0.6.0。下一阶段 V0.7.1 的任务与验收见 docs/progress/V0.7.1.md，优先级确认见 DECISION-015；voxel/resource 包含只读客户端访问、ClientResourceLocator、BlockModelResolver、TextureAtlas、BlockTextureSet；voxel/mesh 和 render/lwjgl 已接入 UV、图集与着色器，MapViewerController 提供后台自动定位、手动绑定与简化模式，PortableSettings 按存档/版本保存绑定。资源身份随三维缓存管理；当前验收范围仍为 8 种完整方块，非完整方块计划 V0.7.2。
+
+
+## V0.7.2 增量（2026-10-26）
+
+voxel/resource 新增 BlockResourceSource/LayeredResourceSource 的只读资源源边界、ModelGeometry/ModelOcclusion 的纯几何及覆盖计算、BuiltinBlockModels 的特殊渲染族静态适配。voxel/data 的 BlockEntityData 保存有界外观 NBT，ChunkNbtDecoder 只读提取；voxel/mesh 的 FluidGeometry 处理静态液位邻接。BlockTextureSet 按选区完整状态和外观指纹准备通用面集合，模型/资源预算与错误明确；MapViewerController 沿用现有入口显示资源失败与近似说明。详细当前范围以 docs/progress/V0.7.2.md 为准。

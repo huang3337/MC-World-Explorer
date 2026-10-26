@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceLocationTest {
     @Test void resolvesDefaultAndModNamespacesWithinTheExpectedAssetFolder() {
+        assertEquals("data/example/banner_pattern/cross.json",ResourceLocation.parse("example:cross").entryName(ResourceLocation.Kind.BANNER_PATTERN));
         assertEquals("minecraft:block/stone", ResourceLocation.parse("block/stone").toString());
         assertEquals("assets/example/textures/block/blue_planks.png",
                 ResourceLocation.parse("example:block/blue_planks").entryName(ResourceLocation.Kind.TEXTURE));

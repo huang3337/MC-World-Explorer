@@ -28,7 +28,7 @@ import java.util.zip.ZipFile;
 import static com.mcworldexplorer.voxel.resource.ResourceAccessException.Reason.*;
 
 /** Explicitly selected local client JAR. No extraction, downloading, or asset execution. */
-public final class ClientResourceArchive implements AutoCloseable {
+public final class ClientResourceArchive implements AutoCloseable, BlockResourceSource {
     public static final long MAX_ARCHIVE_BYTES = 512L * 1024 * 1024;
     public static final int MAX_ENTRIES = 100_000;
     public static final int MAX_INDEX_NAME_CHARS = 8 * 1024 * 1024;
@@ -224,6 +224,11 @@ public final class ClientResourceArchive implements AutoCloseable {
         } catch (CharacterCodingException e) {
             throw new ResourceAccessException(INVALID_METADATA, "资源 JSON 不是有效的 UTF-8", e);
         }
+    }
+
+    @Override public synchronized void validate() throws IOException {
+        if(closed)throw new ResourceAccessException(CLOSED,"客户端资源读取器已关闭");
+        verifyUnchanged();
     }
 
     private void verifyUnchanged() throws IOException {

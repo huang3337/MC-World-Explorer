@@ -13,8 +13,8 @@ import java.util.Map;
 /** Nearest-filtered static PNG atlas, with a one-pixel extruded border per tile. */
 public final class TextureAtlas {
     public static final int MAX_IMAGE_SIZE = 256;
-    public static final int MAX_SIZE = 1024;
-    public static final int MAX_TILES = 128;
+    public static final int MAX_SIZE = 2048;
+    public static final int MAX_TILES = 1024;
     private final int width, height;
     private final int[] pixels;
 
@@ -27,7 +27,8 @@ public final class TextureAtlas {
     public long estimatedBytes() { return (long) pixels.length * Integer.BYTES; }
     public record Tile(int x, int y, int width, int height) { }
 
-    public static BufferedImage decode(byte[] png) throws IOException {
+    public static BufferedImage decode(byte[] png) throws IOException {return decode(png,true);}
+    public static BufferedImage decode(byte[] png,boolean animationStrip) throws IOException {
         byte[] signature = {(byte)137,80,78,71,13,10,26,10};
         if (png.length < 33 || !Arrays.equals(signature, Arrays.copyOf(png, 8)))
             throw new IOException("纹理不是有效 PNG");
@@ -35,9 +36,11 @@ public final class TextureAtlas {
         try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(png))) {
             reader.setInput(input, true, true);
             int w = reader.getWidth(0), h = reader.getHeight(0);
-            if (w < 1 || w != h || w > MAX_IMAGE_SIZE)
-                throw new IOException("仅支持不超过 256×256 的正方形静态纹理");
-            return reader.read(0);
+            if (w < 1 || w > MAX_IMAGE_SIZE || h < 1 || (animationStrip ? h < w || h % w != 0 || h / w > 256 : h > MAX_IMAGE_SIZE))
+                throw new IOException("纹理须为不超过 256 像素的方形或有界纵向动画帧条");
+            var parameters=reader.getDefaultReadParam();
+            parameters.setSourceRegion(new java.awt.Rectangle(0,0,w,animationStrip?w:h));
+            return reader.read(0,parameters); // Static preview uses frame zero, not animation playback.
         } finally { reader.dispose(); }
     }
 
@@ -53,7 +56,7 @@ public final class TextureAtlas {
             if (w < 1 || h < 1 || w > MAX_IMAGE_SIZE || h > MAX_IMAGE_SIZE || tiles.size() >= MAX_TILES)
                 throw new IOException("纹理图集单项尺寸或数量超限");
             if (x + w + 2 > MAX_SIZE) { x = 0; y += rowHeight; rowHeight = 0; }
-            if (y + h + 2 > MAX_SIZE) throw new IOException("纹理图集超过 1024×1024 容量");
+            if (y + h + 2 > MAX_SIZE) throw new IOException("纹理图集超过 2048×2048 容量");
             Tile tile = new Tile(x + 1, y + 1, w, h);
             for (int py = -1; py <= h; py++) for (int px = -1; px <= w; px++)
                 pixels[(y + py + 1) * MAX_SIZE + x + px + 1] = image.getRGB(

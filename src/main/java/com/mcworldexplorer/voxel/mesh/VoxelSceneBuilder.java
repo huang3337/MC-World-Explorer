@@ -90,7 +90,7 @@ public final class VoxelSceneBuilder {
             maxY = Math.max(maxY, mesh.bounds().maxY());
             maxZ = Math.max(maxZ, mesh.bounds().maxZ() + offsetZ);
             for (MeshWarning warning : mesh.warnings()) {
-                String warningKey = (warning.code() == MeshWarning.Code.FALLBACK_BLOCK || warning.code() == MeshWarning.Code.TEXTURE_FALLBACK)
+                String warningKey = (warning.code() == MeshWarning.Code.FALLBACK_BLOCK || warning.code() == MeshWarning.Code.TEXTURE_FALLBACK || warning.code() == MeshWarning.Code.MODEL_APPROXIMATION)
                         ? warning.code() + ":" + warning.detail()
                         : warning.code() + ":" + warning.coordinate() + ":" + warning.detail();
                 MeshWarning existing = warnings.get(warningKey);

@@ -1,8 +1,8 @@
 # Issue 编号对照清单
 
 - **更新日期**：2026-10-26
-- **当前问题总数**：105
-- **当前编号前缀数**：48
+- **当前问题总数**：113
+- **当前编号前缀数**：51
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
@@ -58,6 +58,9 @@
 | `ViewerAreaList.java` | `VAREALIST` | `001` | `ISSUE-VAREALIST-001` | `ISSUE-VAREALIST-002` |
 | `ViewerAreaThumbnail.java` | `VTHUMB` | `001` | `ISSUE-VTHUMB-001` | `ISSUE-VTHUMB-002` |
 | `WorkspaceLayoutTest.java` | `WORKSPACETEST` | `001` | `ISSUE-WORKSPACETEST-001` | `ISSUE-WORKSPACETEST-002` |
+| `BlockTextureSet.java` | `TEXTSET` | `001-003` | `ISSUE-TEXTSET-003` | `ISSUE-TEXTSET-004` |
+| `BlockModelResolver.java` | `BMODEL` | `001-003` | `ISSUE-BMODEL-003` | `ISSUE-BMODEL-004` |
+| `BuiltinBlockModels.java` | `BUILTIN` | `001-002` | `ISSUE-BUILTIN-002` | `ISSUE-BUILTIN-003` |
 
 ## 使用规则
 

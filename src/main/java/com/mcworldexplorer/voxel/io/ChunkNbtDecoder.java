@@ -109,7 +109,12 @@ public final class ChunkNbtDecoder {
                     -1,
                     "Level/Sections contains no palette-based block states");
         }
-        return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections));
+        List<com.mcworldexplorer.voxel.data.BlockEntityData> entities=new ArrayList<>();
+        var entityTags=coordinateContainer.getList(layout==ChunkStorageLayout.MODERN_ROOT?"block_entities":"TileEntities",BinaryTagTypes.COMPOUND);
+        if(entityTags.size()>4096)throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_NBT,-1,"方块实体数量超过 4096，无法完整准备该区块外观");
+        for(int i=0;i<entityTags.size();i++)
+            com.mcworldexplorer.voxel.data.BlockEntityData.read(entityTags.getCompound(i),chunkX,chunkZ).ifPresent(entities::add);
+        return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections,entities));
     }
 
     private static int storedCoordinate(CompoundBinaryTag container, String key) {

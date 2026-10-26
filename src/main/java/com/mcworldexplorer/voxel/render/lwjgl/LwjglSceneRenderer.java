@@ -57,14 +57,25 @@ public final class LwjglSceneRenderer implements AutoCloseable {
         shader.use();
         shader.setMvp(viewProjection);
         scene.bindTexture();
-        for (OpenGlMeshResources mesh : scene.meshes()) {
+        var ordered=new java.util.ArrayList<>(scene.meshes());
+        ordered.sort((a,b)->{
+            boolean ta=a.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT||a.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID;
+            boolean tb=b.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT||b.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID;
+            if(ta!=tb)return ta?1:-1;
+            return ta?Float.compare(b.projectedDepth(viewProjection),a.projectedDepth(viewProjection)):0;
+        });
+        try {
+        for (OpenGlMeshResources mesh : ordered) {
+            org.lwjgl.opengl.GL11.glDepthMask(mesh.layer()!=com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT
+                    &&mesh.layer()!=com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID);
             shader.setOffset(mesh.offsetX(), mesh.offsetZ());
             shader.setColor(mesh.rgb(), mesh.alpha());
             shader.setTextured(mesh.textured());
+            shader.setShaded(mesh.shaded());
             glBindVertexArray(mesh.vertexArray());
             glDrawElements(GL_TRIANGLES, mesh.indexCount(), GL_UNSIGNED_INT, 0L);
         }
-        glBindVertexArray(0);
+        } finally { org.lwjgl.opengl.GL11.glDepthMask(true); glBindVertexArray(0); }
     }
 
     private void requireOwnerThread() {
