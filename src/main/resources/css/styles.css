@@ -337,3 +337,37 @@
 .viewer-area-remove:focused {
     -fx-border-color: #2365C7;
 }
+
+/* Texture guidance stays beside its menu when the toolbar wraps. */
+.viewer-texture-help {
+    -fx-alignment: center;
+    -fx-min-width: 18;
+    -fx-pref-width: 18;
+    -fx-max-width: 18;
+    -fx-min-height: 18;
+    -fx-pref-height: 18;
+    -fx-max-height: 18;
+    -fx-background-color: #F0F4F9;
+    -fx-background-radius: 9;
+    -fx-border-color: #C7D3E2;
+    -fx-border-radius: 9;
+    -fx-text-fill: #647383;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+.viewer-texture-help:hover {
+    -fx-background-color: #EAF2FF;
+    -fx-border-color: #2365C7;
+    -fx-text-fill: #2365C7;
+}
+.viewer-texture-tooltip {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 7;
+    -fx-border-color: #DCE2E9;
+    -fx-border-radius: 7;
+    -fx-text-fill: #243140;
+    -fx-font-size: 12px;
+    -fx-font-weight: normal;
+    -fx-padding: 12;
+    -fx-effect: dropshadow(gaussian, rgba(24, 44, 70, 0.14), 12, 0, 0, 3);
+}

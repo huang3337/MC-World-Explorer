@@ -38,10 +38,9 @@ public final class LwjglSceneRenderer implements AutoCloseable {
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(commitAllowed, "commitAllowed");
         OpenGlSceneResources replacement = OpenGlSceneResources.upload(snapshot);
-        if (!commitAllowed.getAsBoolean()) {
-            replacement.close();
-            return false;
-        }
+        try {
+            if (!commitAllowed.getAsBoolean()) { replacement.close(); return false; }
+        } catch (RuntimeException | Error failure) { replacement.close(); throw failure; }
         OpenGlSceneResources previous = scene;
         scene = replacement;
         if (previous != null) {
@@ -57,9 +56,11 @@ public final class LwjglSceneRenderer implements AutoCloseable {
         }
         shader.use();
         shader.setMvp(viewProjection);
+        scene.bindTexture();
         for (OpenGlMeshResources mesh : scene.meshes()) {
             shader.setOffset(mesh.offsetX(), mesh.offsetZ());
             shader.setColor(mesh.rgb(), mesh.alpha());
+            shader.setTextured(mesh.textured());
             glBindVertexArray(mesh.vertexArray());
             glDrawElements(GL_TRIANGLES, mesh.indexCount(), GL_UNSIGNED_INT, 0L);
         }

@@ -1,5 +1,7 @@
 package com.mcworldexplorer.voxel.mesh;
 
+import java.util.Optional;
+import com.mcworldexplorer.voxel.resource.TextureAtlas;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -13,9 +15,18 @@ public record VoxelSceneSnapshot(
         int faceCount,
         int vertexCount,
         int indexCount,
-        List<MeshWarning> warnings) {
+        List<MeshWarning> warnings,
+        Optional<TextureAtlas> atlas) {
+    public VoxelSceneSnapshot(long anchorWorldX, long anchorWorldZ, List<ChunkMeshSnapshot> chunks,
+                              MeshBounds bounds, int blockCount, int faceCount, int vertexCount,
+                              int indexCount, List<MeshWarning> warnings) {
+        this(anchorWorldX, anchorWorldZ, chunks, bounds, blockCount, faceCount, vertexCount, indexCount, warnings, Optional.empty());
+    }
     public VoxelSceneSnapshot {
         Objects.requireNonNull(bounds, "bounds");
+        Objects.requireNonNull(atlas, "atlas");
+        if (atlas.isEmpty() && chunks.stream().flatMap(c -> c.batches().stream()).anyMatch(MeshBatch::textured))
+            throw new IllegalArgumentException("textured scene requires an atlas");
         chunks = chunks.stream()
                 .sorted(Comparator.comparing(ChunkMeshSnapshot::coordinate))
                 .toList();

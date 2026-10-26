@@ -35,6 +35,8 @@ public final class VoxelShaderProgram implements AutoCloseable {
     private final int mvpLocation;
     private final int offsetLocation;
     private final int colorLocation;
+    private final int texturedLocation;
+    private final int atlasLocation;
 
     public VoxelShaderProgram() throws IOException {
         int vertex = compile(GL_VERTEX_SHADER, read("/v05/shaders/voxel.vert"));
@@ -65,6 +67,8 @@ public final class VoxelShaderProgram implements AutoCloseable {
             mvpLocation = requiredUniform("uMvp");
             offsetLocation = requiredUniform("uOffset");
             colorLocation = requiredUniform("uColor");
+            texturedLocation = requiredUniform("uTextured");
+            atlasLocation = requiredUniform("uAtlas");
         } catch (RuntimeException failure) {
             close();
             throw failure;
@@ -85,6 +89,11 @@ public final class VoxelShaderProgram implements AutoCloseable {
 
     public void setOffset(float x, float z) {
         glUniform3f(offsetLocation, x, 0.0f, z);
+    }
+
+    public void setTextured(boolean textured) {
+        org.lwjgl.opengl.GL20.glUniform1i(texturedLocation, textured ? 1 : 0);
+        org.lwjgl.opengl.GL20.glUniform1i(atlasLocation, 0);
     }
 
     public void setColor(int rgb, float alpha) {

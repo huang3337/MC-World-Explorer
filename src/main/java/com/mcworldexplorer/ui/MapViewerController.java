@@ -1,5 +1,10 @@
 package com.mcworldexplorer.ui;
 
+import com.mcworldexplorer.voxel.mesh.MeshWarning;
+import com.mcworldexplorer.voxel.resource.ClientResourceLocator;
+import com.mcworldexplorer.voxel.resource.ClientResourceArchive;
+import com.mcworldexplorer.storage.PortablePaths;
+import com.mcworldexplorer.world.WorldScanner;
 import com.mcworldexplorer.map.MapMarker;
 import com.mcworldexplorer.map.MapMarkerType;
 import com.mcworldexplorer.map.MapTileCacheResult;
@@ -123,6 +128,12 @@ public final class MapViewerController {
     private boolean activeViewerExpectedFromCache;
     private List<ViewerCachedArea> viewerCachedPreviews = List.of();
     private ViewerAreaList viewerAreaList;
+    private Path viewerResourcePath;
+    private long viewerResourceLookupId;
+    private Task<ClientResourceLocator.Result> viewerResourceLookup;
+    private java.util.function.Supplier<List<Path>> clientResourceRoots = this::defaultClientResourceRoots;
+    @FXML private MenuButton viewerTextureMenu;
+    @FXML private Label viewerTextureHelp;
 
     @FXML
     private ComboBox<WorldDimension> dimensionComboBox;
@@ -186,8 +197,40 @@ public final class MapViewerController {
     private MapViewport viewport;
     private VBox mapPlaceholder;
 
+    private void configureTextureHelp() {
+        Tooltip tip = viewerTextureHelp.getTooltip();
+        // Anchor outside the small hover target; do not let the popup cover it
+        // or compete with Tooltip's timed mouse-following behaviour.
+        Tooltip.uninstall(viewerTextureHelp, tip);
+        tip.setAutoFix(false);
+        tip.setAutoHide(false);
+        tip.getScene().getRoot().setMouseTransparent(true);
+        viewerTextureHelp.setOnMouseEntered(event -> {
+            var anchor = viewerTextureHelp.localToScreen(viewerTextureHelp.getBoundsInLocal());
+            if (anchor == null) return;
+            var screens = javafx.stage.Screen.getScreensForRectangle(anchor.getMinX(), anchor.getMinY(),
+                    anchor.getWidth(), anchor.getHeight());
+            var screen = (screens.isEmpty() ? javafx.stage.Screen.getPrimary() : screens.getFirst())
+                    .getVisualBounds();
+            tip.show(viewerTextureHelp, anchor.getMinX(), anchor.getMaxY() + 8);
+            var content = tip.getScene().getRoot();
+            content.applyCss();
+            content.layout();
+            tip.setX(Math.max(screen.getMinX(), Math.min(anchor.getMinX(), screen.getMaxX() - tip.getWidth())));
+            double below = anchor.getMaxY() + 8;
+            tip.setY(below + tip.getHeight() <= screen.getMaxY()
+                    ? below : anchor.getMinY() - tip.getHeight() - 8);
+        });
+        viewerTextureHelp.setOnMouseExited(event -> tip.hide());
+        viewerTextureHelp.sceneProperty().addListener((observable, previous, current) -> tip.hide());
+        viewerSelectionBar.visibleProperty().addListener((observable, previous, visible) -> {
+            if (!visible) tip.hide();
+        });
+    }
+
     @FXML
     public void initialize() {
+        configureTextureHelp();
         Tooltip statusTooltip = new Tooltip();
         statusTooltip.textProperty().bind(statusLabel.textProperty());
         statusLabel.setTooltip(statusTooltip);
@@ -273,6 +316,7 @@ public final class MapViewerController {
             statusLabel.setText("该存档无法生成地图");
             return;
         }
+        startViewerResourceLookup(null, false);
         try {
             List<WorldDimension> dimensions = WorldDimensionDiscovery.discover(world);
             updatingControls = true;
@@ -294,6 +338,9 @@ public final class MapViewerController {
     }
 
     public void clear() {
+        cancelViewerResourceLookup();
+        viewerResourcePath = null;
+        if (viewerTextureMenu != null) { viewerTextureMenu.setText("纹理：自动"); viewerTextureMenu.setTooltip(null); }
         if (mapPlaceholder != null) {
             mapPlaceholder.setVisible(true);
             locateMenuButton.hide();
@@ -356,6 +403,8 @@ public final class MapViewerController {
             return;
         }
         shuttingDown = true;
+        viewerTextureHelp.getTooltip().hide();
+        cancelViewerResourceLookup();
         contextId++;
         playerLoadId++;
         cacheMaintenanceId++;
@@ -632,7 +681,7 @@ public final class MapViewerController {
         activeViewerTarget = null;
         viewerSelectionLabel.setText(formatViewerSelection(selection));
         viewerConfirmButton.setText(isCachedArea(selection) ? "打开三维预览" : "生成三维预览");
-        viewerConfirmButton.setDisable(false);
+        viewerConfirmButton.setDisable(viewerResourceLookup != null);
     }
 
     private void clearViewerSelection(String message) {
@@ -766,11 +815,120 @@ public final class MapViewerController {
             viewerCoordinator = new VoxelPreviewCoordinator(
                     new LwjglViewerWindow(), viewerProfile);
         }
+        viewerCoordinator.setResource(viewerResourcePath, world.getVersionName());
         return viewerCoordinator;
     }
 
+    @FXML
+    private void handleViewerTexture(ActionEvent event) {
+        if (viewerTaskRunning || shuttingDown) return;
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("选择与存档版本对应的 Minecraft Java 客户端 JAR");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("客户端 JAR", "*.jar"));
+        File selected = chooser.showOpenDialog(viewportHost.getScene().getWindow());
+        if (selected == null) return;
+        startViewerResourceLookup(selected.toPath(), false);
+    }
+
+    @FXML
+    private void handleViewerSimpleColors(ActionEvent event) {
+        if (!viewerTaskRunning && !shuttingDown) {
+            cancelViewerResourceLookup();
+            setViewerResource(null);
+        }
+    }
+
+    @FXML
+    private void handleViewerAutomaticTexture(ActionEvent event) {
+        if (!viewerTaskRunning && !shuttingDown) startViewerResourceLookup(null, true);
+    }
+
+    private List<Path> defaultClientResourceRoots() {
+        List<Path> roots = new ArrayList<>();
+        try { portableSettings.loadCustomSavesPath().ifPresent(roots::add); }
+        catch (IOException e) { LOGGER.warn("无法读取游戏目录配置", e); }
+        roots.add(PortablePaths.applicationRoot().resolve("MC"));
+        roots.add(WorldScanner.getDefaultGameRoot());
+        String appdata = System.getenv("APPDATA");
+        if (appdata != null && !appdata.isBlank()) roots.add(Path.of(appdata, ".minecraft"));
+        return List.copyOf(roots);
+    }
+
+    private void cancelViewerResourceLookup() {
+        viewerResourceLookupId++;
+        if (viewerResourceLookup != null) viewerResourceLookup.cancel(true);
+        viewerResourceLookup = null;
+    }
+
+    private void startViewerResourceLookup(Path explicit, boolean resetBinding) {
+        cancelViewerResourceLookup();
+        if (world == null || !world.isParsed() || shuttingDown) return;
+        long lookupId = viewerResourceLookupId;
+        Path worldPath = world.getFolderPath().toAbsolutePath().normalize();
+        String version = world.getVersionName();
+        viewerTextureMenu.setText(explicit == null ? "纹理：查找中" : "纹理：校验中");
+        viewerTextureMenu.setTooltip(new Tooltip("正在检查本地客户端资源，不会下载或修改存档"));
+        viewerConfirmButton.setDisable(true);
+        Task<ClientResourceLocator.Result> task = new Task<>() {
+            @Override protected ClientResourceLocator.Result call() throws Exception {
+                if (explicit != null && ClientResourceLocator.isValidVersion(version)) {
+                    try (var archive = ClientResourceArchive.open(explicit, version)) {
+                        if (isCancelled()) throw new java.util.concurrent.CancellationException();
+                        Path selected = archive.fingerprint().path();
+                        String message = "已选择本地原版资源，并记住该存档与版本的绑定";
+                        try { portableSettings.saveClientResourcePath(worldPath, version, selected); }
+                        catch (IOException e) { LOGGER.warn("资源绑定保存失败", e); message = "资源可用，但绑定保存失败：" + shortMessage(e); }
+                        return new ClientResourceLocator.Result(ClientResourceLocator.Status.FOUND,
+                                java.util.Optional.of(selected), message, 1);
+                    }
+                }
+                if (resetBinding) portableSettings.saveClientResourcePath(worldPath, version, null);
+                java.util.Optional<Path> binding;
+                try { binding = portableSettings.loadClientResourcePath(worldPath, version); }
+                catch (IOException e) { LOGGER.warn("忽略无效资源绑定", e); binding = java.util.Optional.empty(); }
+                return new ClientResourceLocator().locate(worldPath, version, binding, clientResourceRoots.get(), this::isCancelled);
+            }
+        };
+        viewerResourceLookup = task;
+        task.setOnSucceeded(event -> {
+            if (lookupId != viewerResourceLookupId || shuttingDown || world == null
+                    || !world.getFolderPath().toAbsolutePath().normalize().equals(worldPath)) return;
+            viewerResourceLookup = null;
+            var result = task.getValue();
+            setViewerResource(result.path().orElse(null));
+            if (result.path().isPresent() && explicit == null) viewerTextureMenu.setText("纹理：自动 · " + version);
+            viewerTextureMenu.setTooltip(new Tooltip(result.message() + result.path().map(path -> "\n" + path).orElse("")));
+            if (viewerLockedSelection == null && viewport.isViewerSelectionMode()) viewerSelectionLabel.setText(result.message().split("\n")[0]);
+            refreshViewerCachedAreas();
+        });
+        task.setOnFailed(event -> {
+            if (lookupId != viewerResourceLookupId || shuttingDown) return;
+            viewerResourceLookup = null;
+            setViewerResource(null);
+            viewerTextureMenu.setTooltip(new Tooltip("资源校验失败：" + shortMessage(task.getException()) + "\n可以重新选择或使用简化颜色"));
+            viewerSelectionLabel.setText("资源校验失败：" + shortMessage(task.getException()));
+        });
+        Thread thread = new Thread(task, "client-resource-locator");
+        thread.setDaemon(true); thread.start();
+    }
+
+    private void setViewerResource(Path path) {
+        boolean changed = !Objects.equals(viewerResourcePath, path);
+        viewerResourcePath = path;
+        if (viewerCoordinator != null) viewerCoordinator.setResource(path, world.getVersionName());
+        viewerCacheInspectionId++;
+        if (changed) updateViewerAreaList(List.of());
+        viewerTextureMenu.setText(path == null ? "纹理：简化颜色" : "纹理：原版 " + world.getVersionName());
+        viewerTextureMenu.setTooltip(new Tooltip(path == null ? "所有方块使用简化颜色"
+                : path + "\n生成时校验资源；支持 8 种完整方块，其余使用简化颜色。草色使用固定近似值。"));
+        if (viewerLockedSelection != null) viewerConfirmButton.setText("生成三维预览");
+        viewerConfirmButton.setDisable(viewerTaskRunning || viewerResourceLookup != null || viewerLockedSelection == null);
+        viewerSelectionLabel.setText(path == null ? "已切换简化颜色，可重新生成三维区域"
+                : "已选择客户端资源，生成时验证；仅支持部分完整方块");
+    }
+
     private void startViewerTask() {
-        if (viewerTaskRunning || viewerLockedSelection == null
+        if (viewerTaskRunning || viewerResourceLookup != null || viewerLockedSelection == null
                 || world == null || dimension == null || layer == null) {
             return;
         }
@@ -857,7 +1015,20 @@ public final class MapViewerController {
         setViewerTaskUi(false);
         refreshViewerCachedAreas();
         setViewerAreasVisible(true);
+        long fallbackBlocks = result.snapshot().warnings().stream()
+                .filter(w -> w.code() == MeshWarning.Code.TEXTURE_FALLBACK)
+                .mapToLong(MeshWarning::occurrences).sum();
         String state = result.fromCache() ? "已打开缓存中的三维预览" : "三维预览已打开";
+        if (result.snapshot().atlas().isPresent() && viewerTextureMenu != null) {
+            String details = result.snapshot().warnings().stream()
+                    .filter(w -> w.code() == MeshWarning.Code.TEXTURE_FALLBACK)
+                    .limit(8).map(MeshWarning::detail)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            viewerTextureMenu.setTooltip(new Tooltip(viewerResourcePath
+                    + "\n支持 8 种完整方块；草色使用固定近似值，随机外观固定选择第一项。"
+                    + (details.isEmpty() ? "" : "\n本次简化显示原因（最多 8 项）：\n" + details)));
+        }
+        if (result.snapshot().atlas().isPresent()) state += "，原版纹理" + (fallbackBlocks > 0 ? "（" + fallbackBlocks + " 个方块使用简化颜色）" : "");
         if (result.partialSuccess()) state += "，" + result.failedChunks() + " 个区块读取失败";
         clearViewerSelection(state + "；可继续选择其他区域");
     }
@@ -915,11 +1086,12 @@ public final class MapViewerController {
         }
         viewerLockedSelection = activeViewerTarget;
         viewport.lockViewerSelection(activeViewerTarget);
-        viewerConfirmButton.setDisable(false);
+        viewerConfirmButton.setDisable(viewerResourceLookup != null);
         activeViewerTarget = null;
     }
 
     private void setViewerTaskUi(boolean running) {
+        if (viewerTextureMenu != null) viewerTextureMenu.setDisable(running);
         viewerTaskRunning = running;
         if (viewerAreaList != null) viewerAreaList.setAreas(viewerCachedPreviews, viewerProfile, running);
         if (viewerProgressBar == null) {
@@ -930,7 +1102,7 @@ public final class MapViewerController {
         viewerProgressBar.setProgress(-1);
         viewerCancelButton.setManaged(running);
         viewerCancelButton.setVisible(running);
-        viewerConfirmButton.setDisable(running || viewerLockedSelection == null);
+        viewerConfirmButton.setDisable(running || viewerResourceLookup != null || viewerLockedSelection == null);
     }
 
     @FXML

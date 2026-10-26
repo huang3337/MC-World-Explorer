@@ -19,7 +19,7 @@ class OpenGlMeshResourcesTest {
                 new int[]{0, 1, 0});
 
         assertArrayEquals(new float[]{
-                1, 2, 3, 0, 1, 0,
-                4, 5, 6, 1, 0, 0}, OpenGlMeshResources.interleave(batch));
+                1, 2, 3, 0, 1, 0, 0, 0,
+                4, 5, 6, 1, 0, 0, 0, 0}, OpenGlMeshResources.interleave(batch));
     }
 }

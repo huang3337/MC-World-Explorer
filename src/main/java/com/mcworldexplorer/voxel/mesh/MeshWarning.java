@@ -20,6 +20,7 @@ public record MeshWarning(Code code, ChunkCoordinate coordinate, String detail, 
 
     public enum Code {
         NEIGHBOR_UNAVAILABLE,
-        FALLBACK_BLOCK
+        FALLBACK_BLOCK,
+        TEXTURE_FALLBACK
     }
 }

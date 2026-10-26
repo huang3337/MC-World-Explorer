@@ -150,6 +150,17 @@ class VoxelPreviewCoordinatorTest {
     }
 
     @Test
+    void selectingTheSameResourceModePreservesExistingScenes() throws Exception {
+        FakeWindow window=new FakeWindow();
+        coordinator=coordinator(window,(request,cancellation,monitor)->area(request.target()));
+        var first=new RecordingListener();coordinator.start(request(0),first);first.success.get(3,TimeUnit.SECONDS);
+        coordinator.setResource(null, null);
+        assertEquals(1,coordinator.cachedAreas().size());
+        var second=new RecordingListener();coordinator.start(request(0),second);
+        assertTrue(second.success.get(3,TimeUnit.SECONDS).fromCache());
+    }
+
+    @Test
     void cachedSceneSkipsAreaLoader() throws Exception {
         FakeWindow window = new FakeWindow();
         ViewerSceneCache cache = new ViewerSceneCache(ViewerPerformanceProfile.BASIC);

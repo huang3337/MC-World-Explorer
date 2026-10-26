@@ -32,7 +32,7 @@ MC-World-Explorer/
    │  │  ├─ storage/              严格便携的程序根目录、运行数据路径与配置
    │  │  ├─ ui/                   控制器、存档树与已加载区域卡片 UI
    │  │  ├─ viewer/               三维范围/请求、任务、场景与缩略图内存缓存、相机及唯一窗口
-   │  │  ├─ voxel/                共享方块状态、有限区域加载、简化网格与 OpenGL 资源
+   │  │  ├─ voxel/                共享方块状态、有限区域加载、只读客户端资源、网格与 OpenGL 资源
    │  │  └─ world/                存档模型、扫描和游戏模式
    │  └─ resources/               FXML、CSS、日志和界面文本
    └─ test/java/com/mcworldexplorer/
@@ -53,4 +53,4 @@ V0.2/V0.2.1 使用 `storage/PortablePaths.java` 将日志、缓存、导出和�
 源码目录，也不得写入 Minecraft 存档目录。V0.3 地图块缓存和多人玩家读取继续复用同一
 便携、只读边界。
 
-V0.7 已按确认的 UI 与配套优化范围完成源码收口（0.7.0），软件包仍为 V0.6.0。下一阶段 V0.7.1 的任务与验收见 docs/progress/V0.7.1.md，优先级确认见 DECISION-015；尚未新增纹理资源运行时模块。
+V0.7 已按确认的 UI 与配套优化范围完成源码收口（0.7.0），软件包仍为 V0.6.0。下一阶段 V0.7.1 的任务与验收见 docs/progress/V0.7.1.md，优先级确认见 DECISION-015；voxel/resource 包含只读客户端访问、ClientResourceLocator、BlockModelResolver、TextureAtlas、BlockTextureSet；voxel/mesh 和 render/lwjgl 已接入 UV、图集与着色器，MapViewerController 提供后台自动定位、手动绑定与简化模式，PortableSettings 按存档/版本保存绑定。资源身份随三维缓存管理；当前验收范围仍为 8 种完整方块，非完整方块计划 V0.7.2。

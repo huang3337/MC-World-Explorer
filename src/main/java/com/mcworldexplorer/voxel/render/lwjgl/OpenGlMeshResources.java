@@ -20,6 +20,7 @@ public final class OpenGlMeshResources implements AutoCloseable {
     private final RenderLayer layer;
     private final int rgb;
     private final float alpha;
+    private final boolean textured;
     private final float offsetX;
     private final float offsetZ;
     private final int indexCount;
@@ -37,6 +38,7 @@ public final class OpenGlMeshResources implements AutoCloseable {
         this.layer = batch.layer();
         this.rgb = batch.rgb();
         this.alpha = batch.alpha();
+        this.textured = batch.textured();
         this.offsetX = offsetX;
         this.offsetZ = offsetZ;
         this.indexCount = batch.indices().length;
@@ -62,12 +64,14 @@ public final class OpenGlMeshResources implements AutoCloseable {
             glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, batch.indices(), GL_STATIC_DRAW);
-            int stride = 6 * Float.BYTES;
+            int stride = 8 * Float.BYTES;
             glVertexAttribPointer(0, 3, org.lwjgl.opengl.GL11.GL_FLOAT, false, stride, 0L);
             glEnableVertexAttribArray(0);
             glVertexAttribPointer(
                     1, 3, org.lwjgl.opengl.GL11.GL_FLOAT, false, stride, 3L * Float.BYTES);
             glEnableVertexAttribArray(1);
+            glVertexAttribPointer(2, 2, org.lwjgl.opengl.GL11.GL_FLOAT, false, stride, 6L * Float.BYTES);
+            glEnableVertexAttribArray(2);
             glBindVertexArray(0);
             return new OpenGlMeshResources(
                     batch, offsetX, offsetZ, vertexArray, vertexBuffer, indexBuffer);
@@ -89,16 +93,19 @@ public final class OpenGlMeshResources implements AutoCloseable {
     static float[] interleave(MeshBatch batch) {
         float[] positions = batch.positions();
         float[] normals = batch.normals();
-        float[] vertices = new float[batch.vertexCount() * 6];
+        float[] uv = batch.textureCoordinates();
+        float[] vertices = new float[batch.vertexCount() * 8];
         for (int vertex = 0; vertex < batch.vertexCount(); vertex++) {
             int source = vertex * 3;
-            int target = vertex * 6;
+            int target = vertex * 8;
             vertices[target] = positions[source];
             vertices[target + 1] = positions[source + 1];
             vertices[target + 2] = positions[source + 2];
             vertices[target + 3] = normals[source];
             vertices[target + 4] = normals[source + 1];
             vertices[target + 5] = normals[source + 2];
+            vertices[target + 6] = batch.textured() ? uv[vertex * 2] : 0;
+            vertices[target + 7] = batch.textured() ? uv[vertex * 2 + 1] : 0;
         }
         return vertices;
     }
@@ -110,6 +117,8 @@ public final class OpenGlMeshResources implements AutoCloseable {
     public int rgb() {
         return rgb;
     }
+
+    public boolean textured() { return textured; }
 
     public float alpha() {
         return alpha;

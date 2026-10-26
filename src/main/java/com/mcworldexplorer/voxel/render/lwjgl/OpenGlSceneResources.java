@@ -10,9 +10,11 @@ import java.util.List;
 
 public final class OpenGlSceneResources implements AutoCloseable {
     private final List<OpenGlMeshResources> meshes;
+    private final OpenGlTextureResources texture;
 
-    private OpenGlSceneResources(List<OpenGlMeshResources> meshes) {
+    private OpenGlSceneResources(List<OpenGlMeshResources> meshes, OpenGlTextureResources texture) {
         this.meshes = List.copyOf(meshes);
+        this.texture = texture;
     }
 
     public static OpenGlSceneResources upload(VoxelSceneSnapshot scene) {
@@ -29,16 +31,25 @@ public final class OpenGlSceneResources implements AutoCloseable {
                 .thenComparingInt(item -> item.batch().rgb()));
 
         List<OpenGlMeshResources> uploaded = new ArrayList<>();
+        OpenGlTextureResources texture = null;
         try {
+            if (scene.atlas().isPresent()) texture = new OpenGlTextureResources(scene.atlas().orElseThrow());
             for (UploadItem item : items) {
                 uploaded.add(OpenGlMeshResources.upload(
                         item.batch(), item.offsetX(), item.offsetZ()));
             }
-            return new OpenGlSceneResources(uploaded);
+            return new OpenGlSceneResources(uploaded, texture);
         } catch (RuntimeException | Error failure) {
             closeReverse(uploaded);
+            if (texture != null) texture.close();
             throw failure;
         }
+    }
+
+    public void bindTexture() {
+        org.lwjgl.opengl.GL13.glActiveTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
+        if (texture != null) texture.bind();
+        else org.lwjgl.opengl.GL11.glBindTexture(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, 0);
     }
 
     public List<OpenGlMeshResources> meshes() {
@@ -48,6 +59,7 @@ public final class OpenGlSceneResources implements AutoCloseable {
     @Override
     public void close() {
         closeReverse(meshes);
+        if (texture != null) texture.close();
     }
 
     private static void closeReverse(List<OpenGlMeshResources> resources) {

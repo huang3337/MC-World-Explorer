@@ -1,5 +1,6 @@
 package com.mcworldexplorer.voxel.mesh;
 
+import com.mcworldexplorer.voxel.resource.BlockTextureSet;
 import com.mcworldexplorer.voxel.data.ChunkCoordinate;
 import com.mcworldexplorer.voxel.io.CancellationSignal;
 import com.mcworldexplorer.voxel.io.ChunkDecodeException;
@@ -13,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 
 public final class VoxelSceneBuilder {
+    private final BlockTextureSet textures;
+    public VoxelSceneBuilder() { this(null); }
+    public VoxelSceneBuilder(BlockTextureSet textures) { this.textures = textures; }
     public VoxelSceneResult build(VoxelAreaLoadResult area, CancellationSignal cancellation) {
         return build(area, cancellation, VoxelSceneBuildMonitor.NONE);
     }
@@ -28,7 +32,7 @@ public final class VoxelSceneBuilder {
         Map<ChunkCoordinate, ChunkLoadStatus> statuses = new LinkedHashMap<>();
         List<ChunkMeshSnapshot> meshes = new ArrayList<>();
         boolean cancelled = false;
-        ChunkMesher mesher = new ChunkMesher();
+        ChunkMesher mesher = new ChunkMesher(textures);
 
         List<ChunkCoordinate> coordinates = area.target().coordinates();
         int completed = 0;
@@ -64,7 +68,7 @@ public final class VoxelSceneBuilder {
         return new VoxelSceneResult(snapshot, statuses, System.nanoTime() - start, cancelled);
     }
 
-    private static VoxelSceneSnapshot snapshot(
+    private VoxelSceneSnapshot snapshot(
             VoxelAreaLoadResult area,
             List<ChunkMeshSnapshot> meshes) {
         long anchorX = Math.multiplyExact((long) area.target().minX(), 16L);
@@ -86,7 +90,7 @@ public final class VoxelSceneBuilder {
             maxY = Math.max(maxY, mesh.bounds().maxY());
             maxZ = Math.max(maxZ, mesh.bounds().maxZ() + offsetZ);
             for (MeshWarning warning : mesh.warnings()) {
-                String warningKey = warning.code() == MeshWarning.Code.FALLBACK_BLOCK
+                String warningKey = (warning.code() == MeshWarning.Code.FALLBACK_BLOCK || warning.code() == MeshWarning.Code.TEXTURE_FALLBACK)
                         ? warning.code() + ":" + warning.detail()
                         : warning.code() + ":" + warning.coordinate() + ":" + warning.detail();
                 MeshWarning existing = warnings.get(warningKey);
@@ -111,6 +115,6 @@ public final class VoxelSceneBuilder {
                 meshes.stream().mapToInt(ChunkMeshSnapshot::faceCount).sum(),
                 meshes.stream().mapToInt(ChunkMeshSnapshot::vertexCount).sum(),
                 meshes.stream().mapToInt(ChunkMeshSnapshot::indexCount).sum(),
-                List.copyOf(warnings.values()));
+                List.copyOf(warnings.values()), java.util.Optional.ofNullable(textures).map(BlockTextureSet::atlas));
     }
 }
