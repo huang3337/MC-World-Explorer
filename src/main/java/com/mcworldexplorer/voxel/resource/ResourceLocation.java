@@ -33,6 +33,8 @@ public record ResourceLocation(String namespace, String path) {
         BLOCKSTATE("blockstates/", ".json", 1024 * 1024),
         MODEL("models/", ".json", 1024 * 1024),
         TEXTURE("textures/", ".png", 8 * 1024 * 1024),
+        TEXTURE_META("textures/", ".png.mcmeta", 64*1024),
+        RAW_ASSET("", "", 4*1024*1024),
         BANNER_PATTERN("banner_pattern/", ".json", 64*1024);
 
         private final String folder;

@@ -154,19 +154,21 @@ class BlockModelResolverTest {
             assertFallback(INVALID_MODEL, STATE, SIMPLE_STATE.replace("\"\":", "\"" + selector + "\":"), Map.of());
         assertFallback(NO_VARIANT, STATE, SIMPLE_STATE.replace("\"\":", "\"axis=x|z\":"), Map.of());
         assertFallback(INVALID_MODEL, MODEL, model(cube()).replace("\"cullface\":\"up\"", "\"uv\":[0,0,16],\"cullface\":\"up\""), Map.of());
-        assertFallback(UNSUPPORTED_MODEL, MODEL, model(cube()).replace("\"cullface\":\"up\"", "\"uv\":[0,0,17,16],\"cullface\":\"up\""), Map.of());
+        assertFallback(LIMIT_EXCEEDED, MODEL, model(cube()).replace("\"cullface\":\"up\"", "\"uv\":[0,0,257,16],\"cullface\":\"up\""), Map.of());
         assertFallback(INVALID_MODEL, MODEL, model(cube()).replace("\"up\":", "\"unknown\":"), Map.of());
         try(var archive=open(Map.of(MODEL,model("[]")))) {
             assertTrue(new BlockModelResolver(archive).resolve(state(Map.of())).model().orElseThrow().faces().isEmpty());
         }
     }
 
-    @Test void childElementsReplaceParentElementsAndUnusedTextureCyclesAreVisible() throws Exception {
+    @Test void childElementsReplaceParentsAndOnlyReferencedTexturesAreResolved() throws Exception {
         try (var archive = open(Map.of(PARENT, model("[]"), MODEL,
                 model(cube()).replace("\"textures\":", "\"parent\":\"block/base\",\"textures\":")))) {
             assertTrue(new BlockModelResolver(archive).resolve(state(Map.of())).resolved());
         }
-        assertFallback(REFERENCE_CYCLE, MODEL, model(cube()).replace("\"all\":", "\"particle\":\"#particle\",\"all\":"), Map.of());
+        try(var archive=open(Map.of(MODEL,model(cube()).replace("\"all\":", "\"particle\":\"#particle\",\"unused\":\"#missing\",\"all\":")))) {
+            assertTrue(new BlockModelResolver(archive).resolve(state(Map.of())).resolved(),"未引用的编辑器变量不影响实际几何");
+        }
     }
 
     @Test void propagatesClosedAndChangedArchiveInsteadOfCachingStaleModels() throws Exception {

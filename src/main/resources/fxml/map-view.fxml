@@ -59,7 +59,8 @@
                     <MenuButton fx:id="viewerTextureMenu" text="纹理：自动" mnemonicParsing="false">
                         <items>
                             <MenuItem text="手动选择 JAR" onAction="#handleViewerTexture"/>
-                            <MenuItem text="自动匹配原版资源" onAction="#handleViewerAutomaticTexture"/>
+                            <MenuItem text="自动匹配资源" onAction="#handleViewerAutomaticTexture"/>
+                            <MenuItem text="手动选择游戏目录…" onAction="#handleViewerResourceInstance"/>
                             <MenuItem text="使用简化颜色" onAction="#handleViewerSimpleColors"/>
                         </items>
                     </MenuButton>
@@ -67,9 +68,13 @@
                            accessibleText="纹理选择帮助">
                         <tooltip>
                             <Tooltip wrapText="true" maxWidth="360.0" styleClass="viewer-texture-tooltip"
-                                     text="默认自动匹配存档版本对应的本机原版资源。&#10;&#10;未找到时，选择“手动选择 JAR”，指向与存档版本对应的 Minecraft Java 客户端 JAR。&#10;&#10;常见位置（以 1.21.1 为例）：游戏目录下的&#10;.minecraft\versions\1.21.1\1.21.1.jar&#10;部分启动器的游戏目录直接包含 versions 文件夹。&#10;&#10;请选择客户端 JAR，不要选择存档文件夹、Mod 或服务端 JAR。按存档版本尝试加载；未兼容的方块会降级。没有对应资源时，可选择“使用简化颜色”。"/>
+                                     text="默认按存档版本尝试加载本机原版资源，并从所属游戏目录读取 Mod 和已启用资源包。选择“自动匹配资源”可清除该存档的手动 JAR 和游戏目录绑定，重新自动查找。&#10;&#10;未找到时，选择“手动选择 JAR”，指向与存档版本对应的 Minecraft Java 客户端 JAR。&#10;&#10;常见位置（以 1.21.1 为例）：游戏目录下的&#10;.minecraft\versions\1.21.1\1.21.1.jar&#10;部分启动器的游戏目录直接包含 versions 文件夹。&#10;&#10;“手动选择 JAR”请选择原版客户端，不要选择 Mod 或服务端。&#10;&#10;Mod 未自动匹配时，使用“手动选择游戏目录”，指向包含 mods、resourcepacks 或 saves 的游戏目录，不是某个 Mod JAR。可在旁边的“资源诊断”查看来源与降级原因。按存档版本尝试加载；未兼容的方块会降级。没有对应资源时，可选择“使用简化颜色”。"/>
                         </tooltip>
                     </Label>
+                    <Button fx:id="viewerResourceDiagnosticsButton" text="资源诊断" mnemonicParsing="false"
+                            onAction="#handleViewerResourceDiagnostics" disable="${viewerTextureMenu.disable}">
+                        <tooltip><Tooltip text="查看最近一次三维预览的资源来源、降级原因与静态近似说明。"/></tooltip>
+                    </Button>
                 </HBox>
                 <Label fx:id="viewerSelectionLabel" text="在地图上点击以锁定三维区域" wrapText="true"
                        minHeight="0.0" maxHeight="44.0" maxWidth="300.0"/>

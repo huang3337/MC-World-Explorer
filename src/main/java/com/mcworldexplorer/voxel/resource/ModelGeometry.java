@@ -12,7 +12,8 @@ final class ModelGeometry {
         double[] b = {face.to().x(),face.to().y(),face.to().z()};
         List<Float> positions = new ArrayList<>(12);
         for (int i=0;i<4;i++) {
-            double[] v = {a[0]+p[i*3]*(b[0]-a[0]),a[1]+p[i*3+1]*(b[1]-a[1]),a[2]+p[i*3+2]*(b[2]-a[2])};
+            double[] v = face.vertices().isEmpty()?new double[]{a[0]+p[i*3]*(b[0]-a[0]),a[1]+p[i*3+1]*(b[1]-a[1]),a[2]+p[i*3+2]*(b[2]-a[2])}:
+                new double[]{face.vertices().get(i).x(),face.vertices().get(i).y(),face.vertices().get(i).z()};
             var r = face.elementRotation();
             if (r != null) {
                 double[] origin = {r.origin().x(),r.origin().y(),r.origin().z()};
@@ -41,6 +42,9 @@ final class ModelGeometry {
         float[][] corners=horizontal?new float[][]{{0,0},{0,1},{1,1},{1,0}}:new float[][]{{0,1},{1,1},{1,0},{0,0}};
         List<Float> uv=new ArrayList<>(8);
         for(int i=0;i<4;i++) {
+            if(!face.vertexUv().isEmpty()) {
+                uv.add((float)face.vertexUv().get(i).u());uv.add((float)face.vertexUv().get(i).v());continue;
+            }
             float u=corners[i][0],v=corners[i][1];
             if(part.uvLock()) {
                 // Express transformed positions in the destination face's unrotated texture basis.

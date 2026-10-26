@@ -17,6 +17,7 @@ final class BuiltinBlockModels implements BlockResourceSource {
     void note(BlockState state,String detail){notes.computeIfAbsent(state,ignored->new LinkedHashSet<>()).add(detail);}
 
     BuiltinBlockModels(BlockResourceSource source,Map<String,BlockEntityData> entities){this.source=source;this.entities=Map.copyOf(entities);}
+    @Override public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return source.origin(kind,id);}
     @Override public void validate()throws IOException{source.validate();}
     @Override public ClientResourceArchive.Fingerprint fingerprint(){return source.fingerprint();}
     @Override public Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id)throws IOException{return kind==ResourceLocation.Kind.TEXTURE&&generated.containsKey(id)?Optional.of(generated.get(id)):source.read(kind,id);}

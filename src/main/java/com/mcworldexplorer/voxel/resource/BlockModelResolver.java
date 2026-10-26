@@ -22,9 +22,15 @@ public final class BlockModelResolver {
     public record Uv(double u0, double v0, double u1, double v1) { }
     public record Vec3(double x, double y, double z) { }
     public record ElementRotation(Vec3 origin, String axis, double angle, boolean rescale) { }
+    public record TexCoord(double u,double v) { }
     public record Face(Direction direction, ResourceLocation texture, Uv uv, int rotation,
                        int tintIndex, Direction cullFace, int layer, Vec3 from, Vec3 to,
-                       ElementRotation elementRotation, boolean shade) { }
+                       ElementRotation elementRotation, boolean shade,List<Vec3> vertices,List<TexCoord> vertexUv,float opacity) {
+        public Face(Direction direction,ResourceLocation texture,Uv uv,int rotation,int tintIndex,Direction cullFace,int layer,Vec3 from,Vec3 to,ElementRotation elementRotation,boolean shade) {
+            this(direction,texture,uv,rotation,tintIndex,cullFace,layer,from,to,elementRotation,shade,List.of(),List.of(),1);
+        }
+        public Face {vertices=List.copyOf(vertices);vertexUv=List.copyOf(vertexUv);}
+    }
     public record Part(ResourceLocation id, int xRotation, int yRotation, boolean uvLock, List<Face> faces, String renderType, Vec3 offset) {
         public Part(ResourceLocation id,int x,int y,boolean uvLock,List<Face> faces,String renderType) {
             this(id,x,y,uvLock,faces,renderType,new Vec3(0,0,0));
@@ -102,21 +108,8 @@ public final class BlockModelResolver {
                 int x = rotation(variant, "x"), y = rotation(variant, "y");
                 if (variant.has("weight") && integer(variant.get("weight")) <= 0)
                     throw fail(Reason.INVALID_MODEL, "weight 必须为正整数");
-                Map<String, String> textures = new HashMap<>();
-                String[] renderType={null};
-                var elements = inherit(modelId, textures, new LinkedHashSet<>(), sources, renderType);
-                if(renderType[0]!=null&&!Set.of("minecraft:solid","minecraft:cutout","minecraft:cutout_mipped","minecraft:translucent","minecraft:tripwire").contains(renderType[0]))
-                    throw fail(Reason.UNSUPPORTED_MODEL,"自定义材质类型尚未适配："+renderType[0]);
-                if(elements==null) {
-                    Optional<List<Part>> builtin;
-                    try{builtin=((BuiltinBlockModels)archive).resolve(state,textures);}
-                    catch(ResourceAccessException sourceFailure){throw sourceFailure;}
-                    catch(IOException invalidAppearance){throw fail(Reason.INVALID_MODEL,"特殊外观准备失败："+invalidAppearance.getMessage());}
-                    if(builtin.isEmpty())builtin=Optional.of(List.of(new Part(modelId,x,y,bool(variant,"uvlock",false),List.of(),renderType[0])));
-                    parts.addAll(builtin.orElseThrow());
-                    for(var face:builtin.orElseThrow().stream().flatMap(part->part.faces().stream()).toList()){var reference=new Source(ResourceLocation.Kind.TEXTURE,face.texture());if(!sources.contains(reference))sources.add(reference);}
-                } else parts.add(new Part(modelId, x, y, bool(variant, "uvlock", false), faces(elements, textures, sources), renderType[0]));
-                if(parts.stream().mapToInt(part->part.faces().size()).sum()>1024)throw fail(Reason.LIMIT_EXCEEDED,"组合模型面数超过 1024");
+                parts.addAll(resolveParts(modelId,null,state,x,y,bool(variant,"uvlock",false),0,new LinkedHashSet<>(),sources,Map.of()));
+                if(parts.stream().mapToInt(part->part.faces().size()).sum()>8192)throw fail(Reason.LIMIT_EXCEEDED,"组合模型面数超过 8192");
             }
             if(parts.isEmpty())parts.add(new Part(block,0,0,false,List.of(),null));
             if("true".equals(state.properties().get("waterlogged"))) {
@@ -128,7 +121,7 @@ public final class BlockModelResolver {
             }
             Part first = parts.getFirst();
             var allFaces = parts.stream().flatMap(part -> part.faces().stream()).toList();
-            if (allFaces.size() > 1024) throw fail(Reason.LIMIT_EXCEEDED, "组合模型面数超过 1024");
+            if (allFaces.size() > 8192) throw fail(Reason.LIMIT_EXCEEDED, "组合模型面数超过 8192");
             return new Result(Reason.RESOLVED, fixed ? "已解析；随机候选固定选择第一项" : "已解析",
                     Optional.of(new Model(first.id(), first.xRotation(), first.yRotation(), first.uvLock(), allFaces, fixed, parts)),
                     sources, archive.fingerprint());
@@ -137,39 +130,108 @@ public final class BlockModelResolver {
         } finally { archive.validate(); }
     }
 
-    private JsonArray inherit(ResourceLocation model, Map<String, String> textures,
-                              Set<ResourceLocation> chain, List<Source> sources, String[] renderType) throws IOException, Failure {
-        if (model.namespace().equals("minecraft") && model.path().startsWith("builtin/"))
-            throw fail(Reason.UNSUPPORTED_MODEL, "需要内置特殊渲染：" + model);
-        if (!chain.add(model)) throw fail(Reason.REFERENCE_CYCLE, "父模型循环：" + model);
-        if (chain.size() > MAX_PARENT_DEPTH) throw fail(Reason.LIMIT_EXCEEDED, "父模型层数超过上限");
-        JsonObject json = read(ResourceLocation.Kind.MODEL, model, sources);
-        fields(json, Set.of("parent", "textures", "elements", "ambientocclusion", "display", "gui_light", "render_type", "__comment", "texture_size", "name", "groups"),
-                Reason.UNSUPPORTED_MODEL);
-        bool(json, "ambientocclusion", true); // Existing preview uses directional light, not Minecraft AO.
-        JsonArray elements = null;
-        if (json.has("parent")) elements = inherit(id(string(json.get("parent"))), textures, chain, sources, renderType);
-        if (json.has("render_type"))renderType[0]=id(string(json.get("render_type"))).toString();
-        if (json.has("textures")) {
-            JsonObject local = object(json.get("textures"));
-            for (var entry : local.entrySet()) {
-                variable(entry.getKey());
-                textures.put(entry.getKey(), string(entry.getValue()));
-                if (textures.size() > MAX_TEXTURES) throw fail(Reason.LIMIT_EXCEEDED, "纹理变量过多");
+    private static final Set<String> MODEL_FIELDS=Set.of("textures","elements","ambientocclusion","display","gui_light","render_type","__comment","texture_size","name","groups","credit","format_version","Comment","ambient_occlusion");
+    private JsonObject inherit(ResourceLocation model,Set<ResourceLocation> chain,List<Source> sources)throws IOException,Failure {
+        if(model.namespace().equals("minecraft")&&model.path().startsWith("builtin/"))throw fail(Reason.UNSUPPORTED_MODEL,"需要内置特殊渲染："+model);
+        if(!chain.add(model))throw fail(Reason.REFERENCE_CYCLE,"父模型循环："+model);
+        if(chain.size()>MAX_PARENT_DEPTH)throw fail(Reason.LIMIT_EXCEEDED,"父模型层数超过上限");
+        var json=read(ResourceLocation.Kind.MODEL,model,sources);var parent=new JsonObject();
+        if(json.has("parent"))parent=inherit(id(string(json.get("parent"))),chain,sources);
+        chain.remove(model);return merge(parent,json);
+    }
+    private static boolean equivalentLoaders(String first,String second)throws Failure {
+        var a=id(first);var b=id(second);
+        return a.equals(b)||(Set.of("forge","neoforge","porting_lib").contains(a.namespace())
+            &&Set.of("forge","neoforge","porting_lib").contains(b.namespace())&&a.path().equals(b.path()));
+    }
+    private static JsonObject merge(JsonObject parent,JsonObject child) {
+        var result=new JsonObject();for(var entry:parent.entrySet())result.add(entry.getKey(),entry.getValue());
+        for(var entry:child.entrySet()) {
+            if(entry.getKey().equals("parent"))continue;
+            if(Set.of("textures","children","visibility").contains(entry.getKey())&&result.has(entry.getKey())&&result.get(entry.getKey()).isJsonObject()&&entry.getValue().isJsonObject()) {
+                var values=new JsonObject();for(var item:result.getAsJsonObject(entry.getKey()).entrySet())values.add(item.getKey(),item.getValue());
+                for(var item:entry.getValue().getAsJsonObject().entrySet())values.add(item.getKey(),item.getValue());result.add(entry.getKey(),values);
+            }else result.add(entry.getKey(),entry.getValue());
+        }
+        return result;
+    }
+    private List<Part> resolveParts(ResourceLocation model,JsonObject inline,BlockState state,int x,int y,boolean uvLock,
+            int depth,Set<ResourceLocation> chain,List<Source> sources,Map<String,String> inheritedTextures)throws IOException,Failure {
+        if(depth>=MAX_PARENT_DEPTH)throw fail(Reason.LIMIT_EXCEEDED,"组合模型引用超过 32 层");
+        ResourceLocation tracked=inline==null?model:inline.has("parent")?id(string(inline.get("parent"))):null;
+        if(tracked!=null&&!chain.add(tracked))throw fail(Reason.REFERENCE_CYCLE,"组合模型引用循环："+tracked);
+        try {
+            JsonObject definition=inline==null?inherit(model,new LinkedHashSet<>(),sources):merge(tracked==null?new JsonObject():inherit(tracked,new LinkedHashSet<>(),sources),inline);
+            String loader=definition.has("loader")?string(definition.get("loader")):definition.has("porting_lib:loader")?string(definition.get("porting_lib:loader")):null;
+            if(definition.has("loader")&&definition.has("porting_lib:loader")&&!equivalentLoaders(loader,string(definition.get("porting_lib:loader"))))throw fail(Reason.INVALID_MODEL,"模型 loader 声明冲突");
+            Set<String> allowed=new HashSet<>(MODEL_FIELDS);String kind="standard";
+            if(loader!=null) {
+                allowed.add("loader");allowed.add("porting_lib:loader");var loaderId=id(loader);
+                if(Set.of("neoforge","forge","porting_lib").contains(loaderId.namespace()))kind=loaderId.path();
+                else if(loader.equals("framework:open_model"))kind="open_model";
+                else throw fail(Reason.UNSUPPORTED_MODEL,"尚未支持的模型 loader："+loader);
+                switch(kind) {
+                    case "obj" -> allowed.addAll(Set.of("model","flip_v","mtl_override","automatic_culling","shade_quads","emissive_ambient","visibility"));
+                    case "composite" -> allowed.addAll(Set.of("children","visibility"));
+                    case "elements","empty" -> { }
+                    case "separate_transforms" -> allowed.addAll(Set.of("base","perspectives"));
+                    case "open_model" -> allowed.add("components");
+                    default -> throw fail(Reason.UNSUPPORTED_MODEL,"尚未支持的模型 loader："+loader);
+                }
             }
-        }
-        if (json.has("elements")) {
-            if (!json.get("elements").isJsonArray()) throw fail(Reason.INVALID_MODEL, "elements 必须为数组");
-            elements = json.getAsJsonArray("elements");
-        }
-        chain.remove(model);
-        return elements;
+            fields(definition,allowed,Reason.UNSUPPORTED_MODEL);bool(definition,"ambientocclusion",true);bool(definition,"ambient_occlusion",true);
+            Map<String,String> textures=new HashMap<>(inheritedTextures);
+            if(definition.has("textures"))for(var entry:object(definition.get("textures")).entrySet()){variable(entry.getKey());textures.put(entry.getKey(),string(entry.getValue()));if(textures.size()>MAX_TEXTURES)throw fail(Reason.LIMIT_EXCEEDED,"纹理变量过多");}
+            String renderType=definition.has("render_type")?id(string(definition.get("render_type"))).toString():null;
+            if(renderType!=null&&!Set.of("minecraft:solid","minecraft:cutout","minecraft:cutout_mipped","minecraft:translucent","minecraft:tripwire").contains(renderType))throw fail(Reason.UNSUPPORTED_MODEL,"自定义材质类型尚未适配："+renderType);
+            if(kind.equals("empty"))return List.of(new Part(model,x,y,uvLock,List.of(),renderType));
+            if(kind.equals("composite")) {
+                var children=object(definition.get("children"));if(children.size()>MAX_VARIANTS)throw fail(Reason.LIMIT_EXCEEDED,"组合子模型超过 256 项");
+                var visibility=definition.has("visibility")?object(definition.get("visibility")):new JsonObject();List<Part> result=new ArrayList<>();
+                for(var child:children.entrySet())if(bool(visibility,child.getKey(),true)) {
+                    result.addAll(resolveParts(model,object(child.getValue()),state,x,y,uvLock,depth+1,chain,sources,textures));
+                    if(result.stream().mapToInt(part->part.faces().size()).sum()>8192)throw fail(Reason.LIMIT_EXCEEDED,"组合模型面数超过 8192");
+                }
+                return defaultRenderType(result,renderType);
+            }
+            if(kind.equals("separate_transforms"))return defaultRenderType(resolveParts(model,object(definition.get("base")),state,x,y,uvLock,depth+1,chain,sources,textures),renderType);
+            if(kind.equals("obj")) {
+                try {
+                    bool(definition,"automatic_culling",true);bool(definition,"emissive_ambient",true);
+                    if(uvLock)throw fail(Reason.UNSUPPORTED_MODEL,"OBJ 的 uvlock 需加载器专用 UV 变换，当前未支持");
+                    var faces=new ObjModelReader(archive,sources,textures).read(definition);
+                    ((BuiltinBlockModels)archive).note(state,"OBJ 使用静态几何与平面法线，保留所有面；环境/镜面光照与运行时部件变化未还原");
+                    return List.of(new Part(model,x,y,false,faces,renderType));
+                }catch(ResourceAccessException sourceFailure){if(sourceFailure.scope()==ResourceAccessException.Scope.RESOURCE)throw fail(Reason.LIMIT_EXCEEDED,sourceFailure.getMessage());throw sourceFailure;}
+                catch(ObjModelReader.Problem problem){throw fail(problem.reason,problem.getMessage());}
+                catch(IOException invalid){throw fail(Reason.INVALID_MODEL,"OBJ/MTL 读取失败："+invalid.getMessage());}
+            }
+            JsonElement elements=definition.get(kind.equals("open_model")?"components":"elements");
+            if(elements!=null){if(!elements.isJsonArray())throw fail(Reason.INVALID_MODEL,"模型元素必须为数组");return List.of(new Part(model,x,y,uvLock,faces(elements.getAsJsonArray(),textures,sources),renderType));}
+            if(depth==0&&loader==null) {
+                Optional<List<Part>> builtin;
+                try{builtin=((BuiltinBlockModels)archive).resolve(state,textures);}
+                catch(ResourceAccessException sourceFailure){if(sourceFailure.scope()==ResourceAccessException.Scope.RESOURCE)throw fail(Reason.LIMIT_EXCEEDED,sourceFailure.getMessage());throw sourceFailure;}
+                catch(IOException invalid){throw fail(Reason.INVALID_MODEL,"特殊外观准备失败："+invalid.getMessage());}
+                if(builtin.isPresent()) {
+                    for(var part:builtin.orElseThrow())for(var face:part.faces()){var reference=new Source(ResourceLocation.Kind.TEXTURE,face.texture());if(!sources.contains(reference))sources.add(reference);}
+                    return builtin.orElseThrow();
+                }
+                if(!id(state.name()).namespace().equals("minecraft"))((BuiltinBlockModels)archive).note(state,"资源未提供静态元素几何；若依赖运行时渲染器需额外适配："+model);
+            }
+            return List.of(new Part(model,x,y,uvLock,List.of(),renderType));
+        }catch(IllegalStateException|UnsupportedOperationException|NumberFormatException invalid){if(invalid instanceof java.util.concurrent.CancellationException)throw invalid;throw fail(Reason.INVALID_MODEL,"模型字段数据无效："+invalid.getMessage());}
+        finally{if(tracked!=null)chain.remove(tracked);}
+    }
+
+    private static List<Part> defaultRenderType(List<Part> parts,String type) {
+        if(type==null)return parts;
+        return parts.stream().map(part->part.renderType()!=null?part:new Part(part.id(),part.xRotation(),part.yRotation(),part.uvLock(),part.faces(),type,part.offset())).toList();
     }
 
     private List<Face> faces(JsonArray elements, Map<String, String> textures, List<Source> sources) throws Failure {
         if (elements == null) throw fail(Reason.UNSUPPORTED_MODEL, "资源未声明元素几何，需要特殊渲染或空模型语义");
         if (elements.size() > 128) throw fail(Reason.LIMIT_EXCEEDED, "模型元素超过 128 项");
-        for (String key : textures.keySet()) texture("#" + key, textures);
         List<Face> result = new ArrayList<>();
         for (int layer = 0; layer < elements.size(); layer++) {
             JsonObject element = object(elements.get(layer));
@@ -204,10 +266,10 @@ public final class BlockModelResolver {
                 Uv uv = defaultUv(direction, from, to);
                 if (face.has("uv")) {
                     JsonArray a = array(face.get("uv"), 4);
-                    uv = new Uv(coordinate(a.get(0)), coordinate(a.get(1)), coordinate(a.get(2)), coordinate(a.get(3)));
+                    uv = new Uv(number(a.get(0)), number(a.get(1)), number(a.get(2)), number(a.get(3)));
                 }
                 for (double coordinate : new double[]{uv.u0(), uv.v0(), uv.u1(), uv.v1()})
-                    if (coordinate < 0 || coordinate > 16) throw fail(Reason.UNSUPPORTED_MODEL, "UV 需要纹理重复采样，尚未支持");
+                    if (Math.abs(coordinate)>256) throw fail(Reason.LIMIT_EXCEEDED,"UV 坐标超出 -256..256 预算");
                 int tint = face.has("tintindex") ? integer(face.get("tintindex")) : -1;
                 if (tint < -1 || tint > 255) throw fail(Reason.LIMIT_EXCEEDED, "tintindex 超出范围");
                 Direction cull=null;
@@ -271,7 +333,7 @@ public final class BlockModelResolver {
                     if (entry.getKey().equals("OR")) aggregate |= result; else aggregate &= result;
                 }
                 match &= aggregate;
-            } else match &= alternatives(string(entry.getValue()), properties.get(entry.getKey()));
+            } else match &= alternatives(propertyValue(entry.getValue()), properties.get(entry.getKey()));
         }
         return match;
     }
@@ -279,7 +341,9 @@ public final class BlockModelResolver {
     private JsonObject read(ResourceLocation.Kind kind, ResourceLocation id, List<Source> sources) throws IOException, Failure {
         Source key=new Source(kind,id);sources.add(key);
         var cached=parsedJson.get(key);if(cached!=null)return cached.value();
-        String text = archive.readJson(kind, id).orElseThrow(() -> fail(Reason.MISSING_RESOURCE, "缺少资源：" + id.entryName(kind)));
+        String text;
+        try{text=archive.readJson(kind,id).orElseThrow(()->fail(Reason.MISSING_RESOURCE,"缺少资源："+id.entryName(kind)));}
+        catch(ResourceAccessException invalid){if(invalid.reason()==ResourceAccessException.Reason.INVALID_METADATA)throw fail(Reason.INVALID_JSON,invalid.getMessage());if(invalid.scope()==ResourceAccessException.Scope.RESOURCE)throw fail(Reason.LIMIT_EXCEEDED,invalid.getMessage());throw invalid;}
         try (JsonReader reader = new JsonReader(new StringReader(text))) {
             reader.setStrictness(Strictness.STRICT);
             reader.setNestingLimit(32);
@@ -333,6 +397,10 @@ public final class BlockModelResolver {
         if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isString())
             throw fail(Reason.INVALID_MODEL, "需要字符串");
         return e.getAsString();
+    }
+    private static String propertyValue(JsonElement value)throws Failure {
+        if(value==null||!value.isJsonPrimitive())throw fail(Reason.INVALID_MODEL,"属性条件必须为字符串或基本值");
+        String result=value.getAsString();if(result.length()>256)throw fail(Reason.LIMIT_EXCEEDED,"属性条件过长");return result;
     }
     private static int integer(JsonElement e) throws Failure {
         if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber())

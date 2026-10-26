@@ -23,11 +23,24 @@ class TexturedOpenGlIntegrationTest {
     @Test void rendersSpecialFamiliesWithDistinctEntityAppearances() throws Exception {
         validate(SpecialModelScene.area(),"native-special-models.png");
     }
-    private void validate(com.mcworldexplorer.voxel.io.VoxelAreaLoadResult area,String filename) throws Exception {
+    @Test void rendersRealModObjCompositeAndRectangularSprites() throws Exception {
+        assumeTrue("1".equals(System.getenv("MCWORLD_GL_TEXTURE_TEST"))&&System.getenv("MCWORLD_MOD_INSTANCE_DIR")!=null);
+        var blocks=new java.util.ArrayList<com.mcworldexplorer.voxel.data.BlockState>();
+        for(String axis:java.util.List.of("x","y","z"))blocks.add(new com.mcworldexplorer.voxel.data.BlockState("create:crushing_wheel",java.util.Map.of("axis",axis)));
+        blocks.add(new com.mcworldexplorer.voxel.data.BlockState("create:display_link",java.util.Map.of("facing","north","powered","false")));
+        blocks.add(new com.mcworldexplorer.voxel.data.BlockState("create:andesite_casing",java.util.Map.of()));
+        blocks.add(new com.mcworldexplorer.voxel.data.BlockState("refurbished_furniture:oak_light_ceiling_fan",java.util.Map.of("facing","up","powered","false","lit","false")));
+        validate(GenericModelScene.area(blocks,java.util.List.of()),"native-mod-instance.png",true);
+    }
+    private void validate(com.mcworldexplorer.voxel.io.VoxelAreaLoadResult area,String filename)throws Exception {validate(area,filename,false);}
+    private void validate(com.mcworldexplorer.voxel.io.VoxelAreaLoadResult area,String filename,boolean modInstance) throws Exception {
         assumeTrue("1".equals(System.getenv("MCWORLD_GL_TEXTURE_TEST")),"原生 GL 仅显式启用");
         String path=System.getenv("MCWORLD_CLIENT_RESOURCE_JAR");assumeTrue(path!=null);
-        try(var archive=ClientResourceArchive.open(Path.of(path),"1.21.1")) {
+        try(var archive=modInstance?InstanceResourceSource.open(area.world(),Path.of(path),"1.21.1",Path.of(System.getenv("MCWORLD_MOD_INSTANCE_DIR")),CancellationSignal.NONE,message->{}):ClientResourceArchive.open(Path.of(path),"1.21.1")) {
             var textures=BlockTextureSet.load(archive,area,CancellationSignal.NONE);
+            if(modInstance)for(var result:area.results().values())if(result.chunk()!=null)for(var section:result.chunk().sections())for(int z=0;z<16;z++)for(int x=0;x<16;x++) {
+                var state=section.blockState(x,1,z);if(!state.name().equals("minecraft:air"))assertNotNull(textures.surfaces(state),state+": "+textures.fallbackReason(state));
+            }
             var scene=new VoxelSceneBuilder(textures).build(area,CancellationSignal.NONE).snapshot().orElseThrow();
             assertTrue(glfwInit(),"GLFW initialization failed");
             long window=0;
@@ -35,7 +48,7 @@ class TexturedOpenGlIntegrationTest {
                 glfwDefaultWindowHints();glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
                 glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
                 glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);
-                window=glfwCreateWindow(960,720,"V0.7.2 model validation",0,0);assertNotEquals(0,window);
+                window=glfwCreateWindow(960,720,"model validation",0,0);assertNotEquals(0,window);
                 glfwMakeContextCurrent(window);GL.createCapabilities();
                 int[] width={0},height={0};glfwGetFramebufferSize(window,width,height);
                 glViewport(0,0,width[0],height[0]);glEnable(GL_DEPTH_TEST);glEnable(GL_CULL_FACE);

@@ -25,7 +25,8 @@ public final class LayeredResourceSource implements BlockResourceSource {
         if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException();
         for(var source:sources){var value=source.read(kind,id);if(value.isPresent()){
             byte[] data=value.orElseThrow();
-            if(data.length>kind.maxBytes()||bytesRead+data.length>ClientResourceArchive.MAX_SESSION_READ_BYTES)
+            if(data.length>kind.maxBytes())throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"单个叠加资源超过读取预算",ResourceAccessException.Scope.RESOURCE);
+            if(bytesRead+data.length>ClientResourceArchive.MAX_SESSION_READ_BYTES)
                 throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"资源源叠加读取超过预算");
             bytesRead+=data.length;return Optional.of(data);
         }}return Optional.empty();
