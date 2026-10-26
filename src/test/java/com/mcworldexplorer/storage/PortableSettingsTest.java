@@ -28,6 +28,24 @@ class PortableSettingsTest {
     }
 
     @Test
+    void remembersResourceBindingsPerWorldAndVersionWithoutLosingOtherPreferences() throws Exception {
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY,tempDir.resolve("app").toString());
+        PortableSettings settings=new PortableSettings();
+        Path a=tempDir.resolve("世界甲"),b=tempDir.resolve("世界乙"),jar=tempDir.resolve("客户端.jar");
+        settings.saveCustomSavesPath(tempDir);
+        settings.saveViewerPerformanceProfile("enhanced");
+        settings.saveClientResourcePath(a,"1.21.1",jar);
+        settings.saveClientResourcePath(b,"1.21.1",jar);
+        assertEquals(jar.toAbsolutePath(),new PortableSettings().loadClientResourcePath(a,"1.21.1").orElseThrow());
+        assertTrue(settings.loadClientResourcePath(a,"1.20.1").isEmpty());
+        settings.saveClientResourcePath(a,"1.21.1",null);
+        assertTrue(settings.loadClientResourcePath(a,"1.21.1").isEmpty());
+        assertEquals(jar.toAbsolutePath(),settings.loadClientResourcePath(b,"1.21.1").orElseThrow());
+        assertEquals(tempDir.toAbsolutePath(),settings.loadCustomSavesPath().orElseThrow());
+        assertEquals("enhanced",settings.loadViewerPerformanceProfile().orElseThrow());
+    }
+
+    @Test
     void missingSettingsDoNotCreateConfigDirectory() throws IOException {
         Path applicationRoot = Files.createDirectory(tempDir.resolve("app"));
         System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, applicationRoot.toString());

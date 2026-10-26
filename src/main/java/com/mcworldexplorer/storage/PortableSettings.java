@@ -62,6 +62,31 @@ public final class PortableSettings {
         saveProperties(properties);
     }
 
+    public Optional<Path> loadClientResourcePath(Path world, String version) throws IOException {
+        String value = loadProperties().getProperty(resourceKey(world, version));
+        if (value == null || value.isBlank()) return Optional.empty();
+        try { return Optional.of(Path.of(value).toAbsolutePath().normalize()); }
+        catch (InvalidPathException e) { throw new IOException("保存的客户端资源路径无效", e); }
+    }
+
+    public synchronized void saveClientResourcePath(Path world, String version, Path path) throws IOException {
+        Properties properties = loadProperties();
+        String key = resourceKey(world, version);
+        if (path == null) properties.remove(key);
+        else properties.setProperty(key, path.toAbsolutePath().normalize().toString());
+        saveProperties(properties);
+    }
+
+    private static String resourceKey(Path world, String version) {
+        java.util.Objects.requireNonNull(world, "world");
+        if (version == null || version.isBlank()) throw new IllegalArgumentException("version must not be blank");
+        String identity = world.toAbsolutePath().normalize() + "\0" + version;
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(identity.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return "client_resource." + java.util.HexFormat.of().formatHex(hash);
+        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
+
     private static Path settingsFile() {
         return PortablePaths.configDirectory().resolve(SETTINGS_FILE_NAME);
     }

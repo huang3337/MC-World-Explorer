@@ -1,5 +1,6 @@
 package com.mcworldexplorer.viewer;
 
+import com.mcworldexplorer.voxel.resource.TextureAtlas;
 import com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot;
 
 import java.util.LinkedHashMap;
@@ -103,9 +104,10 @@ public final class ViewerSceneCache {
 
     public static long estimatedBytes(VoxelSceneSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot");
-        long vertexBytes = Math.multiplyExact((long) snapshot.vertexCount(), 6L * Float.BYTES);
+        long vertexBytes = snapshot.chunks().stream().flatMap(chunk -> chunk.batches().stream())
+                .mapToLong(batch -> Math.multiplyExact((long) batch.vertexCount(), (batch.textured() ? 8L : 6L) * Float.BYTES)).sum();
         long indexBytes = Math.multiplyExact((long) snapshot.indexCount(), Integer.BYTES);
-        return Math.addExact(vertexBytes, indexBytes);
+        return Math.addExact(Math.addExact(vertexBytes, indexBytes), snapshot.atlas().map(TextureAtlas::estimatedBytes).orElse(0L));
     }
 
     private void setLimits(int maxEntries, long maxBytes) {

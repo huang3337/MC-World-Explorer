@@ -1,8 +1,8 @@
 # Issue 编号对照清单
 
-- **更新日期**：2026-10-25
-- **当前问题总数**：102
-- **当前编号前缀数**：47
+- **更新日期**：2026-10-26
+- **当前问题总数**：105
+- **当前编号前缀数**：48
 
 本文件用于快速确定新问题应使用的编号。问题详情仍以 `docs/issues/` 和 `docs/issues/resolved/` 中的逐文件审查记录为准。
 
@@ -16,7 +16,7 @@
 | `MainController.java` | `CONTROLLER` | `001-016` | `ISSUE-CONTROLLER-016` | `ISSUE-CONTROLLER-017` |
 | `WorldDimensionDiscovery.java` | `DISCOVERY` | `001-002` | `ISSUE-DISCOVERY-002` | `ISSUE-DISCOVERY-003` |
 | `main.fxml` | `FXML` | `001-005` | `ISSUE-FXML-005` | `ISSUE-FXML-006` |
-| `map-view.fxml` | `MAPFXML` | `001` | `ISSUE-MAPFXML-001` | `ISSUE-MAPFXML-002` |
+| `map-view.fxml` | `MAPFXML` | `001-002` | `ISSUE-MAPFXML-002` | `ISSUE-MAPFXML-003` |
 | `PreviewGenerator.java` | `GENERATOR` | `001-002` | `ISSUE-GENERATOR-002` | `ISSUE-GENERATOR-003` |
 | `DimensionHeightResolver.java` | `HEIGHT` | `001-002` | `ISSUE-HEIGHT-002` | `ISSUE-HEIGHT-003` |
 | `PreviewLayer.java` | `LAYER` | `001` | `ISSUE-LAYER-001` | `ISSUE-LAYER-002` |
@@ -24,7 +24,7 @@
 | `MapTileGenerator.java` | `MAPGEN` | `001` | `ISSUE-MAPGEN-001` | `ISSUE-MAPGEN-002` |
 | `MapTileScheduler.java` | `MAPSCHED` | `001-002` | `ISSUE-MAPSCHED-002` | `ISSUE-MAPSCHED-003` |
 | `MapTileService.java` | `MAPSERVICE` | `001` | `ISSUE-MAPSERVICE-001` | `ISSUE-MAPSERVICE-002` |
-| `MapViewerController.java` | `MAPVIEW` | `001-003` | `ISSUE-MAPVIEW-003` | `ISSUE-MAPVIEW-004` |
+| `MapViewerController.java` | `MAPVIEW` | `001-004` | `ISSUE-MAPVIEW-004` | `ISSUE-MAPVIEW-005` |
 | `MapViewport.java` | `VIEWPORT` | `001-002` | `ISSUE-VIEWPORT-002` | `ISSUE-VIEWPORT-003` |
 | `WorldListCell.java` | `LISTCELL` | `001-003` | `ISSUE-LISTCELL-003` | `ISSUE-LISTCELL-004` |
 | `PortablePaths.java` | `PORTABLE` | `001` | `ISSUE-PORTABLE-001` | `ISSUE-PORTABLE-002` |
@@ -57,6 +57,7 @@
 | `VoxelPreviewCoordinator.java` | `VCOORD` | `001` | `ISSUE-VCOORD-001` | `ISSUE-VCOORD-002` |
 | `ViewerAreaList.java` | `VAREALIST` | `001` | `ISSUE-VAREALIST-001` | `ISSUE-VAREALIST-002` |
 | `ViewerAreaThumbnail.java` | `VTHUMB` | `001` | `ISSUE-VTHUMB-001` | `ISSUE-VTHUMB-002` |
+| `WorkspaceLayoutTest.java` | `WORKSPACETEST` | `001` | `ISSUE-WORKSPACETEST-001` | `ISSUE-WORKSPACETEST-002` |
 
 ## 使用规则
 

@@ -1,5 +1,7 @@
 package com.mcworldexplorer.voxel.mesh;
 
+import com.mcworldexplorer.voxel.resource.BlockModelResolver.Direction;
+import com.mcworldexplorer.voxel.resource.BlockTextureSet;
 import com.mcworldexplorer.voxel.data.BlockState;
 import com.mcworldexplorer.voxel.data.ChunkCoordinate;
 import com.mcworldexplorer.voxel.data.ChunkSection;
@@ -16,6 +18,9 @@ import java.util.List;
 import java.util.Map;
 
 public final class ChunkMesher {
+    private final BlockTextureSet textures;
+    public ChunkMesher() { this(null); }
+    public ChunkMesher(BlockTextureSet textures) { this.textures = textures; }
     public ChunkMeshSnapshot build(
             VoxelAreaLoadResult area,
             ChunkCoordinate target,
@@ -42,6 +47,8 @@ public final class ChunkMesher {
 
         for (ChunkSection section : chunk.sections()) {
             int sectionBaseY = Math.multiplyExact(section.sectionY(), 16);
+            Map<BlockState, Map<Direction, BlockTextureSet.Surface>> sectionTextures = new HashMap<>();
+            Map<BlockState, String> sectionFallbacks = new HashMap<>();
             for (int localY = 0; localY < 16; localY++) {
                 if (cancellation.isCancelled() || Thread.currentThread().isInterrupted()) {
                     throw new java.util.concurrent.CancellationException("mesh generation cancelled");
@@ -64,8 +71,20 @@ public final class ChunkMesher {
                                             state.name()))
                                     .increment();
                         }
+                        if (textures != null && !sectionTextures.containsKey(state)) {
+                            var faces = textures.surfaces(state);
+                            sectionTextures.put(state, faces);
+                            if (faces == null) sectionFallbacks.put(state, state.name() + ": " + textures.fallbackReason(state));
+                        }
+                        var texturedFaces = sectionTextures.get(state);
+                        if (textures != null && texturedFaces == null) {
+                            String detail = sectionFallbacks.get(state);
+                            warnings.computeIfAbsent("texture:" + detail, ignored -> new WarningAccumulator(
+                                    MeshWarning.Code.TEXTURE_FALLBACK, target, detail)).increment();
+                        }
                         MaterialKey key = new MaterialKey(
-                                classification.layer(), classification.rgb(), classification.alpha());
+                                classification.layer(), texturedFaces == null ? classification.rgb() : 0xFFFFFF,
+                                classification.alpha(), texturedFaces != null);
                         BatchBuilder builder = builders.computeIfAbsent(key, BatchBuilder::new);
                         builder.addBlock();
                         long worldX = originX + localX;
@@ -86,7 +105,9 @@ public final class ChunkMesher {
                                         .increment();
                             }
                             if (visibleFace(state, classification, neighbor)) {
-                                builder.addFace(face, localX, y, localZ);
+                                if (texturedFaces == null) builder.addFace(face, localX, y, localZ);
+                                else builder.addTexturedFace(face, texturedFaces.get(
+                                        Direction.valueOf(face.name())), localX, y, localZ);
                                 bounds.include(localX, y, localZ);
                             }
                         }
@@ -178,7 +199,7 @@ public final class ChunkMesher {
         }
     }
 
-    private record MaterialKey(RenderLayer layer, int rgb, float alpha) {
+    private record MaterialKey(RenderLayer layer, int rgb, float alpha, boolean textured) {
     }
 
     private static final class BatchBuilder {
@@ -187,6 +208,7 @@ public final class ChunkMesher {
         private final MaterialKey material;
         private final FloatBuffer positions = new FloatBuffer();
         private final FloatBuffer normals = new FloatBuffer();
+        private final FloatBuffer uv = new FloatBuffer();
         private final IntBuffer indices = new IntBuffer();
         private int blockCount;
 
@@ -213,6 +235,18 @@ public final class ChunkMesher {
             }
         }
 
+        private void addTexturedFace(Face face, BlockTextureSet.Surface surface, int x, int y, int z) {
+            int base = positions.size() / 3;
+            for (int i = 0; i < 4; i++) {
+                positions.add(x + surface.positions().get(i*3));
+                positions.add(y + surface.positions().get(i*3+1));
+                positions.add(z + surface.positions().get(i*3+2));
+                normals.add(face.normalX); normals.add(face.normalY); normals.add(face.normalZ);
+                uv.add(surface.uv().get(i*2)); uv.add(surface.uv().get(i*2+1));
+            }
+            for (int index : FACE_INDICES) indices.add(base + index);
+        }
+
         private MeshBatch build() {
             return new MeshBatch(
                     material.layer(),
@@ -221,7 +255,7 @@ public final class ChunkMesher {
                     blockCount,
                     positions.toArray(),
                     normals.toArray(),
-                    indices.toArray());
+                    indices.toArray(), uv.toArray());
         }
     }
 

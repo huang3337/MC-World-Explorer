@@ -99,6 +99,141 @@ class WorkspaceLayoutTest {
     }
 
     @Test
+    void switchingWorldOrChoosingSimpleColorsDiscardsAnOlderLookup() throws Exception {
+        withWorkspace(root -> {
+            MapViewerController controller=(MapViewerController)root.getProperties().get("mapViewerController");
+            var roots=MapViewerController.class.getDeclaredField("clientResourceRoots");roots.setAccessible(true);
+            CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);
+            roots.set(controller,(java.util.function.Supplier<java.util.List<Path>>)()->{
+                entered.countDown();
+                try { release.await(3,TimeUnit.SECONDS); } catch(InterruptedException e) { Thread.currentThread().interrupt(); }
+                return java.util.List.of(home);
+            });
+            WorldInfo first=new WorldInfo(home.resolve("first"));first.setParsed(true);first.setVersionName("1.21.1");
+            controller.setWorld(first);
+            awaitFx(()->entered.getCount()==0);
+            MenuButton menu=(MenuButton)root.lookup("#viewerTextureMenu");
+            menu.getItems().getLast().fire();
+            assertEquals("纹理：简化颜色",menu.getText());
+            WorldInfo second=new WorldInfo(home.resolve("second"));second.setParsed(true);second.setVersionName("1.20.1");
+            controller.setWorld(second);release.countDown();
+            awaitFx(()->menu.getTooltip()!=null && menu.getTooltip().getText().contains("1.20.1"));
+            assertEquals("纹理：简化颜色",menu.getText());
+        });
+    }
+
+    @Test
+    void realWorldAutomaticallySelectsItsClientAndCanReturnToAutomaticMode() throws Exception {
+        String configured=System.getenv("MCWORLD_UI_TEST_WORLD");
+        assumeTrue(configured!=null && !configured.isBlank());
+        withWorkspace(root -> {
+            selectWorld(root, LevelDatReader.readLevelDat(Path.of(configured)));
+            MenuButton menu=(MenuButton)root.lookup("#viewerTextureMenu");
+            assertEquals("纹理：自动 · 1.21.1",menu.getText());
+            assertTrue(menu.getTooltip().getText().contains("1.21.1.jar"));
+            ((ToggleButton)root.lookup("#viewerModeButton")).fire();
+            root.applyCss(); root.layout();
+            var viewport=(MapViewport)((StackPane)root.lookup("#viewportHost")).getChildren().getFirst();
+            awaitFx(viewport::hasCompleteTargetCoverage);
+            snapshotIfRequested(root,"resource-auto-matched.png");
+            String configuredJar=System.getenv("MCWORLD_CLIENT_RESOURCE_JAR");
+            if (configuredJar != null) {
+                var controller=(MapViewerController)root.getProperties().get("mapViewerController");
+                var lookup=MapViewerController.class.getDeclaredMethod("startViewerResourceLookup",Path.class,boolean.class);
+                lookup.setAccessible(true);lookup.invoke(controller,Path.of(configuredJar),false);
+                awaitFx(()->menu.getText().equals("纹理：原版 1.21.1"));
+                assertEquals(Path.of(configuredJar).toRealPath(),new PortableSettings().loadClientResourcePath(Path.of(configured),"1.21.1").orElseThrow());
+            }
+            menu.getItems().getLast().fire();
+            assertEquals("纹理：简化颜色",menu.getText());
+            menu.getItems().get(1).fire();
+            awaitFx(() -> menu.getText().equals("纹理：自动 · 1.21.1"));
+            assertTrue(menu.getTooltip().getText().contains("自动匹配"));
+            assertTrue(new PortableSettings().loadClientResourcePath(Path.of(configured),"1.21.1").isEmpty());
+        });
+    }
+
+    @Test
+    void textureMenuFollowsExistingViewerToolbarAndKeepsSimpleMode() throws Exception {
+        withWorkspace(root -> {
+            // This is a toolbar layout test; do not start unrelated asynchronous map writes.
+            root.lookup("#viewerSelectionBar").setManaged(true);
+            root.lookup("#viewerSelectionBar").setVisible(true);
+            MenuButton menu = (MenuButton) root.lookup("#viewerTextureMenu");
+            assertNotNull(menu);
+            assertEquals("纹理：自动", menu.getText());
+            Label help = (Label) root.lookup("#viewerTextureHelp");
+            assertNotNull(help);
+            assertEquals(menu.getParent(), help.getParent(), "帮助入口须与纹理菜单一起换行");
+            assertNotNull(help.getTooltip());
+            assertTrue(help.getTooltip().isWrapText());
+            assertTrue(help.getTooltip().getText().contains(".minecraft\\versions\\1.21.1\\1.21.1.jar"));
+            assertTrue(help.getTooltip().getText().contains("按存档版本尝试加载"));
+            assertEquals(3, menu.getItems().size());
+            assertEquals("手动选择 JAR", menu.getItems().getFirst().getText());
+            assertNotNull(menu.getItems().getFirst().getOnAction());
+            menu.getItems().getLast().fire();
+            assertEquals("纹理：简化颜色", menu.getText());
+            root.applyCss(); root.layout();
+            var bounds = menu.localToScene(menu.getBoundsInLocal());
+            assertTrue(bounds.getMaxX() <= 901);
+            assertTrue(root.lookup("#viewportHost").getBoundsInLocal().getHeight() >= 160);
+            snapshotIfRequested(root, "texture-toolbar-900x600.png");
+            Stage stage = new Stage();
+            stage.setOpacity(0);
+            stage.setX(-10000);
+            stage.setScene(root.getScene());
+            try {
+                stage.show();
+                menu.show();
+                for (Window window : java.util.List.copyOf(Window.getWindows())) {
+                    if (window instanceof PopupWindow && window.isShowing()) {
+                        window.setOpacity(0);
+                        Parent popup = window.getScene().getRoot();
+                        popup.applyCss(); popup.layout();
+                        for (var node : popup.lookupAll(".menu-item .label")) {
+                            Label label = (Label) node;
+                            var rendered = (javafx.scene.text.Text) label.lookup(".text");
+                            assertEquals(label.getText(), rendered.getText(), "纹理菜单文字不能被省略");
+                            assertTrue(label.getWidth() + 1 >= label.prefWidth(-1), "纹理菜单宽度不足");
+                            assertTrue(label.getHeight() + 1 >= label.prefHeight(-1), "纹理菜单高度不足");
+                        }
+                        snapshotIfRequested(popup,"texture-menu-expanded.png");
+                    }
+                }
+                menu.hide();
+                help.fireEvent(new MouseEvent(MouseEvent.MOUSE_ENTERED, 0, 0, 0, 0,
+                        MouseButton.NONE, 0, false, false, false, false,
+                        false, false, false, false, false, false, null));
+                assertTrue(help.getTooltip().isShowing());
+                var helpBounds = help.localToScreen(help.getBoundsInLocal());
+                var helpTip = help.getTooltip();
+                assertTrue(helpTip.getY() >= helpBounds.getMaxY() + 7
+                        || helpTip.getY() + helpTip.getHeight() <= helpBounds.getMinY() - 7,
+                        "气泡不得覆盖问号，避免触发反复进出");
+                help.getTooltip().setOpacity(0);
+                Parent tip = help.getTooltip().getScene().getRoot();
+                tip.applyCss(); tip.layout();
+                assertTrue(tip.getLayoutBounds().getWidth() <= 361, "气泡须按最大宽度换行");
+                assertTrue(tip.getLayoutBounds().getHeight() > 100, "帮助内容须完整展开");
+                snapshotIfRequested(tip, "texture-help-tooltip.png");
+                var hiddenDuringHover = new java.util.concurrent.atomic.AtomicBoolean();
+                long hoverUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(6);
+                awaitFx(() -> {
+                    if (!helpTip.isShowing()) hiddenDuringHover.set(true);
+                    return System.nanoTime() >= hoverUntil;
+                });
+                assertFalse(hiddenDuringHover.get(), "持续悬停超过默认显示时长仍应保持气泡");
+                help.fireEvent(new MouseEvent(MouseEvent.MOUSE_EXITED, 0, 0, 0, 0,
+                        MouseButton.NONE, 0, false, false, false, false,
+                        false, false, false, false, false, false, null));
+                assertFalse(helpTip.isShowing(), "离开问号后应关闭气泡");
+            } finally { help.getTooltip().hide(); menu.hide(); stage.close(); }
+
+        });
+    }
+
+    @Test
     void openingDetailsDoesNotResizeMapAndSidebarCanBeRestored() throws Exception {
         withWorkspace(root -> {
             double mapWidth = root.lookup("#viewportHost").getBoundsInLocal().getWidth();
@@ -607,7 +742,7 @@ class WorkspaceLayoutTest {
                 root.layout();
                 drag(viewport.lookup("Canvas"), 100, 80, 220, 136, MouseButton.PRIMARY);
                 assertTrue(viewport.viewerLockedSelection().isPresent());
-                assertFalse(((Button) root.lookup("#viewerConfirmButton")).isDisabled());
+                awaitFx(() -> !((Button) root.lookup("#viewerConfirmButton")).isDisabled());
                 snapshotIfRequested(root, "free-selection-real-world.png");
                 System.out.printf("JavaFX real world %s: empty application cache first full tile=%dms, "
                                 + "viewport complete=%dms; disk-cache reopen first full tile=%dms, "
@@ -642,6 +777,10 @@ class WorkspaceLayoutTest {
         TreeItem<WorldTreeNode> item = new TreeItem<>(WorldTreeNode.world(world));
         tree.getRoot().getChildren().add(item);
         tree.getSelectionModel().select(item);
+        awaitFx(() -> {
+            String text = ((MenuButton) root.lookup("#viewerTextureMenu")).getText();
+            return !text.equals("纹理：查找中") && !text.equals("纹理：校验中");
+        });
     }
 
     private void loadEmptyTestWorld(Parent root) throws Exception {
@@ -699,8 +838,9 @@ class WorkspaceLayoutTest {
     }
 
     private void withWorkspace(Path scanPath, WorkspaceCheck check) throws Exception {
+        String previousHome = System.getProperty("mcworldexplorer.home");
+        var closingScheduler = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.ExecutorService>();
         FutureTask<Void> task = new FutureTask<>(() -> {
-            String previousHome = System.getProperty("mcworldexplorer.home");
             MainController controller = null;
             try {
                 System.setProperty("mcworldexplorer.home", home.toString());
@@ -710,6 +850,15 @@ class WorkspaceLayoutTest {
                 Parent root = loader.load();
                 controller = loader.getController();
                 root.getProperties().put("mapViewerController", loader.getNamespace().get("mapViewerController"));
+                MapViewerController mapController = (MapViewerController) root.getProperties().get("mapViewerController");
+                var resourceRoots = MapViewerController.class.getDeclaredField("clientResourceRoots");
+                resourceRoots.setAccessible(true);
+                resourceRoots.set(mapController, (java.util.function.Supplier<java.util.List<Path>>) () -> java.util.List.of(home));
+                var schedulerField = MapViewerController.class.getDeclaredField("scheduler");
+                schedulerField.setAccessible(true);
+                var executorField = com.mcworldexplorer.map.MapTileScheduler.class.getDeclaredField("executor");
+                executorField.setAccessible(true);
+                closingScheduler.set((java.util.concurrent.ExecutorService) executorField.get(schedulerField.get(mapController)));
                 Scene scene = new Scene(root, 900, 600);
                 scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
                 root.applyCss();
@@ -720,16 +869,20 @@ class WorkspaceLayoutTest {
                 if (controller != null) {
                     controller.shutdown();
                 }
-                if (previousHome == null) {
-                    System.clearProperty("mcworldexplorer.home");
-                } else {
-                    System.setProperty("mcworldexplorer.home", previousHome);
-                }
             }
             return null;
         });
         Platform.runLater(task);
-        task.get(60, TimeUnit.SECONDS);
+        try { task.get(60, TimeUnit.SECONDS); }
+        finally {
+            try {
+                var executor = closingScheduler.get();
+                if (executor != null) assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS), "地图缓存写入线程尚未停止");
+            } finally {
+                if (previousHome == null) System.clearProperty("mcworldexplorer.home");
+                else System.setProperty("mcworldexplorer.home", previousHome);
+            }
+        }
     }
 
     private static void snapshotIfRequested(Parent root, String name) throws Exception {

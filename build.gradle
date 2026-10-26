@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.mcworldexplorer'
-version = '0.7.0'
+version = '0.7.1'
 
 repositories {
     maven { url 'https://maven.aliyun.com/repository/public/' }
@@ -36,6 +36,7 @@ tasks.register('runV04JavaFx', JavaExec) {
 
 dependencies {
     implementation 'net.kyori:adventure-nbt:4.17.0'
+    implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'org.slf4j:slf4j-api:2.0.13'
     implementation platform('org.lwjgl:lwjgl-bom:3.4.1')
     implementation 'org.lwjgl:lwjgl'

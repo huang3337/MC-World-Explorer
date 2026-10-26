@@ -55,6 +55,22 @@
             <children>
                 <Label text="范围"/><ComboBox fx:id="viewerRangeComboBox" prefWidth="112.0"/>
                 <Label text="性能"/><ComboBox fx:id="viewerProfileComboBox" prefWidth="92.0"/>
+                <HBox alignment="CENTER_LEFT" spacing="6.0">
+                    <MenuButton fx:id="viewerTextureMenu" text="纹理：自动" mnemonicParsing="false">
+                        <items>
+                            <MenuItem text="手动选择 JAR" onAction="#handleViewerTexture"/>
+                            <MenuItem text="自动匹配原版资源" onAction="#handleViewerAutomaticTexture"/>
+                            <MenuItem text="使用简化颜色" onAction="#handleViewerSimpleColors"/>
+                        </items>
+                    </MenuButton>
+                    <Label fx:id="viewerTextureHelp" text="?" styleClass="viewer-texture-help"
+                           accessibleText="纹理选择帮助">
+                        <tooltip>
+                            <Tooltip wrapText="true" maxWidth="360.0" styleClass="viewer-texture-tooltip"
+                                     text="默认自动匹配存档版本对应的本机原版资源。&#10;&#10;未找到时，选择“手动选择 JAR”，指向与存档版本对应的 Minecraft Java 客户端 JAR。&#10;&#10;常见位置（以 1.21.1 为例）：游戏目录下的&#10;.minecraft\versions\1.21.1\1.21.1.jar&#10;部分启动器的游戏目录直接包含 versions 文件夹。&#10;&#10;请选择客户端 JAR，不要选择存档文件夹、Mod 或服务端 JAR。按存档版本尝试加载；未兼容的方块会降级。没有对应资源时，可选择“使用简化颜色”。"/>
+                        </tooltip>
+                    </Label>
+                </HBox>
                 <Label fx:id="viewerSelectionLabel" text="在地图上点击以锁定三维区域" wrapText="true"
                        minHeight="0.0" maxHeight="44.0" maxWidth="300.0"/>
                 <ProgressBar fx:id="viewerProgressBar" managed="false" visible="false" prefWidth="120.0" progress="-1.0"/>
