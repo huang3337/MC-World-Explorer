@@ -8,6 +8,7 @@ public interface BlockResourceSource {
     Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id) throws IOException;
     Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id) throws IOException;
     ClientResourceArchive.Fingerprint fingerprint();
+    default Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return Optional.empty();}
     /** Recheck mutable backing sources before/after using cached parsed resources. */
     default void validate() throws IOException { }
 }

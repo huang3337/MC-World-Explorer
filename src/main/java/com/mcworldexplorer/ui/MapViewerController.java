@@ -67,6 +67,8 @@ import javafx.geometry.Pos;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
+import javafx.stage.DirectoryChooser;
+import javafx.scene.control.TextArea;
 import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,6 +131,8 @@ public final class MapViewerController {
     private List<ViewerCachedArea> viewerCachedPreviews = List.of();
     private ViewerAreaList viewerAreaList;
     private Path viewerResourcePath;
+    private Path viewerResourceInstance;
+    private String viewerResourceDiagnostic="尚未生成三维区域";
     private long viewerResourceLookupId;
     private Task<ClientResourceLocator.Result> viewerResourceLookup;
     private java.util.function.Supplier<List<Path>> clientResourceRoots = this::defaultClientResourceRoots;
@@ -316,7 +320,10 @@ public final class MapViewerController {
             statusLabel.setText("该存档无法生成地图");
             return;
         }
-        startViewerResourceLookup(null, false);
+        try {
+            viewerResourceInstance=portableSettings.loadResourceInstancePath(world.getFolderPath(),world.getVersionName()).filter(java.nio.file.Files::isDirectory).orElse(null);
+        }catch(IOException invalid){LOGGER.warn("忽略不可用的资源实例绑定",invalid);}
+        startViewerResourceLookup(null);
         try {
             List<WorldDimension> dimensions = WorldDimensionDiscovery.discover(world);
             updatingControls = true;
@@ -340,6 +347,7 @@ public final class MapViewerController {
     public void clear() {
         cancelViewerResourceLookup();
         viewerResourcePath = null;
+        viewerResourceInstance=null;viewerResourceDiagnostic="尚未生成三维区域";
         if (viewerTextureMenu != null) { viewerTextureMenu.setText("纹理：自动"); viewerTextureMenu.setTooltip(null); }
         if (mapPlaceholder != null) {
             mapPlaceholder.setVisible(true);
@@ -815,7 +823,7 @@ public final class MapViewerController {
             viewerCoordinator = new VoxelPreviewCoordinator(
                     new LwjglViewerWindow(), viewerProfile);
         }
-        viewerCoordinator.setResource(viewerResourcePath, world.getVersionName());
+        viewerCoordinator.setResource(viewerResourcePath, world.getVersionName(),viewerResourceInstance);
         return viewerCoordinator;
     }
 
@@ -827,7 +835,7 @@ public final class MapViewerController {
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("客户端 JAR", "*.jar"));
         File selected = chooser.showOpenDialog(viewportHost.getScene().getWindow());
         if (selected == null) return;
-        startViewerResourceLookup(selected.toPath(), false);
+        startViewerResourceLookup(selected.toPath());
     }
 
     @FXML
@@ -840,7 +848,64 @@ public final class MapViewerController {
 
     @FXML
     private void handleViewerAutomaticTexture(ActionEvent event) {
-        if (!viewerTaskRunning && !shuttingDown) startViewerResourceLookup(null, true);
+        if(world==null||!world.isParsed()||viewerTaskRunning||shuttingDown)return;
+        cancelViewerResourceLookup();
+        try{portableSettings.clearResourceBindings(world.getFolderPath(),world.getVersionName());}
+        catch(IOException failure){
+            viewerTextureMenu.setText(viewerResourcePath==null?"纹理：简化颜色":"纹理：手动资源");
+            viewerSelectionLabel.setText("恢复自动匹配失败："+shortMessage(failure));return;
+        }
+        viewerResourceInstance=null;
+        setViewerResource(null);
+        updateViewerAreaList(List.of());
+        viewerResourceDiagnostic="已恢复自动匹配资源，重新生成后显示诊断";
+        startViewerResourceLookup(null);
+    }
+
+    @FXML private void handleViewerResourceInstance(ActionEvent event) {
+        if(world==null||viewerTaskRunning||shuttingDown)return;
+        DirectoryChooser chooser=new DirectoryChooser();chooser.setTitle("选择存档所属的游戏目录（包含 mods、resourcepacks 或 saves）");
+        if(viewerResourceInstance!=null&&java.nio.file.Files.isDirectory(viewerResourceInstance))chooser.setInitialDirectory(viewerResourceInstance.toFile());
+        File selected=chooser.showDialog(viewportHost.getScene().getWindow());if(selected==null)return;
+        Path path=selected.toPath().toAbsolutePath().normalize();
+        if(java.util.stream.Stream.of("mods","resourcepacks","saves","options.txt").noneMatch(name->java.nio.file.Files.exists(path.resolve(name)))) {
+            viewerSelectionLabel.setText("请选择游戏目录，包含 mods、resourcepacks、saves 或 options.txt");return;
+        }
+        changeResourceInstance(path);
+    }
+    private void changeResourceInstance(Path path) {
+        try{portableSettings.saveResourceInstancePath(world.getFolderPath(),world.getVersionName(),path);}
+        catch(IOException failure){viewerSelectionLabel.setText("游戏目录绑定保存失败："+shortMessage(failure));return;}
+        viewerResourceInstance=path;
+        if(viewerCoordinator!=null)viewerCoordinator.setResource(viewerResourcePath,world.getVersionName(),path);
+        viewerCacheInspectionId++;updateViewerAreaList(List.of());
+        viewerResourceDiagnostic="游戏目录已改变，重新生成后显示诊断";
+        viewerSelectionLabel.setText("已选择游戏目录，可重新生成三维区域");
+        if(viewerLockedSelection!=null)viewerConfirmButton.setText("生成三维预览");
+        viewerTextureMenu.setTooltip(new Tooltip("游戏目录："+path));
+    }
+    @FXML private void handleViewerResourceDiagnostics(ActionEvent event) {
+        Alert dialog=new Alert(Alert.AlertType.INFORMATION);dialog.setTitle("三维资源诊断");dialog.setHeaderText("当前区域的资源来源与降级原因");
+        dialog.initOwner(viewportHost.getScene().getWindow());dialog.setResizable(true);
+        TextArea text=new TextArea(viewerResourceDiagnostic);text.setEditable(false);text.setWrapText(true);text.setPrefColumnCount(82);text.setPrefRowCount(22);
+        dialog.getDialogPane().setContent(text);dialog.showAndWait();
+    }
+    private static String resourceDiagnostics(ViewerTaskResult result) {
+        var warnings=result.snapshot().warnings();StringBuilder text=new StringBuilder("区域：").append(result.request().world()).append("\n");
+        warnings.stream().filter(w->w.code()==MeshWarning.Code.RESOURCE_CONTEXT||w.code()==MeshWarning.Code.RESOURCE_WARNING).forEach(w->text.append(w.detail()).append('\n'));
+        java.util.Map<String,Long> counts=new java.util.LinkedHashMap<>();
+        var failures=warnings.stream().filter(w->w.code()==MeshWarning.Code.TEXTURE_FALLBACK).sorted(java.util.Comparator.comparingInt(MeshWarning::occurrences).reversed()).toList();
+        for(var failure:failures) {
+            String detail=failure.detail();String group=detail.contains("MISSING_RESOURCE")||detail.contains("缺少 PNG")?"缺少资源":detail.contains("LIMIT_EXCEEDED")||detail.contains("超过")||detail.contains("超限")?"预算限制":detail.contains("UNSUPPORTED_MODEL")?"未支持模型表达":detail.contains("INVALID_")?"非法资源": "其他解析失败";
+            counts.merge(group,(long)failure.occurrences(),Long::sum);
+        }
+        text.append("\n使用简化颜色的方块：").append(failures.stream().mapToLong(MeshWarning::occurrences).sum()).append('\n');
+        counts.forEach((group,count)->text.append(group).append("：").append(count).append('\n'));
+        text.append("\n具体原因（按方块出现次数，最多 100 项）：\n");
+        failures.stream().limit(100).forEach(w->text.append(w.occurrences()).append(" × ").append(w.detail()).append('\n'));
+        text.append("\n资源引用抽样（最多 128 项）：\n");warnings.stream().filter(w->w.code()==MeshWarning.Code.RESOURCE_ORIGIN).limit(128).forEach(w->text.append(w.detail()).append('\n'));
+        text.append("\n静态近似（最多 30 项）：\n");warnings.stream().filter(w->w.code()==MeshWarning.Code.MODEL_APPROXIMATION).limit(30).forEach(w->text.append(w.detail()).append('\n'));
+        return text.toString();
     }
 
     private List<Path> defaultClientResourceRoots() {
@@ -860,7 +925,7 @@ public final class MapViewerController {
         viewerResourceLookup = null;
     }
 
-    private void startViewerResourceLookup(Path explicit, boolean resetBinding) {
+    private void startViewerResourceLookup(Path explicit) {
         cancelViewerResourceLookup();
         if (world == null || !world.isParsed() || shuttingDown) return;
         long lookupId = viewerResourceLookupId;
@@ -875,14 +940,11 @@ public final class MapViewerController {
                     try (var archive = ClientResourceArchive.open(explicit, version)) {
                         if (isCancelled()) throw new java.util.concurrent.CancellationException();
                         Path selected = archive.fingerprint().path();
-                        String message = "已选择本地原版资源，并记住该存档与版本的绑定";
-                        try { portableSettings.saveClientResourcePath(worldPath, version, selected); }
-                        catch (IOException e) { LOGGER.warn("资源绑定保存失败", e); message = "资源可用，但绑定保存失败：" + shortMessage(e); }
+                        String message = "已选择本地原版资源";
                         return new ClientResourceLocator.Result(ClientResourceLocator.Status.FOUND,
                                 java.util.Optional.of(selected), message, 1);
                     }
                 }
-                if (resetBinding) portableSettings.saveClientResourcePath(worldPath, version, null);
                 java.util.Optional<Path> binding;
                 try { binding = portableSettings.loadClientResourcePath(worldPath, version); }
                 catch (IOException e) { LOGGER.warn("忽略无效资源绑定", e); binding = java.util.Optional.empty(); }
@@ -895,10 +957,15 @@ public final class MapViewerController {
                     || !world.getFolderPath().toAbsolutePath().normalize().equals(worldPath)) return;
             viewerResourceLookup = null;
             var result = task.getValue();
+            String message=result.message();
+            if(explicit!=null&&result.path().isPresent()) {
+                try{portableSettings.saveClientResourcePath(worldPath,version,result.path().orElseThrow());message+="，并记住该存档与版本的绑定";}
+                catch(IOException failure){LOGGER.warn("资源绑定保存失败",failure);message+="，但绑定保存失败："+shortMessage(failure);}
+            }
             setViewerResource(result.path().orElse(null));
             if (result.path().isPresent() && explicit == null) viewerTextureMenu.setText("纹理：自动 · " + version);
-            viewerTextureMenu.setTooltip(new Tooltip(result.message() + result.path().map(path -> "\n" + path).orElse("")));
-            if (viewerLockedSelection == null && viewport.isViewerSelectionMode()) viewerSelectionLabel.setText(result.message().split("\n")[0]);
+            viewerTextureMenu.setTooltip(new Tooltip(message + result.path().map(path -> "\n" + path).orElse("")));
+            if (viewerLockedSelection == null && viewport.isViewerSelectionMode()) viewerSelectionLabel.setText(message.split("\n")[0]);
             refreshViewerCachedAreas();
         });
         task.setOnFailed(event -> {
@@ -915,7 +982,7 @@ public final class MapViewerController {
     private void setViewerResource(Path path) {
         boolean changed = !Objects.equals(viewerResourcePath, path);
         viewerResourcePath = path;
-        if (viewerCoordinator != null) viewerCoordinator.setResource(path, world.getVersionName());
+        if (viewerCoordinator != null) viewerCoordinator.setResource(path, world.getVersionName(),viewerResourceInstance);
         viewerCacheInspectionId++;
         if (changed) updateViewerAreaList(List.of());
         viewerTextureMenu.setText(path == null ? "纹理：简化颜色" : "纹理：原版 " + world.getVersionName());
@@ -1008,6 +1075,7 @@ public final class MapViewerController {
         if (requestId != activeViewerRequestId) {
             return;
         }
+        viewerResourceDiagnostic=resourceDiagnostics(result);
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
         activeViewerTarget = null;
@@ -1021,14 +1089,15 @@ public final class MapViewerController {
         String state = result.fromCache() ? "已打开缓存中的三维预览" : "三维预览已打开";
         if (result.snapshot().atlas().isPresent() && viewerTextureMenu != null) {
             String details = result.snapshot().warnings().stream()
-                    .filter(w -> w.code() == MeshWarning.Code.TEXTURE_FALLBACK || w.code() == MeshWarning.Code.MODEL_APPROXIMATION)
+                    .filter(w -> w.code() == MeshWarning.Code.TEXTURE_FALLBACK || w.code() == MeshWarning.Code.MODEL_APPROXIMATION || w.code()==MeshWarning.Code.RESOURCE_WARNING)
                     .limit(8).map(MeshWarning::detail)
                     .collect(java.util.stream.Collectors.joining("\n"));
             viewerTextureMenu.setTooltip(new Tooltip(viewerResourcePath
+                    + "\n"+result.snapshot().warnings().stream().filter(w->w.code()==MeshWarning.Code.RESOURCE_CONTEXT).map(MeshWarning::detail).findFirst().orElse("")
                     + "\n按选区模型匹配纹理；草色使用固定近似值，随机外观固定选择第一项。"
                     + (details.isEmpty() ? "" : "\n本次近似或简化显示说明（最多 8 项）：\n" + details)));
         }
-        if (result.snapshot().atlas().isPresent()) state += "，原版纹理" + (fallbackBlocks > 0 ? "（" + fallbackBlocks + " 个方块使用简化颜色）" : "");
+        if (result.snapshot().atlas().isPresent()) state += "，资源纹理" + (fallbackBlocks > 0 ? "（" + fallbackBlocks + " 个方块使用简化颜色）" : "");
         if (result.partialSuccess()) state += "，" + result.failedChunks() + " 个区块读取失败";
         clearViewerSelection(state + "；可继续选择其他区域");
     }

@@ -3,6 +3,8 @@ package com.mcworldexplorer.viewer;
 import java.nio.file.Path;
 import com.mcworldexplorer.voxel.resource.ResourceLocation;
 import com.mcworldexplorer.voxel.resource.ClientResourceArchive;
+import com.mcworldexplorer.voxel.resource.InstanceResourceSource;
+import com.mcworldexplorer.voxel.resource.BlockResourceSource;
 import com.mcworldexplorer.voxel.resource.BlockTextureSet;
 import com.mcworldexplorer.voxel.io.CancellationSignal;
 import com.mcworldexplorer.voxel.io.ChunkLoadStatus;
@@ -25,7 +27,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class VoxelPreviewCoordinator implements AutoCloseable {
-    public static final String RENDER_VERSION = "v072-models-entities-r3";
+    public static final String RENDER_VERSION = "v073-instance-resources-r1";
 
     private final ExecutorService executor;
     private final ViewerSceneCache cache;
@@ -38,6 +40,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
     private boolean closed;
     private Path resourcePath;
     private String resourceVersion;
+    private Path resourceInstance;
     private long resourceRevision;
 
     public VoxelPreviewCoordinator(ViewerWindow window, ViewerPerformanceProfile profile) {
@@ -82,7 +85,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             if (previous != null) {
                 previous.cancel();
             }
-            current = new ActiveRequest(++nextRequestId, request, listener, resourcePath, resourceVersion);
+            current = new ActiveRequest(++nextRequestId, request, listener, resourcePath, resourceVersion,resourceInstance);
             active = current;
             cache.setProfile(request.profile());
             try {
@@ -127,21 +130,24 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         cache.remove(key);
     }
 
-    public synchronized void setResource(Path path, String version) {
+    public synchronized void setResource(Path path,String version) {setResource(path,version,null);}
+    public synchronized void setResource(Path path, String version,Path instance) {
         requireOpen();
         Path selected = path == null ? null : path.toAbsolutePath().normalize();
         if (selected != null && (version == null || version.isBlank()))
             throw new IllegalArgumentException("需要存档版本以校验客户端资源");
         String selectedVersion = selected == null ? null : version;
-        if (Objects.equals(selected, resourcePath) && Objects.equals(selectedVersion, resourceVersion)) return;
+        Path selectedInstance=instance==null?null:instance.toAbsolutePath().normalize();
+        if (Objects.equals(selected, resourcePath) && Objects.equals(selectedVersion, resourceVersion)&&Objects.equals(selectedInstance,resourceInstance)) return;
         cancel();
         resourcePath = selected;
         resourceVersion = selectedVersion;
+        resourceInstance=selectedInstance;
         resourceRevision++;
         cache.clear();
     }
 
-    private static String renderIdentity(ClientResourceArchive archive) {
+    private static String renderIdentity(BlockResourceSource archive) {
         return archive == null ? RENDER_VERSION : RENDER_VERSION + "|" + archive.fingerprint();
     }
 
@@ -149,18 +155,18 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         List<ViewerAreaKey> valid = new ArrayList<>();
         Path path;
         String version;
-        long revision;
-        synchronized (this) { path = resourcePath; version = resourceVersion; revision = resourceRevision; }
-        String identity;
-        try (var archive = path == null ? null : ClientResourceArchive.open(path, version)) {
-            identity = renderIdentity(archive);
-        } catch (IOException e) {
-            synchronized (this) { if (revision == resourceRevision) cache.clear(); }
-            return List.of();
-        }
+        long revision;Path instance;
+        synchronized (this) { path = resourcePath; version = resourceVersion; revision = resourceRevision;instance=resourceInstance; }
+        java.util.Map<Path,String> identities=new java.util.HashMap<>();
         for (ViewerAreaKey key : cache.keys()) {
             RegionSourceSignature signature = null;
-            try { if (key.renderVersion().equals(identity)) signature = signatureProvider.capture(key); }
+            try {
+                String identity=identities.get(key.world());
+                if(identity==null)try(var archive=path==null?null:InstanceResourceSource.open(key.world(),path,version,instance,CancellationSignal.NONE,message->{})) {
+                    identity=renderIdentity(archive);identities.put(key.world(),identity);
+                }
+                if (key.renderVersion().equals(identity)) signature = signatureProvider.capture(key);
+            }
             catch (Exception ignored) { /* Remove invalid entries only if this resource selection is still current. */ }
             synchronized (this) {
                 if (closed || revision != resourceRevision) return List.of();
@@ -179,7 +185,8 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
     private void prepare(ActiveRequest request) {
         if (!isCurrent(request)) return;
         try (var archive = request.resourcePath == null ? null
-                : ClientResourceArchive.open(request.resourcePath, request.resourceVersion)) {
+                : InstanceResourceSource.open(request.request().world(),request.resourcePath,request.resourceVersion,request.resourceInstance,request,
+                    message->report(request,new ViewerProgress(ViewerProgressStage.CHECKING_CACHE,0,0,message)))) {
             if (!isCurrent(request)) {
                 return;
             }
@@ -190,13 +197,12 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
                 if (!isCurrentLocked(request)) return;
                 request.key = key;
                 for (ViewerAreaKey previous : cache.keys())
-                    if (!previous.renderVersion().equals(key.renderVersion())) cache.remove(previous);
+                    if (previous.world().equals(key.world())&&!previous.renderVersion().equals(key.renderVersion())) cache.remove(previous);
             }
             RegionSourceSignature before = signatureProvider.capture(key);
             var cached = cache.get(key, before);
             if (cached.isPresent()) {
-                if (archive != null) archive.readJson(ResourceLocation.Kind.MODEL,
-                        ResourceLocation.parse("block/stone"));
+                if(archive!=null)archive.validateAll();
                 int failedChunks = cache.previews().stream().filter(preview -> preview.key().equals(key))
                         .mapToInt(ViewerCachedArea::failedChunks).findFirst().orElse(0);
                 show(request, cached.orElseThrow(), true, failedChunks);
@@ -241,8 +247,15 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             VoxelSceneSnapshot snapshot = scene.snapshot().orElseThrow(() ->
                     new IOException("所选区域没有可渲染的三维几何"));
             ViewerAreaThumbnail thumbnail = ViewerAreaThumbnail.fromArea(area, request);
-            if (archive != null) archive.readJson(ResourceLocation.Kind.MODEL,
-                    ResourceLocation.parse("block/stone"));
+            if(archive!=null) {
+                archive.validateAll();
+                var notes=new ArrayList<>(snapshot.warnings());
+                var coordinate=new com.mcworldexplorer.voxel.data.ChunkCoordinate(key.target().minX(),key.target().minZ());
+                notes.add(new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_CONTEXT,coordinate,archive.description()));
+                for(String detail:archive.originSamples())notes.add(new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_ORIGIN,coordinate,detail));
+                for(String detail:archive.warnings())notes.add(new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_WARNING,coordinate,detail));
+                snapshot=new VoxelSceneSnapshot(snapshot.anchorWorldX(),snapshot.anchorWorldZ(),snapshot.chunks(),snapshot.bounds(),snapshot.blockCount(),snapshot.faceCount(),snapshot.vertexCount(),snapshot.indexCount(),notes,snapshot.atlas());
+            }
             RegionSourceSignature after = signatureProvider.capture(key);
             if (!before.equals(after)) {
                 throw new IOException("生成期间存档 Region 文件发生变化，请重新生成");
@@ -390,15 +403,17 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         private final ViewerTaskListener listener;
         private final Path resourcePath;
         private final String resourceVersion;
+        private final Path resourceInstance;
         private volatile ViewerAreaKey key;
         private final AtomicBoolean cancelled = new AtomicBoolean();
 
-        private ActiveRequest(long id, ViewerRequest request, ViewerTaskListener listener, Path resourcePath, String resourceVersion) {
+        private ActiveRequest(long id, ViewerRequest request, ViewerTaskListener listener, Path resourcePath, String resourceVersion,Path resourceInstance) {
             this.id = id;
             this.request = request;
             this.listener = listener;
             this.resourcePath = resourcePath;
             this.resourceVersion = resourceVersion;
+            this.resourceInstance=resourceInstance;
         }
 
         private long id() {

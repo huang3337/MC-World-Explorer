@@ -22,6 +22,9 @@ public record MeshWarning(Code code, ChunkCoordinate coordinate, String detail, 
         NEIGHBOR_UNAVAILABLE,
         FALLBACK_BLOCK,
         TEXTURE_FALLBACK,
-        MODEL_APPROXIMATION
+        MODEL_APPROXIMATION,
+        RESOURCE_CONTEXT,
+        RESOURCE_ORIGIN,
+        RESOURCE_WARNING
     }
 }

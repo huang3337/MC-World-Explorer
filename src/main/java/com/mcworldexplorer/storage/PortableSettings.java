@@ -77,6 +77,22 @@ public final class PortableSettings {
         saveProperties(properties);
     }
 
+    public Optional<Path> loadResourceInstancePath(Path world,String version)throws IOException {
+        String value=loadProperties().getProperty("instance."+resourceKey(world,version));
+        if(value==null||value.isBlank())return Optional.empty();
+        try{return Optional.of(Path.of(value).toAbsolutePath().normalize());}catch(InvalidPathException invalid){throw new IOException("资源实例绑定无效",invalid);}
+    }
+    public synchronized void saveResourceInstancePath(Path world,String version,Path path)throws IOException {
+        Properties properties=loadProperties();String key="instance."+resourceKey(world,version);
+        if(path==null)properties.remove(key);else properties.setProperty(key,path.toAbsolutePath().normalize().toString());saveProperties(properties);
+    }
+
+    /** Reset both choices together, preserving other worlds, versions and preferences. */
+    public synchronized void clearResourceBindings(Path world,String version)throws IOException {
+        Properties properties=loadProperties();String key=resourceKey(world,version);
+        properties.remove(key);properties.remove("instance."+key);saveProperties(properties);
+    }
+
     private static String resourceKey(Path world, String version) {
         java.util.Objects.requireNonNull(world, "world");
         if (version == null || version.isBlank()) throw new IllegalArgumentException("version must not be blank");

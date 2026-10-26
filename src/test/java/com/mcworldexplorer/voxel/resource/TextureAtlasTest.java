@@ -72,6 +72,23 @@ class TextureAtlasTest {
         base.setRGB(0,0,0x00806040);
         assertEquals(0x00806040, BlockTextureSet.composite(base,-1,null,-1).getRGB(0,0));
     }
+    @Test void rectangularSpritesAndMetadataFrameSelectionRemainDistinct()throws Exception {
+        var rectangle=TextureAtlas.decodeResource(png(32,16),Optional.empty());assertEquals(32,rectangle.getWidth());assertEquals(16,rectangle.getHeight());
+        assertEquals(31,TextureAtlas.decodeResource(png(16,31),Optional.empty()).getHeight());
+        var image=new BufferedImage(32,16,BufferedImage.TYPE_INT_ARGB);
+        for(int y=0;y<16;y++)for(int x=0;x<32;x++)image.setRGB(x,y,x<16?0xFFFF0000:0xFF00FF00);
+        var output=new ByteArrayOutputStream();ImageIO.write(image,"png",output);
+        var frame=TextureAtlas.decodeResource(output.toByteArray(),Optional.of("{\"animation\":{\"frames\":[1,0]}}"));
+        assertEquals(16,frame.getWidth());assertEquals(0xFF00FF00,frame.getRGB(0,0));
+        assertThrows(IOException.class,()->TextureAtlas.decodeResource(output.toByteArray(),Optional.of("{\"animation\":{\"frames\":[2]}}")));
+        assertThrows(IOException.class,()->TextureAtlas.decodeResource(output.toByteArray(),Optional.of("{\"animation\":{\"width\":0}}")));
+    }
+    @Test void overlayResolutionIsResampledInNormalizedTextureSpace()throws Exception {
+        var base=new BufferedImage(2,1,BufferedImage.TYPE_INT_ARGB);base.setRGB(0,0,0xFFFF0000);base.setRGB(1,0,0xFF00FF00);
+        var top=new BufferedImage(4,2,BufferedImage.TYPE_INT_ARGB);top.setRGB(3,1,0xFF0000FF);
+        var result=BlockTextureSet.composite(base,-1,top,-1);assertEquals(4,result.getWidth());assertEquals(2,result.getHeight());
+        assertEquals(0xFFFF0000,result.getRGB(1,1));assertEquals(0xFF00FF00,result.getRGB(2,1));assertEquals(0xFF0000FF,result.getRGB(3,1));
+    }
     private static byte[] png(int w,int h) throws IOException {
         var output = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(w,h,BufferedImage.TYPE_INT_ARGB),"png",output);

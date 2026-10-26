@@ -106,6 +106,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
         if (zip != null) try { zip.close(); } catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
     }
 
+    @Override public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return Optional.of(fingerprint.path().toString());}
     public Metadata metadata() { return metadata; }
     public Fingerprint fingerprint() { return fingerprint; }
 
@@ -116,6 +117,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
         verifyUnchanged();
         ZipEntry entry = zip.getEntry(id.entryName(kind));
         if (entry == null || entry.isDirectory()) return Optional.empty();
+        if(entry.getSize()>kind.maxBytes())throw new ResourceAccessException(LIMIT_EXCEEDED,"单个资源条目超过读取上限："+id,ResourceAccessException.Scope.RESOURCE);
         long remaining = MAX_SESSION_READ_BYTES - readBytes;
         if (remaining < 1 || entry.getSize() > remaining)
             throw new ResourceAccessException(LIMIT_EXCEEDED, "本次资源读取超过 64 MiB 上限");

@@ -139,8 +139,8 @@ class WorkspaceLayoutTest {
             String configuredJar=System.getenv("MCWORLD_CLIENT_RESOURCE_JAR");
             if (configuredJar != null) {
                 var controller=(MapViewerController)root.getProperties().get("mapViewerController");
-                var lookup=MapViewerController.class.getDeclaredMethod("startViewerResourceLookup",Path.class,boolean.class);
-                lookup.setAccessible(true);lookup.invoke(controller,Path.of(configuredJar),false);
+                var lookup=MapViewerController.class.getDeclaredMethod("startViewerResourceLookup",Path.class);
+                lookup.setAccessible(true);lookup.invoke(controller,Path.of(configuredJar));
                 awaitFx(()->menu.getText().equals("纹理：原版 1.21.1"));
                 assertEquals(Path.of(configuredJar).toRealPath(),new PortableSettings().loadClientResourcePath(Path.of(configured),"1.21.1").orElseThrow());
             }
@@ -150,6 +150,62 @@ class WorkspaceLayoutTest {
             awaitFx(() -> menu.getText().equals("纹理：自动 · 1.21.1"));
             assertTrue(menu.getTooltip().getText().contains("自动匹配"));
             assertTrue(new PortableSettings().loadClientResourcePath(Path.of(configured),"1.21.1").isEmpty());
+        });
+    }
+
+    @Test void resourceDiagnosticsSeparatesCountsOriginsAndStaticApproximation()throws Exception {
+        var coordinate=new com.mcworldexplorer.voxel.data.ChunkCoordinate(0,0);
+        var warnings=java.util.List.of(
+            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_CONTEXT,coordinate,"实例：pack-a"),
+            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_ORIGIN,coordinate,"example:block/shape → shapes.jar"),
+            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.TEXTURE_FALLBACK,coordinate,"example:absent MISSING_RESOURCE",7),
+            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.TEXTURE_FALLBACK,coordinate,"example:runtime UNSUPPORTED_MODEL",2),
+            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.MODEL_APPROXIMATION,coordinate,"OBJ 静态几何",4));
+        var scene=new com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot(0,0,java.util.List.of(),new com.mcworldexplorer.voxel.mesh.MeshBounds(0,0,0,0,0,0),0,0,0,0,warnings);
+        var request=new com.mcworldexplorer.viewer.ViewerRequest(home,"test","minecraft:overworld","主世界",com.mcworldexplorer.voxel.data.ChunkRectangle.target(0,0,0,0),
+            com.mcworldexplorer.viewer.ViewerPerformanceProfile.BASIC,new com.mcworldexplorer.viewer.ViewerMapReturnState(0,0,2,com.mcworldexplorer.preview.PreviewLayer.surfaceOverview()));
+        var diagnostics=MapViewerController.class.getDeclaredMethod("resourceDiagnostics",com.mcworldexplorer.viewer.ViewerTaskResult.class);diagnostics.setAccessible(true);
+        String text=(String)diagnostics.invoke(null,new com.mcworldexplorer.viewer.ViewerTaskResult(request,scene,false,0));
+        assertTrue(text.contains("使用简化颜色的方块：9"));assertTrue(text.contains("缺少资源：7"));assertTrue(text.contains("未支持模型表达：2"));
+        assertTrue(text.contains("实例：pack-a"));assertTrue(text.contains("shapes.jar"));assertTrue(text.contains("OBJ 静态几何"));
+    }
+
+    @Test void aCompletedOlderManualLookupCannotPersistAfterReturningToAutomatic()throws Exception {
+        String client=System.getenv("MCWORLD_CLIENT_RESOURCE_JAR");assumeTrue(client!=null);
+        withWorkspace(root->{
+            var controller=(MapViewerController)root.getProperties().get("mapViewerController");
+            Path path=Files.createDirectories(home.resolve("world"));WorldInfo info=new WorldInfo(path);info.setParsed(true);info.setVersionName("1.21.1");controller.setWorld(info);
+            var lookup=MapViewerController.class.getDeclaredMethod("startViewerResourceLookup",Path.class);lookup.setAccessible(true);lookup.invoke(controller,Path.of(client));
+            var field=MapViewerController.class.getDeclaredField("viewerResourceLookup");field.setAccessible(true);
+            var completed=(javafx.concurrent.Task<?>)field.get(controller);
+            // Finish background validation while the FX success callback is still queued.
+            completed.get(10,TimeUnit.SECONDS);
+            assertTrue(new PortableSettings().loadClientResourcePath(path,"1.21.1").isEmpty(),"后台校验完成本身不能写绑定");
+            ((MenuButton)root.lookup("#viewerTextureMenu")).getItems().get(1).fire();
+            awaitFx(()->{try{return field.get(controller)==null;}catch(IllegalAccessException error){throw new AssertionError(error);}});
+            assertTrue(new PortableSettings().loadClientResourcePath(path,"1.21.1").isEmpty(),"旧手动结果不能恢复已清除绑定");
+        });
+    }
+
+    @Test void automaticResourceMatchingResetsBothManualChoicesOnlyForCurrentWorld()throws Exception {
+        withWorkspace(root->{
+            var controller=(MapViewerController)root.getProperties().get("mapViewerController");
+            Path first=Files.createDirectories(home.resolve("world-a")),second=Files.createDirectories(home.resolve("world-b")),instance=Files.createDirectories(home.resolve("实例/mods")).getParent();
+            WorldInfo a=new WorldInfo(first);a.setParsed(true);a.setVersionName("1.21.1");
+            WorldInfo b=new WorldInfo(second);b.setParsed(true);b.setVersionName("1.21.1");
+            var change=MapViewerController.class.getDeclaredMethod("changeResourceInstance",Path.class);change.setAccessible(true);
+            var selected=MapViewerController.class.getDeclaredField("viewerResourceInstance");selected.setAccessible(true);
+            var settings=new PortableSettings();Path jar=home.resolve("manual-client.jar");
+            settings.saveClientResourcePath(first,"1.21.1",jar);settings.saveClientResourcePath(second,"1.21.1",jar);
+            settings.saveResourceInstancePath(second,"1.21.1",instance);
+            controller.setWorld(a);change.invoke(controller,instance);
+            assertEquals(instance,new PortableSettings().loadResourceInstancePath(first,"1.21.1").orElseThrow());
+            controller.setWorld(b);assertEquals(instance,selected.get(controller));controller.setWorld(a);assertEquals(instance,selected.get(controller));
+            MenuButton menu=(MenuButton)root.lookup("#viewerTextureMenu");assertEquals("自动匹配资源",menu.getItems().get(1).getText());
+            menu.getItems().get(1).fire();assertNull(selected.get(controller));
+            assertTrue(settings.loadResourceInstancePath(first,"1.21.1").isEmpty());assertTrue(settings.loadClientResourcePath(first,"1.21.1").isEmpty());
+            assertEquals(instance,settings.loadResourceInstancePath(second,"1.21.1").orElseThrow());assertEquals(jar,settings.loadClientResourcePath(second,"1.21.1").orElseThrow());
+            controller.setWorld(b);controller.setWorld(a);assertNull(selected.get(controller),"重开世界后仍使用自动游戏目录");
         });
     }
 
@@ -169,7 +225,16 @@ class WorkspaceLayoutTest {
             assertTrue(help.getTooltip().isWrapText());
             assertTrue(help.getTooltip().getText().contains(".minecraft\\versions\\1.21.1\\1.21.1.jar"));
             assertTrue(help.getTooltip().getText().contains("按存档版本尝试加载"));
-            assertEquals(3, menu.getItems().size());
+            assertEquals(4, menu.getItems().size());
+            assertEquals("自动匹配资源",menu.getItems().get(1).getText());
+            assertEquals("手动选择游戏目录…",menu.getItems().get(2).getText());
+            assertTrue(menu.getItems().stream().noneMatch(item->item.getText().contains("实例")||item.getText().contains("恢复")),"统一自动入口后不再拆分恢复操作");
+            assertTrue(menu.getItems().stream().noneMatch(item->item.getText().contains("诊断")),"诊断入口应独立于纹理选择下拉栏");
+            Button diagnostics=(Button)root.lookup("#viewerResourceDiagnosticsButton");
+            assertNotNull(diagnostics);assertEquals("资源诊断",diagnostics.getText());assertNotNull(diagnostics.getOnAction());
+            assertEquals(menu.getParent(),diagnostics.getParent(),"资源操作应成组换行");
+            menu.setDisable(true);assertTrue(diagnostics.isDisabled(),"生成期间与纹理操作保持相同禁用状态");
+            menu.setDisable(false);assertFalse(diagnostics.isDisabled());
             assertEquals("手动选择 JAR", menu.getItems().getFirst().getText());
             assertNotNull(menu.getItems().getFirst().getOnAction());
             menu.getItems().getLast().fire();
@@ -177,6 +242,13 @@ class WorkspaceLayoutTest {
             root.applyCss(); root.layout();
             var bounds = menu.localToScene(menu.getBoundsInLocal());
             assertTrue(bounds.getMaxX() <= 901);
+            var diagnosticBounds=diagnostics.localToScene(diagnostics.getBoundsInLocal());
+            var helpLayoutBounds=help.localToScene(help.getBoundsInLocal());
+            assertTrue(diagnosticBounds.getMaxX()<=901,"独立诊断按钮不能溢出窄窗口");
+            assertTrue(diagnosticBounds.getMinX()>=helpLayoutBounds.getMaxX()+5,"诊断按钮与帮助入口须留间距");
+            assertEquals(helpLayoutBounds.getCenterY(),diagnosticBounds.getCenterY(),1,"资源操作垂直居中");
+            var diagnosticText=(javafx.scene.text.Text)diagnostics.lookup(".text");
+            assertEquals("资源诊断",diagnosticText.getText(),"诊断按钮文字完整显示");
             assertTrue(root.lookup("#viewportHost").getBoundsInLocal().getHeight() >= 160);
             snapshotIfRequested(root, "texture-toolbar-900x600.png");
             Stage stage = new Stage();

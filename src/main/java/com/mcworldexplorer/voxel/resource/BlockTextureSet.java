@@ -107,7 +107,7 @@ public final class BlockTextureSet {
         for (BlockState state : states) {
             check(cancel);
             var result = resolver.resolve(state);
-            if (!result.resolved()) { failures.put(state, result.reason() + ": " + result.detail()); continue; }
+            if (!result.resolved()) { failures.put(state, result.reason() + ": " + result.detail()+trace(archive,result)); continue; }
             var model = result.model().orElseThrow();
             var stateNotes=new ArrayList<>(((BuiltinBlockModels)archive).notes(state));
             if(model.fixedFirstAlternative())stateNotes.add("随机候选模型固定选择第一项");
@@ -115,6 +115,7 @@ public final class BlockTextureSet {
             try {
                 if(model.faces().size()>faceBudget) throw new IOException("本次模型面准备超过 32768 项预算");
                 Map<String,Painted> painted = new LinkedHashMap<>();
+                Map<String,BufferedImage> tintedImages=new HashMap<>();
                 long workingBytes=0;
                 int elementBase=0;
                 for(var part:model.parts()) {
@@ -124,25 +125,40 @@ public final class BlockTextureSet {
                         if(quad.normal().stream().allMatch(v->Math.abs(v)<1e-6))continue;
                         BufferedImage sourceImage=image(archive,face.texture(),images);
                         long bytes=(long)sourceImage.getWidth()*sourceImage.getHeight()*4;
-                        if(workingBytes+bytes>32L*1024*1024)throw new IOException("单状态面纹理工作内存超过 32 MiB 预算");
-                        BufferedImage base=composite(sourceImage,face.tintIndex(),null,-1);
+                        String paintKey=face.texture()+"|"+face.tintIndex()+"|"+face.opacity();
+                        BufferedImage tinted=tintedImages.get(paintKey);
+                        if(tinted==null){
+                            if(workingBytes+bytes>32L*1024*1024)throw new IOException("单状态面纹理工作内存超过 32 MiB 预算");
+                            tinted=composite(sourceImage,face.tintIndex(),null,-1);
+                            if(face.opacity()<1)for(int py=0;py<tinted.getHeight();py++)for(int px=0;px<tinted.getWidth();px++){int color=tinted.getRGB(px,py);tinted.setRGB(px,py,(color&0xFFFFFF)|(Math.round((color>>>24)*face.opacity())<<24));}
+                            tintedImages.put(paintKey,tinted);workingBytes+=bytes;
+                        }
+                        for(var tiled:UvTiling.split(quad)) {
+                        BufferedImage base=tinted;quad=tiled;
                         String key=quad.positions()+"|"+quad.normal()+"|"+quad.uv()+"|"+face.shade()+"|"+part.renderType();
                         var previous=painted.get(key);
-                        if(previous!=null)base=composite(previous.image(),-1,base,-1);
-                        else workingBytes+=bytes;
+                        if(previous!=null){
+                            long combinedBytes=(long)Math.max(previous.image().getWidth(),base.getWidth())*Math.max(previous.image().getHeight(),base.getHeight())*4;
+                            if(workingBytes+combinedBytes>32L*1024*1024)throw new IOException("单状态面纹理工作内存超过 32 MiB 预算");
+                            base=composite(previous.image(),-1,base,-1);workingBytes+=combinedBytes;
+                        }
                         painted.put(key,new Painted(quad,base,face.shade(),previous==null?elementBase+face.layer():previous.element(),part.renderType()));
+                        if(painted.size()>faceBudget)throw new IOException("UV 展开后的模型面超过本次 32768 面预算");
+                        }
                     }
-                    elementBase+=128;
+                    elementBase+=part.faces().stream().mapToInt(BlockModelResolver.Face::layer).max().orElse(-1)+1;
                 }
                 List<Pending> surfaces=new ArrayList<>();
+                Map<BufferedImage,TextureAtlas.Tile> stateTiles=new IdentityHashMap<>();
                 for(var paint:painted.values()) {
-                    var tile=builder.add(imageKey(paint.image()),paint.image());
+                    var tile=stateTiles.get(paint.image());
+                    if(tile==null){tile=builder.add(imageKey(paint.image()),paint.image());stateTiles.put(paint.image(),tile);}
                     surfaces.add(new Pending(paint.quad(),tile,paint.shade(),material(paint.image(),paint.renderType()),paint.element()));
                 }
                 faceBudget-=surfaces.size();
                 pending.put(state,surfaces);
-            } catch (ResourceAccessException e) { throw e; }
-            catch (IOException e) { failures.put(state,e.getMessage()); }
+            } catch (ResourceAccessException e) { if(e.scope()==ResourceAccessException.Scope.RESOURCE||e.reason()==ResourceAccessException.Reason.INVALID_METADATA)failures.put(state,e.reason()+": "+e.getMessage()+trace(archive,result));else throw e; }
+            catch (IOException e) { failures.put(state,e.getMessage()+trace(archive,result)); }
         }
         TextureAtlas atlas=builder.build();
         Map<BlockState,List<Surface>> models=new HashMap<>();
@@ -164,6 +180,12 @@ public final class BlockTextureSet {
         return new BlockTextureSet(models, failures, atlas, archive.fingerprint(), limited,notes);
     }
 
+    private static String trace(BlockResourceSource source,BlockModelResolver.Result result) {
+        var reference=result.sources().stream().filter(item->item.kind()==ResourceLocation.Kind.MODEL).findFirst().or(()->result.sources().stream().findFirst());
+        if(reference.isEmpty())return "";var entry=reference.orElseThrow();
+        return "（资源 "+entry.id()+"；来源 "+source.origin(entry.kind(),entry.id()).orElse("未记录或缺失对应来源")+"）";
+    }
+
     private static BufferedImage image(BlockResourceSource archive, ResourceLocation id,
                                         Map<ResourceLocation, BufferedImage> images) throws IOException {
         BufferedImage image = images.get(id);
@@ -171,7 +193,7 @@ public final class BlockTextureSet {
             if (images.size() >= TextureAtlas.MAX_TILES) throw new IOException("解码纹理数量超限");
             byte[] data = archive.read(ResourceLocation.Kind.TEXTURE, id)
                     .orElseThrow(() -> new IOException("缺少 PNG：" + id));
-            image = TextureAtlas.decode(data,!id.path().startsWith("entity/"));
+            image = TextureAtlas.decodeResource(data,archive.readJson(ResourceLocation.Kind.TEXTURE_META,id));
             long decoded=images.values().stream().mapToLong(value->(long)value.getWidth()*value.getHeight()*4).sum();
             if(decoded+(long)image.getWidth()*image.getHeight()*4>64L*1024*1024)throw new IOException("解码纹理内存超过 64 MiB 预算");
             images.put(id, image);
@@ -180,14 +202,13 @@ public final class BlockTextureSet {
     }
 
     static BufferedImage composite(BufferedImage base, int tint, BufferedImage overlay, int overlayTint) throws IOException {
-        int w = base.getWidth(), h = base.getHeight();
-        if (overlay != null && (overlay.getWidth() != w || overlay.getHeight() != h))
-            throw new IOException("覆盖层与底纹尺寸不一致");
+        int w=overlay==null?base.getWidth():Math.max(base.getWidth(),overlay.getWidth());
+        int h=overlay==null?base.getHeight():Math.max(base.getHeight(),overlay.getHeight());
         BufferedImage output = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
-            int bottom = tinted(base.getRGB(x, y), tint);
+            int bottom = tinted(base.getRGB(x*base.getWidth()/w, y*base.getHeight()/h), tint);
             if (overlay == null) { output.setRGB(x, y, bottom); continue; }
-            int top=tinted(overlay.getRGB(x,y),overlayTint),a=top>>>24,bottomAlpha=bottom>>>24;
+            int top=tinted(overlay.getRGB(x*overlay.getWidth()/w,y*overlay.getHeight()/h),overlayTint),a=top>>>24,bottomAlpha=bottom>>>24;
             int alpha=a+(bottomAlpha*(255-a)+127)/255;
             int rgb=alpha<<24;
             for(int shift:new int[]{0,8,16}) {

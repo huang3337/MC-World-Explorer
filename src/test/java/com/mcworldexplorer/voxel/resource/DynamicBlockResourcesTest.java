@@ -107,9 +107,9 @@ class DynamicBlockResourcesTest {
     @Test void derivedTextureBudgetFailsOnlyTheLargeStateAndKeepsFollowingModelsUsable() throws Exception {
         List<String> faces=new ArrayList<>();for(String direction:List.of("down","up","north","south","west","east"))faces.add("\""+direction+"\":{\"texture\":\"example:block/plain\"}");
         List<String> elements=new ArrayList<>();
-        for(int i=0;i<23;i++){int x=i%8*2,y=i/8*2;elements.add("{\"from\":["+x+","+y+",0],\"to\":["+(x+1)+","+(y+1)+",1],\"faces\":{"+String.join(",",faces)+"}}");}
+        for(int i=0;i<23;i++){final int index=i;int x=i%8*2,y=i/8*2;elements.add("{\"from\":["+x+","+y+",0],\"to\":["+(x+1)+","+(y+1)+",1],\"faces\":{"+java.util.stream.IntStream.range(0,6).mapToObj(j->faces.get(j).replace("example:block/plain","example:block/plain"+(index*6+j))).collect(java.util.stream.Collectors.joining(","))+"}}");}
         var output=new ByteArrayOutputStream();var image=new BufferedImage(256,256,BufferedImage.TYPE_INT_ARGB);ImageIO.write(image,"png",output);
-        Map<String,byte[]> resources=new HashMap<>();resources.put("assets/example/textures/block/plain.png",output.toByteArray());
+        Map<String,byte[]> resources=new HashMap<>();for(int i=0;i<138;i++)resources.put("assets/example/textures/block/plain"+i+".png",output.toByteArray());
         for(String name:List.of("large","small")) {
             resources.put("assets/example/blockstates/"+name+".json",("{\"variants\":{\"\":{\"model\":\"example:block/"+name+"\"}}}").getBytes(StandardCharsets.UTF_8));
             resources.put("assets/example/models/block/"+name+".json",("{\"elements\":["+(name.equals("large")?String.join(",",elements):elements.getFirst())+"]}").getBytes(StandardCharsets.UTF_8));
