@@ -9,12 +9,22 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 
 public final class VoxelChunk {
+    private final java.util.Map<Long,BlockEntityData> blockEntities;
     private final int chunkX;
     private final int chunkZ;
     private final NavigableMap<Integer, ChunkSection> sections;
 
     public VoxelChunk(int chunkX, int chunkZ, List<ChunkSection> sections)
             throws ChunkDecodeException {
+        this(chunkX,chunkZ,sections,java.util.List.of());
+    }
+
+    public VoxelChunk(int chunkX,int chunkZ,List<ChunkSection> sections,List<BlockEntityData> entities) throws ChunkDecodeException {
+        if(entities.size()>4096)throw new IllegalArgumentException("方块实体数量超过 4096");
+        java.util.Map<Long,BlockEntityData> indexedEntities=new java.util.HashMap<>();
+        for(var entity:entities)if(Math.floorDiv(entity.x(),16)==chunkX&&Math.floorDiv(entity.z(),16)==chunkZ)
+            indexedEntities.put(entityKey(entity.x(),entity.y(),entity.z()),entity);
+        this.blockEntities=java.util.Map.copyOf(indexedEntities);
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
         TreeMap<Integer, ChunkSection> indexed = new TreeMap<>();
@@ -38,6 +48,13 @@ public final class VoxelChunk {
         }
         this.sections = Collections.unmodifiableNavigableMap(indexed);
     }
+
+    public java.util.Optional<BlockEntityData> blockEntity(long x,int y,long z) {
+        if(Math.floorDiv(x,16)!=chunkX||Math.floorDiv(z,16)!=chunkZ)return java.util.Optional.empty();
+        return java.util.Optional.ofNullable(blockEntities.get(entityKey(x,y,z)));
+    }
+    private static long entityKey(long x,int y,long z){return ((long)y<<8)|((z&15)<<4)|(x&15);}
+    public java.util.Collection<BlockEntityData> blockEntities(){return blockEntities.values();}
 
     public int chunkX() {
         return chunkX;

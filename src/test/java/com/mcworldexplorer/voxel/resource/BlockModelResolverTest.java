@@ -32,6 +32,20 @@ class BlockModelResolverTest {
         return "[{\"from\":[0,0,0],\"to\":[16,16,16],\"faces\":{" + String.join(",", faces) + "}}]";
     }
 
+    @Test void combinesNestedMultipartConditionsAndKeepsPerPartTransforms() throws Exception {
+        String multipart="{\"multipart\":[{\"apply\":{\"model\":\"block/stone\"}},{\"when\":{\"OR\":[{\"axis\":\"x|z\"},{\"AND\":[{\"axis\":\"y\"},{\"open\":\"true\"}]}]},\"apply\":[{\"model\":\"block/stone\",\"y\":90,\"uvlock\":true}]}]}";
+        try(var archive=open(Map.of(STATE,multipart))) {
+            var resolver=new BlockModelResolver(archive);
+            var connected=resolver.resolve(state(Map.of("axis","z"))).model().orElseThrow();
+            assertEquals(2,connected.parts().size());assertEquals(12,connected.faces().size());
+            assertEquals(90,connected.parts().getLast().yRotation());assertTrue(connected.parts().getLast().uvLock());
+            assertTrue(connected.fixedFirstAlternative());
+            assertEquals(1,resolver.resolve(state(Map.of("axis","y","open","false"))).model().orElseThrow().parts().size());
+            assertEquals(2,resolver.resolve(state(Map.of("axis","y","open","true"))).model().orElseThrow().parts().size());
+        }
+        assertFallback(INVALID_MODEL,STATE,"{\"multipart\":[{\"when\":{\"OR\":[]},\"apply\":{\"model\":\"block/stone\"}}]}",Map.of());
+    }
+
     @Test void inheritsChildAliasesOverParentAndKeepsTraceAndUv() throws Exception {
         String base = "{\"textures\":{\"all\":\"#surface\",\"surface\":\"block/old\"},\"elements\":" + cube() + "}";
         String child = "{\"parent\":\"block/base\",\"textures\":{\"surface\":\"block/new\"}}";
@@ -92,20 +106,18 @@ class BlockModelResolverTest {
         assertFallback(INVALID_MODEL, MODEL, model(cube()).replace("block/synthetic", "../escape"), Map.of());
     }
 
-    @Test void rejectsUnsupportedGeometryAndFieldsRatherThanPretendingItIsACube() throws Exception {
-        for (String json : List.of(model(cube().replace("[16,16,16]", "[16,8,16]")),
-                model(cube()).replace("\"from\":", "\"rotation\":{},\"from\":"),
-                model(cube()).replace("\"textures\":", "\"loader\":\"custom\",\"textures\":"),
-                model(cube()).replace("\"textures\":", "\"ambientocclusion\":false,\"textures\":"),
-                model(cube()).replace("\"cullface\":\"up\"", "\"cullface\":\"down\""),
-                model(cube()).replace("\"cullface\":\"up\"", "\"tintindex\":2,\"cullface\":\"up\"")))
-            assertFallback(UNSUPPORTED_MODEL, MODEL, json, Map.of());
-        assertFallback(UNSUPPORTED_MODEL, STATE, "{\"multipart\":[]}", Map.of());
+    @Test void rejectsCustomLoadersAndInvalidRotationsRatherThanPretendingSupport() throws Exception {
+        assertFallback(UNSUPPORTED_MODEL, MODEL, model(cube()).replace("\"textures\":", "\"loader\":\"custom\",\"textures\":"), Map.of());
+        assertFallback(INVALID_MODEL, MODEL, model(cube()).replace("\"from\":", "\"rotation\":{},\"from\":"), Map.of());
+        try(var archive=open(Map.of(STATE,"{\"multipart\":[]}"))) {
+            var empty=new BlockModelResolver(archive).resolve(state(Map.of()));
+            assertTrue(empty.resolved());assertTrue(empty.model().orElseThrow().faces().isEmpty());
+        }
         assertFallback(UNSUPPORTED_MODEL, STATE, SIMPLE_STATE.replace("\"model\":", "\"x\":45,\"model\":"), Map.of());
         try (var archive = open(Map.of())) {
             var resolver = new BlockModelResolver(archive);
-            assertEquals(UNSUPPORTED_BLOCK, resolver.resolve(new BlockState("mod:stone", Map.of())).reason());
-            assertEquals(UNSUPPORTED_BLOCK, resolver.resolve(new BlockState("minecraft:oak_stairs", Map.of())).reason());
+            assertEquals(MISSING_RESOURCE, resolver.resolve(new BlockState("mod:stone", Map.of())).reason());
+            assertEquals(MISSING_RESOURCE, resolver.resolve(new BlockState("minecraft:oak_stairs", Map.of())).reason());
         }
     }
 
@@ -140,11 +152,13 @@ class BlockModelResolverTest {
         assertFallback(LIMIT_EXCEEDED, MODEL, "{\"textures\":{" + String.join(",", textures) + "}}", Map.of());
         for (String selector : List.of("axis=x,axis=y", "axis=", "axis"))
             assertFallback(INVALID_MODEL, STATE, SIMPLE_STATE.replace("\"\":", "\"" + selector + "\":"), Map.of());
-        assertFallback(UNSUPPORTED_MODEL, STATE, SIMPLE_STATE.replace("\"\":", "\"axis=x|z\":"), Map.of());
+        assertFallback(NO_VARIANT, STATE, SIMPLE_STATE.replace("\"\":", "\"axis=x|z\":"), Map.of());
         assertFallback(INVALID_MODEL, MODEL, model(cube()).replace("\"cullface\":\"up\"", "\"uv\":[0,0,16],\"cullface\":\"up\""), Map.of());
         assertFallback(UNSUPPORTED_MODEL, MODEL, model(cube()).replace("\"cullface\":\"up\"", "\"uv\":[0,0,17,16],\"cullface\":\"up\""), Map.of());
         assertFallback(INVALID_MODEL, MODEL, model(cube()).replace("\"up\":", "\"unknown\":"), Map.of());
-        assertFallback(UNSUPPORTED_MODEL, MODEL, model("[]"), Map.of());
+        try(var archive=open(Map.of(MODEL,model("[]")))) {
+            assertTrue(new BlockModelResolver(archive).resolve(state(Map.of())).model().orElseThrow().faces().isEmpty());
+        }
     }
 
     @Test void childElementsReplaceParentElementsAndUnusedTextureCyclesAreVisible() throws Exception {
@@ -203,6 +217,37 @@ class BlockModelResolverTest {
             }
         }
         assertEquals(before, stamp(jar));
+    }
+
+    @Test void cachedModelsStillCheckSourceLifecycleAndEmptyGeometryIsValid() throws Exception {
+        var archive=open(Map.of());var resolver=new BlockModelResolver(archive);
+        assertTrue(resolver.resolve(state(Map.of())).resolved());archive.close();
+        var failure=assertThrows(ResourceAccessException.class,()->resolver.resolve(state(Map.of())));
+        assertEquals(ResourceAccessException.Reason.CLOSED,failure.reason());
+        try(var empty=open(Map.of(MODEL,"{\"textures\":{\"particle\":\"block/synthetic\"}}"))) {
+            var result=new BlockModelResolver(empty).resolve(state(Map.of()));
+            assertTrue(result.resolved());assertTrue(result.model().orElseThrow().faces().isEmpty());
+        }
+        try(var optional=open(Map.of(MODEL,model(cube()).replace("\"cullface\":\"down\"","\"cullface\":\"bottom\"")))) {
+            var result=new BlockModelResolver(optional).resolve(state(Map.of()));assertTrue(result.resolved());
+            assertNull(result.model().orElseThrow().faces().stream().filter(f->f.direction()==BlockModelResolver.Direction.DOWN).findFirst().orElseThrow().cullFace());
+        }
+    }
+
+    @Test void lowNodeLargeStringsCannotBypassParsedCacheMemoryBound() throws Exception {
+        Map<String,Integer> reads=new java.util.HashMap<>();String comment="x".repeat(900_000);
+        BlockResourceSource source=new BlockResourceSource(){
+            public ClientResourceArchive.Fingerprint fingerprint(){return new ClientResourceArchive.Fingerprint(home,1,1,"synthetic");}
+            public java.util.Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id){return java.util.Optional.empty();}
+            public java.util.Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id){
+                if(kind==ResourceLocation.Kind.BLOCKSTATE)return java.util.Optional.of("{\"variants\":{\"\":{\"model\":\"example:block/"+id.path()+"\"}}}");
+                reads.merge(id.path(),1,Integer::sum);return java.util.Optional.of("{\"__comment\":\""+comment+"\",\"elements\":[]}");
+            }
+        };
+        var resolver=new BlockModelResolver(source);
+        for(int i=0;i<12;i++)assertTrue(resolver.resolve(new BlockState("example:shape"+i,Map.of())).resolved());
+        assertTrue(resolver.resolve(new BlockState("example:shape0",Map.of())).resolved());
+        assertEquals(2,reads.get("block/shape0"),"大字符串模型应按字符预算逐出，而非只计算节点数");
     }
 
     private static String stamp(Path path) throws Exception {

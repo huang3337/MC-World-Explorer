@@ -25,7 +25,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class VoxelPreviewCoordinator implements AutoCloseable {
-    public static final String RENDER_VERSION = "v071-textures-r1";
+    public static final String RENDER_VERSION = "v072-models-entities-r3";
 
     private final ExecutorService executor;
     private final ViewerSceneCache cache;
@@ -224,7 +224,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             report(request, new ViewerProgress(
                     ViewerProgressStage.BUILDING_MESH, 0,
                     request.request().target().coordinates().size(), "正在生成网格"));
-            var textures = archive == null ? null : BlockTextureSet.load(archive, request);
+            var textures = archive == null ? null : BlockTextureSet.load(archive, area, request);
             SceneBuilder selectedBuilder = textures == null ? sceneBuilder : (input, cancellation, monitor) ->
                     new VoxelSceneBuilder(textures).build(input, cancellation, monitor);
             VoxelSceneResult scene = selectedBuilder.build(

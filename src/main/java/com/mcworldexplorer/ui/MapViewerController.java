@@ -920,11 +920,11 @@ public final class MapViewerController {
         if (changed) updateViewerAreaList(List.of());
         viewerTextureMenu.setText(path == null ? "纹理：简化颜色" : "纹理：原版 " + world.getVersionName());
         viewerTextureMenu.setTooltip(new Tooltip(path == null ? "所有方块使用简化颜色"
-                : path + "\n生成时校验资源；支持 8 种完整方块，其余使用简化颜色。草色使用固定近似值。"));
+                : path + "\n生成时校验资源；按选区实际状态解析；支持标准模型与特殊类型静态预览；缺资源时明确降级。草色使用固定近似值。"));
         if (viewerLockedSelection != null) viewerConfirmButton.setText("生成三维预览");
         viewerConfirmButton.setDisable(viewerTaskRunning || viewerResourceLookup != null || viewerLockedSelection == null);
         viewerSelectionLabel.setText(path == null ? "已切换简化颜色，可重新生成三维区域"
-                : "已选择客户端资源，生成时验证；仅支持部分完整方块");
+                : "已选择客户端资源，生成时验证；按资源模型尝试匹配完整方块");
     }
 
     private void startViewerTask() {
@@ -1021,12 +1021,12 @@ public final class MapViewerController {
         String state = result.fromCache() ? "已打开缓存中的三维预览" : "三维预览已打开";
         if (result.snapshot().atlas().isPresent() && viewerTextureMenu != null) {
             String details = result.snapshot().warnings().stream()
-                    .filter(w -> w.code() == MeshWarning.Code.TEXTURE_FALLBACK)
+                    .filter(w -> w.code() == MeshWarning.Code.TEXTURE_FALLBACK || w.code() == MeshWarning.Code.MODEL_APPROXIMATION)
                     .limit(8).map(MeshWarning::detail)
                     .collect(java.util.stream.Collectors.joining("\n"));
             viewerTextureMenu.setTooltip(new Tooltip(viewerResourcePath
-                    + "\n支持 8 种完整方块；草色使用固定近似值，随机外观固定选择第一项。"
-                    + (details.isEmpty() ? "" : "\n本次简化显示原因（最多 8 项）：\n" + details)));
+                    + "\n按选区模型匹配纹理；草色使用固定近似值，随机外观固定选择第一项。"
+                    + (details.isEmpty() ? "" : "\n本次近似或简化显示说明（最多 8 项）：\n" + details)));
         }
         if (result.snapshot().atlas().isPresent()) state += "，原版纹理" + (fallbackBlocks > 0 ? "（" + fallbackBlocks + " 个方块使用简化颜色）" : "");
         if (result.partialSuccess()) state += "，" + result.failedChunks() + " 个区块读取失败";

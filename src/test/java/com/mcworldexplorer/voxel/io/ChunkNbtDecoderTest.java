@@ -19,6 +19,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ChunkNbtDecoderTest {
+    @Test void readsModernAndLegacyVisualEntitiesAndRejectsSilentTruncation() throws Exception {
+        var entity=CompoundBinaryTag.builder().putInt("x",1).putInt("y",0).putInt("z",2).putString("id","minecraft:sign").putString("Text1","Hello").put("Items",ListBinaryTag.empty()).build();
+        for(boolean modern:List.of(true,false)) {
+            var container=CompoundBinaryTag.builder().putInt("xPos",0).putInt("zPos",0).put(modern?"sections":"Sections",ListBinaryTag.empty())
+                .put(modern?"block_entities":"TileEntities",ListBinaryTag.listBinaryTag(BinaryTagTypes.COMPOUND,List.of(entity))).build();
+            var root=modern?container:CompoundBinaryTag.builder().put("Level",container).build();
+            var data=ChunkNbtDecoder.read(stream(root),0,0).chunk().blockEntity(1,0,2).orElseThrow();
+            assertEquals("Hello",data.visual().getString("Text1"));assertEquals(false,data.visual().keySet().contains("Items"));
+        }
+        var large=CompoundBinaryTag.builder().put("sections",ListBinaryTag.empty()).put("block_entities",ListBinaryTag.listBinaryTag(BinaryTagTypes.COMPOUND,java.util.Collections.nCopies(4097,entity))).build();
+        assertEquals(ChunkDecodeException.Reason.INVALID_NBT,assertThrows(ChunkDecodeException.class,()->ChunkNbtDecoder.read(stream(large),0,0)).reason());
+    }
+
     @Test
     void preservesModernPropertiesAndStoredCoordinates() throws Exception {
         CompoundBinaryTag state = CompoundBinaryTag.builder()
