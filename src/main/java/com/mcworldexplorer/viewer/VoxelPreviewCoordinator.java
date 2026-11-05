@@ -5,6 +5,7 @@ import com.mcworldexplorer.voxel.resource.ResourceLocation;
 import com.mcworldexplorer.voxel.resource.ClientResourceArchive;
 import com.mcworldexplorer.voxel.resource.InstanceResourceSource;
 import com.mcworldexplorer.voxel.resource.BlockResourceSource;
+import com.mcworldexplorer.voxel.resource.ModelRuleRegistry;
 import com.mcworldexplorer.voxel.resource.BlockTextureSet;
 import com.mcworldexplorer.voxel.io.CancellationSignal;
 import com.mcworldexplorer.voxel.io.ChunkLoadStatus;
@@ -27,7 +28,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class VoxelPreviewCoordinator implements AutoCloseable {
-    public static final String RENDER_VERSION = "v073-instance-resources-r1";
+    public static final String RENDER_VERSION = "v074-open-rules-r6-target-index";
 
     private final ExecutorService executor;
     private final ViewerSceneCache cache;
@@ -41,6 +42,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
     private Path resourcePath;
     private String resourceVersion;
     private Path resourceInstance;
+    private ModelRuleRegistry modelRules=ModelRuleRegistry.defaults();
     private long resourceRevision;
 
     public VoxelPreviewCoordinator(ViewerWindow window, ViewerPerformanceProfile profile) {
@@ -85,7 +87,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             if (previous != null) {
                 previous.cancel();
             }
-            current = new ActiveRequest(++nextRequestId, request, listener, resourcePath, resourceVersion,resourceInstance);
+            current = new ActiveRequest(++nextRequestId, request, listener, resourcePath, resourceVersion,resourceInstance,modelRules);
             active = current;
             cache.setProfile(request.profile());
             try {
@@ -147,23 +149,32 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         cache.clear();
     }
 
-    private static String renderIdentity(BlockResourceSource archive) {
-        return archive == null ? RENDER_VERSION : RENDER_VERSION + "|" + archive.fingerprint();
+    /** Explicit trusted rule registration. Changing rule identity cancels work and invalidates cached scenes. */
+    public synchronized void setModelRules(ModelRuleRegistry rules) {
+        setModelRules(rules,false);
+    }
+    /** Same package content may now be backed by a fresh worker after cancellation/failure. */
+    public synchronized void setModelRules(ModelRuleRegistry rules,boolean executionChanged) {
+        requireOpen();Objects.requireNonNull(rules);if(modelRules.fingerprint().equals(rules.fingerprint())&&!executionChanged){modelRules=rules;return;}
+        cancel();modelRules=rules;resourceRevision++;cache.clear();window.clear();
+    }
+    private static String renderIdentity(BlockResourceSource archive,ModelRuleRegistry rules) {
+        return archive==null?RENDER_VERSION:RENDER_VERSION+"|rules="+rules.fingerprint()+"|"+archive.fingerprint();
     }
 
     public List<ViewerAreaKey> validateCachedAreas() {
         List<ViewerAreaKey> valid = new ArrayList<>();
         Path path;
         String version;
-        long revision;Path instance;
-        synchronized (this) { path = resourcePath; version = resourceVersion; revision = resourceRevision;instance=resourceInstance; }
+        long revision;Path instance;ModelRuleRegistry rules;
+        synchronized (this) { path = resourcePath; version = resourceVersion; revision = resourceRevision;instance=resourceInstance;rules=modelRules; }
         java.util.Map<Path,String> identities=new java.util.HashMap<>();
         for (ViewerAreaKey key : cache.keys()) {
             RegionSourceSignature signature = null;
             try {
                 String identity=identities.get(key.world());
                 if(identity==null)try(var archive=path==null?null:InstanceResourceSource.open(key.world(),path,version,instance,CancellationSignal.NONE,message->{})) {
-                    identity=renderIdentity(archive);identities.put(key.world(),identity);
+                    identity=renderIdentity(archive,rules);identities.put(key.world(),identity);
                 }
                 if (key.renderVersion().equals(identity)) signature = signatureProvider.capture(key);
             }
@@ -192,7 +203,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             }
             report(request, new ViewerProgress(
                     ViewerProgressStage.CHECKING_CACHE, 0, 0, "正在检查三维缓存"));
-            ViewerAreaKey key = request.request().areaKey(renderIdentity(archive));
+            ViewerAreaKey key = request.request().areaKey(renderIdentity(archive,request.rules));
             synchronized (this) {
                 if (!isCurrentLocked(request)) return;
                 request.key = key;
@@ -230,7 +241,7 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             report(request, new ViewerProgress(
                     ViewerProgressStage.BUILDING_MESH, 0,
                     request.request().target().coordinates().size(), "正在生成网格"));
-            var textures = archive == null ? null : BlockTextureSet.load(archive, area, request);
+            var textures = archive == null ? null : BlockTextureSet.load(archive, area, request,request.rules);
             SceneBuilder selectedBuilder = textures == null ? sceneBuilder : (input, cancellation, monitor) ->
                     new VoxelSceneBuilder(textures).build(input, cancellation, monitor);
             VoxelSceneResult scene = selectedBuilder.build(
@@ -249,12 +260,13 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
             ViewerAreaThumbnail thumbnail = ViewerAreaThumbnail.fromArea(area, request);
             if(archive!=null) {
                 archive.validateAll();
+                var confirmedModIds=archive.confirmedModIds();
                 var notes=new ArrayList<>(snapshot.warnings());
                 var coordinate=new com.mcworldexplorer.voxel.data.ChunkCoordinate(key.target().minX(),key.target().minZ());
                 notes.add(new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_CONTEXT,coordinate,archive.description()));
                 for(String detail:archive.originSamples())notes.add(new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_ORIGIN,coordinate,detail));
                 for(String detail:archive.warnings())notes.add(new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_WARNING,coordinate,detail));
-                snapshot=new VoxelSceneSnapshot(snapshot.anchorWorldX(),snapshot.anchorWorldZ(),snapshot.chunks(),snapshot.bounds(),snapshot.blockCount(),snapshot.faceCount(),snapshot.vertexCount(),snapshot.indexCount(),notes,snapshot.atlas());
+                snapshot=new VoxelSceneSnapshot(snapshot.anchorWorldX(),snapshot.anchorWorldZ(),snapshot.chunks(),snapshot.bounds(),snapshot.blockCount(),snapshot.faceCount(),snapshot.vertexCount(),snapshot.indexCount(),notes,snapshot.atlas(),confirmedModIds);
             }
             RegionSourceSignature after = signatureProvider.capture(key);
             if (!before.equals(after)) {
@@ -404,16 +416,17 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         private final Path resourcePath;
         private final String resourceVersion;
         private final Path resourceInstance;
+        private final ModelRuleRegistry rules;
         private volatile ViewerAreaKey key;
         private final AtomicBoolean cancelled = new AtomicBoolean();
 
-        private ActiveRequest(long id, ViewerRequest request, ViewerTaskListener listener, Path resourcePath, String resourceVersion,Path resourceInstance) {
+        private ActiveRequest(long id, ViewerRequest request, ViewerTaskListener listener, Path resourcePath, String resourceVersion,Path resourceInstance,ModelRuleRegistry rules) {
             this.id = id;
             this.request = request;
             this.listener = listener;
             this.resourcePath = resourcePath;
             this.resourceVersion = resourceVersion;
-            this.resourceInstance=resourceInstance;
+            this.resourceInstance=resourceInstance;this.rules=rules;
         }
 
         private long id() {

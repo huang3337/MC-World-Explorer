@@ -36,7 +36,9 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
     public static final int MAX_METADATA_BYTES = 64 * 1024;
     public static final long MAX_SESSION_READ_BYTES = 64L * 1024 * 1024;
 
-    public record Metadata(String versionId, int worldVersion, int resourcePackVersion) { }
+    public record Metadata(String versionId,int worldVersion,int resourcePackVersion,int resourcePackMinor) {
+        public Metadata(String versionId,int worldVersion,int resourcePackVersion){this(versionId,worldVersion,resourcePackVersion,0);}
+    }
     public record Fingerprint(Path path, long size, long modifiedMillis, String sha256) { }
 
     private final ZipFile zip;
@@ -45,6 +47,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
     private final Metadata metadata;
     private long readBytes;
     private boolean closed;
+    private final java.util.Map<String,Boolean> registryPresence=new java.util.LinkedHashMap<>(16,.75f,true);
 
     private ClientResourceArchive(ZipFile zip, Fingerprint fingerprint, Object fileKey, Metadata metadata,
                                   long readBytes) {
@@ -108,6 +111,29 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
 
     @Override public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return Optional.of(fingerprint.path().toString());}
     public Metadata metadata() { return metadata; }
+    @Override public Optional<String> baseClientVersion(){return Optional.of(metadata.versionId());}
+    synchronized long bytesRead(){return readBytes;}
+    private final java.util.LinkedHashMap<String,Optional<RegistrationClass>> clientClasses=new java.util.LinkedHashMap<>(16,.75f,true);
+    private int clientClassBytes,clientClassReads;
+    @Override public synchronized Optional<RegistrationClass> clientClass(String name)throws IOException {
+        RegistrationClass.checkName(name);validate();var cached=clientClasses.get(name);if(cached!=null)return cached;
+        if(++clientClassReads>4096)throw new ResourceAccessException(LIMIT_EXCEEDED,"客户端类查询超过4096次");
+        var entry=zip.getEntry(name+".class");Optional<RegistrationClass> result=Optional.empty();
+        if(entry!=null&&!entry.isDirectory()){
+            long remaining=MAX_SESSION_READ_BYTES-readBytes;if(remaining<1||entry.getSize()>remaining)throw new ResourceAccessException(LIMIT_EXCEEDED,"客户端类读取超过共享64MiB会话预算");
+            byte[] bytes=readEntry(zip,entry,(int)Math.min(RegistrationClass.MAX_BYTES,remaining));readBytes+=bytes.length;
+            result=Optional.of(new RegistrationClass(name,bytes,fingerprint.path().toString(),fingerprint.sha256()));
+        }
+        int size=result.map(c->c.bytes().length).orElse(0);while(!clientClasses.isEmpty()&&(clientClasses.size()>=128||clientClassBytes+size>8*1024*1024)){var key=clientClasses.keySet().iterator().next();clientClassBytes-=clientClasses.remove(key).map(c->c.bytes().length).orElse(0);}
+        clientClasses.put(name,result);clientClassBytes+=size;validate();return result;
+    }
+    @Override public Optional<Boolean> baseDataRegistry(String directory)throws IOException {
+        validate();new ResourceLocation("minecraft",directory+"/check.json");if(directory.length()>128)throw new IllegalArgumentException("注册目录过长");
+        var old=registryPresence.get(directory);if(old!=null)return Optional.of(old);
+        String prefix="data/minecraft/"+directory+"/";boolean present=zip.stream().anyMatch(e->!e.isDirectory()&&e.getName().startsWith(prefix)&&e.getName().endsWith(".json"));
+        if(registryPresence.size()>=16)registryPresence.remove(registryPresence.keySet().iterator().next());registryPresence.put(directory,present);return Optional.of(present);
+    }
+
     public Fingerprint fingerprint() { return fingerprint; }
 
     public synchronized Optional<byte[]> read(ResourceLocation.Kind kind, ResourceLocation id) throws IOException {
@@ -179,7 +205,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
             reader.setNestingLimit(MAX_JSON_NESTING);
             String id = null;
             int world = -1;
-            int pack = -1;
+            int pack = -1,minor=0;
             Set<String> fields = new HashSet<>();
             reader.beginObject();
             while (reader.hasNext()) {
@@ -200,9 +226,14 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
                         while (reader.hasNext()) {
                             String name = reader.nextName();
                             if (!packFields.add(name)) throw new IOException("duplicate pack metadata field");
-                            if (name.equals("resource")) {
+                            if (name.equals("resource")||name.equals("resource_major")) {
                                 if (reader.peek() != JsonToken.NUMBER) throw new IOException("pack version must be numeric");
-                                pack = reader.nextInt();
+                                int major=reader.nextInt();
+                                if(pack!=-1&&pack!=major)throw new IOException("conflicting resource format versions");
+                                pack=major;
+                            } else if(name.equals("resource_minor")) {
+                                if(reader.peek()!=JsonToken.NUMBER)throw new IOException("resource minor format must be numeric");
+                                minor=reader.nextInt();if(minor<0)throw new IOException("negative resource minor format");
                             } else reader.skipValue();
                         }
                         reader.endObject();
@@ -213,7 +244,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
             reader.endObject();
             if (reader.peek() != JsonToken.END_DOCUMENT || id == null || id.isBlank()
                     || id.length() > 128 || world < 0 || pack < 1) throw new IOException("incomplete version metadata");
-            return new Metadata(id, world, pack);
+            return new Metadata(id, world, pack,minor);
         } catch (IOException | IllegalStateException | NumberFormatException e) {
             throw new ResourceAccessException(INVALID_METADATA, "客户端版本元数据无效", e);
         }
@@ -252,7 +283,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             try (InputStream input = Files.newInputStream(path)) {
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[262144];
                 int read;
                 long total = 0;
                 while ((read = input.read(buffer)) != -1) {
@@ -271,6 +302,8 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
     @Override public synchronized void close() throws IOException {
         if (!closed) {
             closed = true;
+            registryPresence.clear();
+            clientClasses.clear();clientClassBytes=0;
             zip.close();
         }
     }

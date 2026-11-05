@@ -15,7 +15,6 @@ public final class PortableSettings {
     private static final String SETTINGS_FILE_NAME = "settings.properties";
     private static final String CUSTOM_SAVES_PATH = "custom_saves_path";
     private static final String VIEWER_PERFORMANCE_PROFILE = "viewer_performance_profile";
-
     public Optional<Path> loadCustomSavesPath() throws IOException {
         Path settingsFile = settingsFile();
         if (!Files.isRegularFile(settingsFile)) {

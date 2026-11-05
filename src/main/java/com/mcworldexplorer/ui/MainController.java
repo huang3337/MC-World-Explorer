@@ -12,6 +12,7 @@ import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ScrollPane;
@@ -37,6 +38,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Consumer;
 
 public class MainController {
     private static final Logger LOGGER = LoggerFactory.getLogger(MainController.class);
@@ -55,6 +58,23 @@ public class MainController {
     private Path selectedRootPath;
     private String pendingScanWarning;
     private double sidebarPosition = 0.23;
+    private Consumer<String> documentOpener = address -> { throw new IllegalStateException("浏览器服务尚未初始化"); };
+    private Dialog<Void> aboutDialog;
+
+    public void setDocumentOpener(Consumer<String> opener) {
+        documentOpener = Objects.requireNonNull(opener);
+    }
+
+    @FXML
+    private void handleAbout() {
+        if (aboutDialog != null) {
+            aboutDialog.getDialogPane().getScene().getWindow().requestFocus();
+            return;
+        }
+        aboutDialog = AboutDialog.create(workspaceSplitPane.getScene().getWindow(), documentOpener);
+        aboutDialog.setOnHidden(event -> aboutDialog = null);
+        aboutDialog.show();
+    }
 
     @FXML
     private SplitPane workspaceSplitPane;
@@ -97,6 +117,7 @@ public class MainController {
     private MapViewerController mapViewerController;
 
     public void shutdown() {
+        if (aboutDialog != null) aboutDialog.close();
         if (mapViewerController != null) {
             mapViewerController.shutdown();
         }

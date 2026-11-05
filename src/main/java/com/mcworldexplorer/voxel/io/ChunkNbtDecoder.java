@@ -95,10 +95,17 @@ public final class ChunkNbtDecoder {
         }
 
         List<ChunkSection> sections = new ArrayList<>();
+        var biomes=new TreeMap<Integer,com.mcworldexplorer.voxel.data.BiomeSection>();
         for (int i = 0; i < sectionTags.size(); i++) {
-            ChunkSection section = readSection(sectionTags.getCompound(i), layout);
+            var sectionTag=sectionTags.getCompound(i);
+            ChunkSection section = readSection(sectionTag, layout);
             if (section != null) {
                 sections.add(section);
+            }
+            if(layout==ChunkStorageLayout.MODERN_ROOT&&sectionTag.get("biomes")!=null){
+                int y=sectionTag.getInt("Y");
+                if(biomes.putIfAbsent(y,com.mcworldexplorer.voxel.data.BiomeSection.read(sectionTag.get("biomes")))!=null)
+                    throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_SECTION,y,"duplicate saved biome section");
             }
         }
         if (layout == ChunkStorageLayout.LEVEL_PALETTE
@@ -114,7 +121,7 @@ public final class ChunkNbtDecoder {
         if(entityTags.size()>4096)throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_NBT,-1,"方块实体数量超过 4096，无法完整准备该区块外观");
         for(int i=0;i<entityTags.size();i++)
             com.mcworldexplorer.voxel.data.BlockEntityData.read(entityTags.getCompound(i),chunkX,chunkZ).ifPresent(entities::add);
-        return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections,entities));
+        return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections,entities,biomes));
     }
 
     private static int storedCoordinate(CompoundBinaryTag container, String key) {
@@ -160,7 +167,7 @@ public final class ChunkNbtDecoder {
             if (states.keySet().isEmpty()) {
                 return null;
             }
-            palette = states.getList("palette", BinaryTagTypes.COMPOUND);
+            palette = states.getList("palette");
             data = states.getLongArray("data");
         } else {
             if (!section.keySet().contains("Palette")) {
@@ -178,7 +185,10 @@ public final class ChunkNbtDecoder {
 
         List<BlockState> states = new ArrayList<>(palette.size());
         for (int i = 0; i < palette.size(); i++) {
-            states.add(readState(palette.getCompound(i), sectionY, i));
+            var value=palette.get(i);
+            if(value instanceof net.kyori.adventure.nbt.StringBinaryTag text)states.add(stringState(text.value(),sectionY,i));
+            else if(value instanceof CompoundBinaryTag compound)states.add(readState(compound,sectionY,i));
+            else throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_PALETTE,sectionY,"palette entry "+i+" is neither a block ID nor an object");
         }
         return new ChunkSection(sectionY, states, data);
     }
@@ -187,7 +197,10 @@ public final class ChunkNbtDecoder {
             CompoundBinaryTag state,
             int sectionY,
             int paletteIndex) throws ChunkDecodeException {
-        String name = state.getString("Name");
+        if(state.keySet().size()==1&&state.get("") instanceof net.kyori.adventure.nbt.StringBinaryTag text)return stringState(text.value(),sectionY,paletteIndex);
+        if(state.keySet().contains("Name")&&state.keySet().contains("id")&&!state.getString("Name").equals(state.getString("id")))
+            throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_PALETTE,sectionY,"conflicting block name fields");
+        String name = state.keySet().contains("id")?state.getString("id"):state.getString("Name");
         if (name == null || name.isBlank()) {
             throw new ChunkDecodeException(
                     ChunkDecodeException.Reason.INVALID_PALETTE,
@@ -195,8 +208,12 @@ public final class ChunkNbtDecoder {
                     "palette entry " + paletteIndex + " has no block name");
         }
         Map<String, String> properties = new TreeMap<>();
-        if (state.keySet().contains("Properties")) {
-            CompoundBinaryTag propertyTag = state.getCompound("Properties");
+        if(state.keySet().contains("Properties")&&state.keySet().contains("properties")&&!state.get("Properties").equals(state.get("properties")))
+            throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_PALETTE_PROPERTY,sectionY,"conflicting property fields");
+        if (state.keySet().contains("Properties")||state.keySet().contains("properties")) {
+            String keyName=state.keySet().contains("properties")?"properties":"Properties";
+            if(!(state.get(keyName) instanceof CompoundBinaryTag))throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_PALETTE_PROPERTY,sectionY,"block properties must be a compound");
+            CompoundBinaryTag propertyTag = state.getCompound(keyName);
             for (String key : propertyTag.keySet()) {
                 BinaryTag value = propertyTag.get(key);
                 if (value == null || value.type() != BinaryTagTypes.STRING) {
@@ -218,5 +235,9 @@ public final class ChunkNbtDecoder {
                     "palette entry " + paletteIndex + " has an invalid property",
                     e);
         }
+    }
+    private static BlockState stringState(String name,int sectionY,int index)throws ChunkDecodeException {
+        if(name==null||name.isBlank())throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_PALETTE,sectionY,"palette entry "+index+" has no block name");
+        return new BlockState(name,Map.of());
     }
 }

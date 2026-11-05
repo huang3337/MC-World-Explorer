@@ -58,12 +58,12 @@ public final class RegionFileReader implements AutoCloseable {
         long chunkStart = (long) sectorOffset * SECTOR_BYTES;
         long allocatedBytes = (long) sectorCount * SECTOR_BYTES;
         long fileSize = channel.size();
-        if (chunkStart > fileSize || allocatedBytes > fileSize - chunkStart) {
+        if (chunkStart > fileSize - Integer.BYTES - 1) {
             throw failure(
                     RegionReadException.Reason.INVALID_LOCATION,
                     localChunkX,
                     localChunkZ,
-                    "declared sectors exceed the file size");
+                    "chunk header is outside the file");
         }
 
         ByteBuffer chunkHeader = ByteBuffer.allocate(Integer.BYTES + 1).order(ByteOrder.BIG_ENDIAN);
@@ -130,6 +130,8 @@ public final class RegionFileReader implements AutoCloseable {
     }
 
     private ByteBuffer readHeader() throws IOException {
+        // A zero-byte Region has no chunk records. Do not initialize or rewrite its header.
+        if(channel.size()==0)return ByteBuffer.allocate(HEADER_BYTES).asReadOnlyBuffer().order(ByteOrder.BIG_ENDIAN);
         if (channel.size() < HEADER_BYTES) {
             throw failure(
                     RegionReadException.Reason.TRUNCATED_HEADER,

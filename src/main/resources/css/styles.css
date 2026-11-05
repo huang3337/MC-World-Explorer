@@ -9,6 +9,16 @@
     -fx-faint-focus-color: #2365c722;
 }
 
+.resource-settings { -fx-background-color: #f4f6f8; }
+.settings-heading { -fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #243140; }
+.settings-scroll { -fx-background: #f4f6f8; -fx-background-color: transparent; }
+.settings-scroll > .viewport { -fx-background-color: transparent; }
+.resource-settings .tab-pane > .tab-header-area > .tab-header-background { -fx-background-color: #e8edf3; }
+.resource-settings .tab-pane > .tab-header-area .tab { -fx-background-color: transparent; -fx-background-insets: 0; -fx-padding: 7 12; }
+.resource-settings .tab-pane > .tab-header-area .tab:selected { -fx-background-color: #ffffff; -fx-border-color: #2365c7; -fx-border-width: 0 0 2 0; }
+.settings-notice { -fx-padding: 10 12; -fx-background-color: #eaf1fb; -fx-background-radius: 6; -fx-text-fill: #315785; }
+.plugin-state { -fx-text-fill: #647383; -fx-font-size: 12px; }
+
 .workspace {
     -fx-padding: 0;
     -fx-background-color: #f4f6f8;
@@ -24,7 +34,7 @@
 }
 
 .sidebar-header {
-    -fx-padding: 20 14 14 14;
+    -fx-padding: 16 14 12 14;
 }
 
 .section-title {
@@ -74,7 +84,7 @@
 }
 
 .world-header {
-    -fx-padding: 15 16 10 16;
+    -fx-padding: 16 18 12 18;
 }
 
 .button, .toggle-button, .menu-button {
@@ -233,10 +243,10 @@
 }
 
 .viewer-selection-bar {
-    -fx-background-color: #eef5fb;
-    -fx-border-color: #9db9d0;
-    -fx-border-width: 1;
-    -fx-padding: 10 16 10 16;
+    -fx-background-color: #f4f7fb;
+    -fx-border-color: #dce2e9;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 12 16 10 16;
 }
 
 .map-viewport {
@@ -371,3 +381,20 @@
     -fx-padding: 12;
     -fx-effect: dropshadow(gaussian, rgba(24, 44, 70, 0.14), 12, 0, 0, 3);
 }
+
+/* Work area remains primary; settings and diagnostics use restrained support surfaces. */
+.mode-switch { -fx-font-weight: bold; }
+.mode-switch:selected { -fx-background-color: #eaf2ff; -fx-border-color: #90b5ed; }
+.preview-options { -fx-background-color: transparent; -fx-padding: 0; }
+.preview-options > .title { -fx-background-color: transparent; -fx-padding: 3 0; -fx-font-size: 12px; }
+.preview-options > .content { -fx-background-color: transparent; -fx-border-width: 0; -fx-padding: 8 0 2 0; }
+.settings-section { -fx-padding: 12; -fx-spacing: 10; -fx-background-color: white; -fx-border-color: #e0e6ed; -fx-border-radius: 5; -fx-background-radius: 5; }
+.plugin-list, .diagnostic-table { -fx-background-color: white; -fx-border-color: #dce2e9; -fx-background-insets: 0; }
+.plugin-list .list-cell { -fx-padding: 9 10; }
+.plugin-list .list-cell:filled:selected { -fx-background-color: #eaf2ff; -fx-text-fill: #243140; }
+.plugin-detail, .diagnostic-detail { -fx-padding: 10 12; -fx-background-color: #f5f7fa; -fx-border-color: #e0e6ed; -fx-border-width: 1 0 0 0; }
+.diagnostic-summary { -fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #315785; }
+.settings-feedback { -fx-control-inner-background: #f5f7fa; -fx-font-size: 12px; }
+.section-caption { -fx-font-size: 12px; -fx-text-fill: #647383; }
+.empty-state { -fx-padding: 20; -fx-text-fill: #647383; -fx-text-alignment: center; }
+.about-avatar { -fx-padding: 1; -fx-background-color: white; -fx-background-radius: 25; -fx-border-color: #dce2e9; -fx-border-width: 1; -fx-border-radius: 25; }

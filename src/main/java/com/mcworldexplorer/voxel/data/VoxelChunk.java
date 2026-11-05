@@ -13,6 +13,7 @@ public final class VoxelChunk {
     private final int chunkX;
     private final int chunkZ;
     private final NavigableMap<Integer, ChunkSection> sections;
+    private final java.util.Map<Integer,BiomeSection> biomeSections;
 
     public VoxelChunk(int chunkX, int chunkZ, List<ChunkSection> sections)
             throws ChunkDecodeException {
@@ -20,6 +21,10 @@ public final class VoxelChunk {
     }
 
     public VoxelChunk(int chunkX,int chunkZ,List<ChunkSection> sections,List<BlockEntityData> entities) throws ChunkDecodeException {
+        this(chunkX,chunkZ,sections,entities,java.util.Map.of());
+    }
+    public VoxelChunk(int chunkX,int chunkZ,List<ChunkSection> sections,List<BlockEntityData> entities,java.util.Map<Integer,BiomeSection> biomeSections) throws ChunkDecodeException {
+        this.biomeSections=java.util.Map.copyOf(biomeSections);
         if(entities.size()>4096)throw new IllegalArgumentException("方块实体数量超过 4096");
         java.util.Map<Long,BlockEntityData> indexedEntities=new java.util.HashMap<>();
         for(var entity:entities)if(Math.floorDiv(entity.x(),16)==chunkX&&Math.floorDiv(entity.z(),16)==chunkZ)
@@ -55,6 +60,13 @@ public final class VoxelChunk {
     }
     private static long entityKey(long x,int y,long z){return ((long)y<<8)|((z&15)<<4)|(x&15);}
     public java.util.Collection<BlockEntityData> blockEntities(){return blockEntities.values();}
+    /** Raw saved quart cells; missing/invalid input must not become a default plains biome. */
+    public java.util.Optional<BiomeSection> biomeSection(int sectionY){return java.util.Optional.ofNullable(biomeSections.get(sectionY));}
+    public java.util.Optional<String> biomeAtQuart(int localQuartX,int quartY,int localQuartZ){
+        if(localQuartX<0||localQuartX>3||localQuartZ<0||localQuartZ>3)throw new IndexOutOfBoundsException("local quart coordinates must be 0..3");
+        var section=biomeSections.get(Math.floorDiv(quartY,4));
+        return section==null?java.util.Optional.empty():section.at(localQuartX,Math.floorMod(quartY,4),localQuartZ);
+    }
 
     public int chunkX() {
         return chunkX;

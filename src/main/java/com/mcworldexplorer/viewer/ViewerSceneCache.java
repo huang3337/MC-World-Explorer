@@ -107,7 +107,24 @@ public final class ViewerSceneCache {
         long vertexBytes = snapshot.chunks().stream().flatMap(chunk -> chunk.batches().stream())
                 .mapToLong(batch -> Math.multiplyExact((long) batch.vertexCount(), (batch.textured() ? 8L : 6L) * Float.BYTES)).sum();
         long indexBytes = Math.multiplyExact((long) snapshot.indexCount(), Integer.BYTES);
-        return Math.addExact(Math.addExact(vertexBytes, indexBytes), snapshot.atlas().map(TextureAtlas::estimatedBytes).orElse(0L));
+        long targets = snapshot.chunks().stream().mapToLong(chunk -> chunk.targets().estimatedBytes()).sum();
+        long owners = snapshot.confirmedModIds().stream().mapToLong(id -> 64L + id.length()*2L).sum();
+        var seen=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<com.mcworldexplorer.voxel.resource.BlockResourceDiagnostic,Boolean>());
+        var seenWarnings=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<com.mcworldexplorer.voxel.mesh.MeshWarning,Boolean>());
+        var warningLists=new java.util.ArrayList<java.util.List<com.mcworldexplorer.voxel.mesh.MeshWarning>>();
+        warningLists.add(snapshot.warnings());snapshot.chunks().forEach(chunk->warningLists.add(chunk.warnings()));
+        long diagnostics=0;
+        for(var warnings:warningLists)for(var warning:warnings){
+            if(!seenWarnings.add(warning))continue;
+            diagnostics+=80L+warning.detail().length()*2L;
+            if(warning.diagnostic().isPresent()&&seen.add(warning.diagnostic().orElseThrow())){
+                var d=warning.diagnostic().orElseThrow();diagnostics+=192L+d.state().name().length()*2L+d.detail().length()*2L+d.reasonCode().length()*2L;
+                diagnostics+=d.state().properties().entrySet().stream().mapToLong(e->64L+(e.getKey().length()+e.getValue().length())*2L).sum();
+                diagnostics+=d.loaders().stream().mapToLong(value->40L+value.length()*2L).sum();
+                diagnostics+=d.assets().stream().mapToLong(a->96L+(a.kind().length()+a.id().length()+a.origin().length())*2L).sum();
+            }
+        }
+        return Math.addExact(Math.addExact(Math.addExact(vertexBytes, indexBytes), targets + owners + diagnostics), snapshot.atlas().map(TextureAtlas::estimatedBytes).orElse(0L));
     }
 
     private void setLimits(int maxEntries, long maxBytes) {

@@ -16,7 +16,12 @@ public record VoxelSceneSnapshot(
         int vertexCount,
         int indexCount,
         List<MeshWarning> warnings,
-        Optional<TextureAtlas> atlas) {
+        Optional<TextureAtlas> atlas, java.util.Set<String> confirmedModIds) {
+    public VoxelSceneSnapshot(long anchorWorldX, long anchorWorldZ, List<ChunkMeshSnapshot> chunks,
+                              MeshBounds bounds, int blockCount, int faceCount, int vertexCount,
+                              int indexCount, List<MeshWarning> warnings, Optional<TextureAtlas> atlas) {
+        this(anchorWorldX,anchorWorldZ,chunks,bounds,blockCount,faceCount,vertexCount,indexCount,warnings,atlas,java.util.Set.of());
+    }
     public VoxelSceneSnapshot(long anchorWorldX, long anchorWorldZ, List<ChunkMeshSnapshot> chunks,
                               MeshBounds bounds, int blockCount, int faceCount, int vertexCount,
                               int indexCount, List<MeshWarning> warnings) {
@@ -25,6 +30,7 @@ public record VoxelSceneSnapshot(
     public VoxelSceneSnapshot {
         Objects.requireNonNull(bounds, "bounds");
         Objects.requireNonNull(atlas, "atlas");
+        confirmedModIds = java.util.Set.copyOf(confirmedModIds);
         if (atlas.isEmpty() && chunks.stream().flatMap(c -> c.batches().stream()).anyMatch(MeshBatch::textured))
             throw new IllegalArgumentException("textured scene requires an atlas");
         chunks = chunks.stream()

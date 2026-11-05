@@ -10,9 +10,9 @@
               styleClass="world-sidebar" SplitPane.resizableWithParent="false">
             <children>
                 <VBox spacing="12.0" styleClass="sidebar-header">
-                    <Label text="我的世界" styleClass="section-title"/>
+                    <Label text="存档库" styleClass="section-title"/>
                     <Button fx:id="chooseFolderButton" mnemonicParsing="false"
-                            onAction="#handleChooseFolder" text="%button.chooseFolder" maxWidth="Infinity"/>
+                            onAction="#handleChooseFolder" text="选择目录…" maxWidth="Infinity"/>
                 </VBox>
                 <TreeView fx:id="worldTreeView" minWidth="0.0" VBox.vgrow="ALWAYS"/>
                 <HBox spacing="8.0" alignment="CENTER_LEFT" styleClass="sidebar-status">
@@ -39,6 +39,8 @@
                                minWidth="0.0" maxWidth="Infinity" styleClass="muted-text"/>
                     </VBox>
                     <ToggleButton fx:id="detailsToggleButton" text="存档详情" mnemonicParsing="false" minWidth="-Infinity" styleClass="quiet-button"/>
+                    <Button fx:id="aboutButton" text="关于" mnemonicParsing="false" minWidth="-Infinity"
+                            onAction="#handleAbout" styleClass="quiet-button"/>
                 </HBox>
                 <StackPane VBox.vgrow="ALWAYS" minHeight="0.0">
                     <children>

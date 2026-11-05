@@ -27,7 +27,7 @@ public record WorldDimension(
         return new WorldDimension(
                 OVERWORLD_ID,
                 "主世界",
-                worldFolder.resolve("region"),
+                region(worldFolder,"overworld",worldFolder.resolve("region")),
                 DimensionKind.OVERWORLD);
     }
 
@@ -35,7 +35,7 @@ public record WorldDimension(
         return new WorldDimension(
                 NETHER_ID,
                 "下界",
-                worldFolder.resolve("DIM-1").resolve("region"),
+                region(worldFolder,"the_nether",worldFolder.resolve("DIM-1").resolve("region")),
                 DimensionKind.NETHER);
     }
 
@@ -43,8 +43,12 @@ public record WorldDimension(
         return new WorldDimension(
                 END_ID,
                 "末地",
-                worldFolder.resolve("DIM1").resolve("region"),
+                region(worldFolder,"the_end",worldFolder.resolve("DIM1").resolve("region")),
                 DimensionKind.END);
+    }
+    private static Path region(Path world,String name,Path legacy) {
+        Path modern=world.resolve("dimensions").resolve("minecraft").resolve(name).resolve("region");
+        return java.nio.file.Files.isDirectory(modern)?modern:legacy;
     }
 
     public boolean isOverworld() {

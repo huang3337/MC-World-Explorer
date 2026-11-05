@@ -20,6 +20,7 @@ import javafx.scene.control.MenuButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.control.TitledPane;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TreeItem;
@@ -57,6 +58,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** Uses isolated configuration; real-save access is opt-in through MCWORLD_UI_TEST_WORLD. */
+@org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="mcwe.ui.tests", matches="true")
 class WorkspaceLayoutTest {
     @TempDir
     Path home;
@@ -95,6 +97,57 @@ class WorkspaceLayoutTest {
             }
             assertTrue(root.lookup("#viewportHost").getBoundsInLocal().getHeight() >= 250);
             snapshotIfRequested(root, "workspace-900x600.png");
+        });
+    }
+
+
+
+
+
+    private javafx.scene.control.Dialog<?> openResourceDialog(Parent root,MapViewerController controller)throws Exception {
+        var entry=(Button)root.lookup("#resourceSettingsButton");assertNotNull(entry);assertFalse(entry.isDisabled());entry.fire();
+        var field=MapViewerController.class.getDeclaredField("resourceSettingsDialog");field.setAccessible(true);var dialog=(javafx.scene.control.Dialog<?>)field.get(controller);
+        assertTrue(dialog.isShowing());dialog.getDialogPane().applyCss();dialog.getDialogPane().layout();return dialog;
+    }
+
+
+
+    @Test void resourceSettingsFollowsTaskCompletionStatus()throws Exception {
+        withWorkspace(root->{
+            loadEmptyTestWorld(root);Stage stage=new Stage();stage.setScene(root.getScene());stage.show();
+            try{
+                var controller=(MapViewerController)root.getProperties().get("mapViewerController");
+                ((ToggleButton)root.lookup("#viewerModeButton")).fire();
+                var viewport=(MapViewport)((StackPane)root.lookup("#viewportHost")).getChildren().getFirst();
+                var selection=com.mcworldexplorer.voxel.data.ChunkRectangle.centered(0,0,3,3);
+                var locked=MapViewerController.class.getDeclaredField("viewerLockedSelection");locked.setAccessible(true);locked.set(controller,selection);
+                viewport.lockViewerSelection(selection);
+                var dialog=openResourceDialog(root,controller);var pane=dialog.getDialogPane();
+                var taskUi=MapViewerController.class.getDeclaredMethod("setViewerTaskUi",boolean.class);taskUi.setAccessible(true);taskUi.invoke(controller,true);
+                var status=(Label)pane.lookup("#resourceSettingsStatus");assertTrue(status.getText().contains("正在生成预览"));
+                assertEquals("取消生成",((Button)root.lookup("#viewerCancelButton")).getText());
+                assertTrue(((Button)pane.lookup("#resourceAutomaticButton")).isDisabled());taskUi.invoke(controller,false);
+                assertEquals(selection,viewport.viewerLockedSelection().orElseThrow());
+                assertEquals("取消选区",((Button)root.lookup("#viewerCancelButton")).getText());
+                ((Label)root.lookup("#viewerSelectionLabel")).setText("三维预览已打开；状态更新测试");
+                assertEquals("三维预览已打开；状态更新测试",status.getText());assertFalse(((Button)pane.lookup("#resourceAutomaticButton")).isDisabled());dialog.close();
+            }finally{stage.close();}
+        });
+    }
+
+    @Test void resourceSettingsWrapLongPathsAndKeepActionsReachable()throws Exception {
+        withWorkspace(root->{
+            String longPath="D:\\游戏目录\\"+"整合包与资源目录\\".repeat(15)+"1.21.1.jar";
+            var pane=new ResourceSettingsPane(new ResourceSettingsPane.Host(){
+                public String world(){return "长路径布局测试存档";}public String version(){return "1.21.1";}public String client(){return longPath;}public String instance(){return longPath;}
+                public String status(){return "已选择资源；生成预览后显示详细诊断。";}public String diagnostics(){return "此页面使用合成路径检查布局。";}public boolean resourceActionsAvailable(){return true;}
+                public void automatic(){}public void chooseClient(){}public void chooseInstance(){}public void simpleColors(){}
+            });
+            ((TitledPane)pane.lookup("#resourceManualSection")).setExpanded(true);
+            var scene=new Scene(pane,520,440);scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());pane.applyCss();pane.resize(520,440);pane.layout();
+            var client=(Label)pane.lookup("#resourceClientValue");assertEquals(longPath,client.getTooltip().getText());assertTrue(client.getHeight()>30);
+            var scroll=(ScrollPane)pane.lookup(".settings-scroll");assertTrue(scroll.getContent().getBoundsInParent().getWidth()<=scroll.getViewportBounds().getWidth()+1);
+            scroll.setVvalue(1);pane.layout();snapshotIfRequested(pane,"resource-settings-long-path-520x440.png");
         });
     }
 
@@ -166,8 +219,8 @@ class WorkspaceLayoutTest {
             com.mcworldexplorer.viewer.ViewerPerformanceProfile.BASIC,new com.mcworldexplorer.viewer.ViewerMapReturnState(0,0,2,com.mcworldexplorer.preview.PreviewLayer.surfaceOverview()));
         var diagnostics=MapViewerController.class.getDeclaredMethod("resourceDiagnostics",com.mcworldexplorer.viewer.ViewerTaskResult.class);diagnostics.setAccessible(true);
         String text=(String)diagnostics.invoke(null,new com.mcworldexplorer.viewer.ViewerTaskResult(request,scene,false,0));
-        assertTrue(text.contains("使用简化颜色的方块：9"));assertTrue(text.contains("缺少资源：7"));assertTrue(text.contains("未支持模型表达：2"));
-        assertTrue(text.contains("实例：pack-a"));assertTrue(text.contains("shapes.jar"));assertTrue(text.contains("OBJ 静态几何"));
+        assertTrue(text.contains("仅统计当前加载选区"));assertTrue(text.contains("TEXTURE_FALLBACK"));
+        assertTrue(text.contains("实例：pack-a"));assertTrue(text.contains("shapes.jar"));assertTrue(text.contains("OBJ 静态几何"));assertTrue(text.contains("不代表整个 Mod"));
     }
 
     @Test void aCompletedOlderManualLookupCannotPersistAfterReturningToAutomatic()throws Exception {
@@ -215,6 +268,7 @@ class WorkspaceLayoutTest {
             // This is a toolbar layout test; do not start unrelated asynchronous map writes.
             root.lookup("#viewerSelectionBar").setManaged(true);
             root.lookup("#viewerSelectionBar").setVisible(true);
+            ((javafx.scene.control.TitledPane)root.lookup("#viewerAdvancedOptions")).setExpanded(true);
             MenuButton menu = (MenuButton) root.lookup("#viewerTextureMenu");
             assertNotNull(menu);
             assertEquals("纹理：自动", menu.getText());
@@ -231,7 +285,7 @@ class WorkspaceLayoutTest {
             assertTrue(menu.getItems().stream().noneMatch(item->item.getText().contains("实例")||item.getText().contains("恢复")),"统一自动入口后不再拆分恢复操作");
             assertTrue(menu.getItems().stream().noneMatch(item->item.getText().contains("诊断")),"诊断入口应独立于纹理选择下拉栏");
             Button diagnostics=(Button)root.lookup("#viewerResourceDiagnosticsButton");
-            assertNotNull(diagnostics);assertEquals("资源诊断",diagnostics.getText());assertNotNull(diagnostics.getOnAction());
+            assertNotNull(diagnostics);assertEquals("查看解析诊断",diagnostics.getText());assertNotNull(diagnostics.getOnAction());
             assertEquals(menu.getParent(),diagnostics.getParent(),"资源操作应成组换行");
             menu.setDisable(true);assertTrue(diagnostics.isDisabled(),"生成期间与纹理操作保持相同禁用状态");
             menu.setDisable(false);assertFalse(diagnostics.isDisabled());
@@ -445,6 +499,7 @@ class WorkspaceLayoutTest {
             viewport.viewportState().zoomVisualAt(1, 0, 0, viewport.getWidth(), viewport.getHeight());
             viewport.viewportState().centerOn(0, 0);
             Button confirm = (Button) root.lookup("#viewerConfirmButton");
+            Button cancel = (Button) root.lookup("#viewerCancelButton");
             Label feedback = (Label) root.lookup("#viewerSelectionLabel");
             var canvas = viewport.lookup("Canvas");
             double originalX = viewport.viewportState().centerX();
@@ -467,11 +522,22 @@ class WorkspaceLayoutTest {
             assertEquals(originalX - 32, viewport.viewportState().centerX());
             assertEquals(rectangle, viewport.viewerLockedSelection().orElseThrow());
             drag(canvas, 100, 70, 650, 380, MouseButton.PRIMARY);
+            assertEquals(rectangle, viewport.viewerLockedSelection().orElseThrow(),
+                    "已锁定区域只能经取消或 Esc 解锁，不能直接重画");
+            assertFalse(confirm.isDisabled());
+            assertTrue(cancel.isVisible());
+            assertEquals("取消选区", cancel.getText());
+            cancel.fire();
+            assertTrue(viewport.viewerLockedSelection().isEmpty());
+            assertTrue(confirm.isDisabled());
+            drag(canvas, 100, 70, 650, 380, MouseButton.PRIMARY);
             assertTrue(confirm.isDisabled());
             assertTrue(feedback.getText().contains("超出上限"));
             drag(canvas, 160, 100, 160, 100, MouseButton.PRIMARY);
             assertEquals(1, viewport.viewerLockedSelection().orElseThrow().width());
             assertFalse(confirm.isDisabled());
+            cancel.fire();
+            assertTrue(viewport.viewerLockedSelection().isEmpty());
             profiles.setValue(com.mcworldexplorer.viewer.ViewerPerformanceProfile.BASIC);
             assertTrue(confirm.isDisabled());
             assertTrue(viewport.viewerLockedSelection().isEmpty());
@@ -480,6 +546,122 @@ class WorkspaceLayoutTest {
             Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, 340, 192, MouseButton.PRIMARY));
             assertFalse(viewport.isViewerSelectionMode());
             assertTrue(viewport.viewerLockedSelection().isEmpty());
+        });
+    }
+
+    @Test
+    void lockedSelectionSurvivesLoadingAndCompletionUntilExplicitCancellation() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            var controller = (MapViewerController) root.getProperties().get("mapViewerController");
+            ((ToggleButton) root.lookup("#viewerModeButton")).fire();
+            @SuppressWarnings("unchecked")
+            var ranges = (ComboBox<com.mcworldexplorer.viewer.ViewerRangeOption>) root.lookup("#viewerRangeComboBox");
+            var profiles = (ComboBox<?>) root.lookup("#viewerProfileComboBox");
+            ranges.setValue(com.mcworldexplorer.viewer.ViewerRangeOption.FREE);
+            var viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+            root.applyCss(); root.layout();
+            viewport.viewportState().zoomVisualAt(1, 0, 0, viewport.getWidth(), viewport.getHeight());
+            viewport.viewportState().centerOn(0, 0);
+            var canvas = viewport.lookup("Canvas");
+            var confirm = (Button) root.lookup("#viewerConfirmButton");
+            var cancel = (Button) root.lookup("#viewerCancelButton");
+            var label = (Label) root.lookup("#viewerSelectionLabel");
+            var running = MapViewerController.class.getDeclaredField("viewerTaskRunning"); running.setAccessible(true);
+            var locked = MapViewerController.class.getDeclaredField("viewerLockedSelection"); locked.setAccessible(true);
+            var target = MapViewerController.class.getDeclaredField("activeViewerTarget"); target.setAccessible(true);
+            var requestId = MapViewerController.class.getDeclaredField("activeViewerRequestId"); requestId.setAccessible(true);
+            var setUi = MapViewerController.class.getDeclaredMethod("setViewerTaskUi", boolean.class); setUi.setAccessible(true);
+            var progress = MapViewerController.class.getDeclaredMethod("acceptViewerProgress", long.class, com.mcworldexplorer.viewer.ViewerProgress.class); progress.setAccessible(true);
+            var failure = MapViewerController.class.getDeclaredMethod("acceptViewerFailure", long.class, Throwable.class); failure.setAccessible(true);
+            var success = MapViewerController.class.getDeclaredMethod("acceptViewerSuccess", long.class, com.mcworldexplorer.viewer.ViewerTaskResult.class); success.setAccessible(true);
+            var original = com.mcworldexplorer.voxel.data.ChunkRectangle.centered(40, 40, 3, 3);
+            var worldField = MapViewerController.class.getDeclaredField("world"); worldField.setAccessible(true);
+            var world = ((WorldInfo) worldField.get(controller)).getFolderPath();
+            var request = new com.mcworldexplorer.viewer.ViewerRequest(world, "fixture", "minecraft:overworld", "主世界", original,
+                    com.mcworldexplorer.viewer.ViewerPerformanceProfile.BASIC,
+                    new com.mcworldexplorer.viewer.ViewerMapReturnState(0, 0, 1, com.mcworldexplorer.preview.PreviewLayer.surfaceOverview()));
+            var scene = new com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot(0, 0, java.util.List.of(),
+                    new com.mcworldexplorer.voxel.mesh.MeshBounds(0, 0, 0, 0, 0, 0), 0, 0, 0, 0, java.util.List.of());
+            var result = new com.mcworldexplorer.viewer.ViewerTaskResult(request, scene, false, 0);
+            for (String completion : java.util.List.of("cancel", "escape", "success", "failure")) {
+                viewport.viewportState().zoomAt(com.mcworldexplorer.map.MapDisplayZoom.BLOCKS_1,
+                        viewport.getWidth() / 2, viewport.getHeight() / 2,
+                        viewport.getWidth(), viewport.getHeight());
+                locked.set(controller, original);
+                viewport.lockViewerSelection(original);
+                target.set(controller, original);
+                requestId.setLong(controller, 123);
+                setUi.invoke(controller, true);
+                label.setText("正在读取原区域");
+                assertTrue(ranges.isDisabled(), "加载中不能更换选区范围");
+                assertTrue(profiles.isDisabled(), "加载中不能更换性能档位");
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_PRESSED, 100, 80, MouseButton.PRIMARY));
+                assertTrue(running.getBoolean(controller), "左键按下不能取消加载");
+                assertEquals(original, target.get(controller)); assertEquals(123, requestId.getLong(controller));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, 132, 96, MouseButton.PRIMARY));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, 132, 96, MouseButton.PRIMARY));
+                assertEquals(original, viewport.viewerLockedSelection().orElseThrow(), "加载中不能框选新区域");
+                assertEquals(original, locked.get(controller));
+                assertTrue(running.getBoolean(controller), "地图操作不能取消加载");
+                assertEquals(original, target.get(controller)); assertEquals(123, requestId.getLong(controller));
+                assertTrue(confirm.isDisabled()); assertTrue(cancel.isVisible()); assertEquals("正在读取原区域", label.getText());
+                assertEquals("取消生成", cancel.getText());
+                double centerBeforePan = viewport.viewportState().centerX();
+                drag(canvas, 100, 80, 116, 80, MouseButton.SECONDARY);
+                assertTrue(viewport.viewportState().centerX() < centerBeforePan, "加载中仍可拖动地图");
+                var zoomBefore = viewport.viewportState().displayZoom();
+                viewport.zoomIn();
+                assertNotEquals(zoomBefore, viewport.viewportState().displayZoom(), "加载中仍可缩放地图");
+                assertEquals(original, viewport.viewerLockedSelection().orElseThrow());
+                progress.invoke(controller, 123L, new com.mcworldexplorer.viewer.ViewerProgress(com.mcworldexplorer.viewer.ViewerProgressStage.READING_CHUNKS, 1, 2, "原区域仍在加载"));
+                assertEquals("原区域仍在加载", label.getText());
+                if (completion.equals("cancel")) cancel.fire();
+                else if (completion.equals("escape")) Event.fireEvent(viewport, escapeKey());
+                else if (completion.equals("failure")) {
+                    failure.invoke(controller, 123L, new IllegalStateException("expected regression fixture"));
+                } else {
+                    success.invoke(controller, 123L, result);
+                }
+                assertFalse(running.getBoolean(controller));
+                assertEquals(-1, requestId.getLong(controller));
+                if (completion.equals("cancel") || completion.equals("escape")) {
+                    assertTrue(viewport.isViewerSelectionMode(), "取消生成只解除锁定，不退出三维选区模式");
+                    assertTrue(viewport.viewerLockedSelection().isEmpty());
+                    assertNull(locked.get(controller));
+                    assertNull(target.get(controller));
+                    assertTrue(confirm.isDisabled());
+                    assertFalse(cancel.isVisible());
+                    assertFalse(ranges.isDisabled());
+                    assertFalse(profiles.isDisabled());
+                    String cancelledLabel = label.getText();
+                    progress.invoke(controller, 123L, new com.mcworldexplorer.viewer.ViewerProgress(
+                            com.mcworldexplorer.viewer.ViewerProgressStage.READING_CHUNKS, 2, 2, "过期进度"));
+                    success.invoke(controller, 123L, result);
+                    failure.invoke(controller, 123L, new IllegalStateException("stale failure"));
+                    assertEquals(cancelledLabel, label.getText(), "取消后的旧回调不能覆盖当前状态");
+                    assertTrue(viewport.viewerLockedSelection().isEmpty(), "迟到成功不能复活已取消的选区");
+                    assertNull(locked.get(controller));
+                    assertNull(target.get(controller));
+                    assertEquals(-1, requestId.getLong(controller));
+                    assertFalse(running.getBoolean(controller));
+                    assertTrue(confirm.isDisabled());
+                } else {
+                    assertEquals(original, viewport.viewerLockedSelection().orElseThrow(), "成功或失败后仍固定原区域");
+                    assertEquals(original, locked.get(controller));
+                    assertFalse(confirm.isDisabled(), "终态允许重新打开或重试原区域");
+                    assertTrue(cancel.isVisible(), "锁定区域保留显式取消入口");
+                    assertEquals("取消选区", cancel.getText());
+                    assertTrue(ranges.isDisabled(), "调整范围前需显式取消选区");
+                    assertTrue(profiles.isDisabled(), "调整档位前需显式取消选区");
+                    if (completion.equals("failure")) assertEquals("重新生成", confirm.getText());
+                    drag(canvas, 100, 80, 132, 96, MouseButton.PRIMARY);
+                    assertEquals(original, viewport.viewerLockedSelection().orElseThrow(), "终态不能直接重画选区");
+                    cancel.fire();
+                    assertTrue(viewport.viewerLockedSelection().isEmpty());
+                    assertNull(locked.get(controller));
+                }
+            }
         });
     }
 
@@ -519,6 +701,8 @@ class WorkspaceLayoutTest {
             var coordinatorField = MapViewerController.class.getDeclaredField("viewerCoordinator");
             coordinatorField.setAccessible(true);
             coordinatorField.set(controller, coordinator);
+            // Seed scenes only after the controller has installed the active plugin snapshot.
+            var configure=MapViewerController.class.getDeclaredMethod("ensureViewerCoordinator");configure.setAccessible(true);configure.invoke(controller);
             var cacheField = coordinator.getClass().getDeclaredField("cache");
             cacheField.setAccessible(true);
             var cache = (com.mcworldexplorer.viewer.ViewerSceneCache) cacheField.get(coordinator);
@@ -904,6 +1088,13 @@ class WorkspaceLayoutTest {
             timeout.stop();
         }
     }
+
+
+
+
+
+
+
 
     private void withWorkspace(WorkspaceCheck check) throws Exception {
         withWorkspace(home.resolve("missing-minecraft-directory"), check);

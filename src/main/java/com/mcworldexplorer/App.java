@@ -28,6 +28,7 @@ public class App extends Application {
         FXMLLoader loader = new FXMLLoader(fxmlLocation, ResourceBundle.getBundle("messages"));
         Parent root = loader.load();
         controller = loader.getController();
+        controller.setDocumentOpener(getHostServices()::showDocument);
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
         URL stylesheet = getClass().getResource("/css/styles.css");
         if (stylesheet == null) {

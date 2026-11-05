@@ -3,6 +3,9 @@ package com.mcworldexplorer.ui;
 import com.mcworldexplorer.voxel.mesh.MeshWarning;
 import com.mcworldexplorer.voxel.resource.ClientResourceLocator;
 import com.mcworldexplorer.voxel.resource.ClientResourceArchive;
+import com.mcworldexplorer.voxel.resource.ResourceLocation;
+import com.mcworldexplorer.voxel.resource.ModelPluginCatalog;
+import com.mcworldexplorer.voxel.resource.ModelPluginStore;
 import com.mcworldexplorer.storage.PortablePaths;
 import com.mcworldexplorer.world.WorldScanner;
 import com.mcworldexplorer.map.MapMarker;
@@ -36,6 +39,7 @@ import com.mcworldexplorer.viewer.ViewerRequest;
 import com.mcworldexplorer.viewer.ViewerCachedArea;
 import com.mcworldexplorer.viewer.ViewerTaskListener;
 import com.mcworldexplorer.viewer.ViewerTaskResult;
+import com.mcworldexplorer.viewer.ResourceDiagnosticReport;
 import com.mcworldexplorer.viewer.VoxelPreviewCoordinator;
 import com.mcworldexplorer.viewer.lwjgl.LwjglViewerWindow;
 import com.mcworldexplorer.voxel.data.ChunkRectangle;
@@ -98,6 +102,13 @@ public final class MapViewerController {
     private final ViewportExporter exporter = new ViewportExporter();
     private final PlayerDataReader playerDataReader = new PlayerDataReader();
     private final PortableSettings portableSettings = new PortableSettings();
+    private javafx.scene.control.Dialog<Void> resourceSettingsDialog;
+    private ResourceSettingsPane resourceSettingsPane;
+    private ModelPluginCatalog modelPlugins=ModelPluginCatalog.core();
+    private ModelPluginCatalog.Selection modelPluginSelection=modelPlugins.select(Set.of());
+    private ModelPluginLibraryController modelPluginLibrary;
+    private String modelPluginNotice="";
+    private Map<ResourceLocation,String> modelPluginExecutions=Map.of();
     private final MapTileLoadTracker tileLoadTracker = new MapTileLoadTracker();
     private final PauseTransition viewportDebounce = new PauseTransition(Duration.millis(200));
     private final PauseTransition playerHighlight = new PauseTransition(Duration.seconds(3));
@@ -133,6 +144,7 @@ public final class MapViewerController {
     private Path viewerResourcePath;
     private Path viewerResourceInstance;
     private String viewerResourceDiagnostic="尚未生成三维区域";
+    private ResourceDiagnosticReport viewerDiagnosticReport=ResourceDiagnosticReport.empty();
     private long viewerResourceLookupId;
     private Task<ClientResourceLocator.Result> viewerResourceLookup;
     private java.util.function.Supplier<List<Path>> clientResourceRoots = this::defaultClientResourceRoots;
@@ -174,7 +186,7 @@ public final class MapViewerController {
     @FXML
     private ToggleButton viewerModeButton;
     @FXML
-    private FlowPane viewerSelectionBar;
+    private VBox viewerSelectionBar;
     @FXML
     private ComboBox<ViewerRangeOption> viewerRangeComboBox;
     @FXML
@@ -241,6 +253,10 @@ public final class MapViewerController {
         Tooltip selectionTooltip = new Tooltip();
         selectionTooltip.textProperty().bind(viewerSelectionLabel.textProperty());
         viewerSelectionLabel.setTooltip(selectionTooltip);
+        viewerSelectionLabel.textProperty().addListener((observable,previous,current)->refreshResourceSettings());
+        modelPluginLibrary=new ModelPluginLibraryController(()->!viewerTaskRunning&&!cacheMaintenanceInProgress&&!shuttingDown,
+            this::acceptPluginLibrarySnapshot,text->{modelPluginNotice=text;if(resourceSettingsPane!=null)resourceSettingsPane.showPluginFeedback(text);refreshResourceSettings();});
+        modelPluginLibrary.initialize();
         viewerAreaList = new ViewerAreaList(() -> {
             setViewerAreasVisible(false);
             viewerAreasButton.requestFocus();
@@ -347,7 +363,7 @@ public final class MapViewerController {
     public void clear() {
         cancelViewerResourceLookup();
         viewerResourcePath = null;
-        viewerResourceInstance=null;viewerResourceDiagnostic="尚未生成三维区域";
+        viewerResourceInstance=null;invalidateResourceDiagnostics("尚未生成三维区域");
         if (viewerTextureMenu != null) { viewerTextureMenu.setText("纹理：自动"); viewerTextureMenu.setTooltip(null); }
         if (mapPlaceholder != null) {
             mapPlaceholder.setVisible(true);
@@ -372,6 +388,7 @@ public final class MapViewerController {
         playerLocations = List.of();
         pendingPlayerNavigation = null;
         cacheMaintenanceInProgress = false;
+        refreshResourceSettings();
         dimensionStates.clear();
         world = null;
         dimension = null;
@@ -411,6 +428,8 @@ public final class MapViewerController {
             return;
         }
         shuttingDown = true;
+        if(resourceSettingsDialog!=null)resourceSettingsDialog.close();
+        if(modelPluginLibrary!=null)modelPluginLibrary.close();
         viewerTextureHelp.getTooltip().hide();
         cancelViewerResourceLookup();
         contextId++;
@@ -430,6 +449,8 @@ public final class MapViewerController {
 
     private void selectDimension(WorldDimension selected) {
         cancelViewerTask(false);
+        invalidateResourceDiagnostics("维度已切换，生成三维预览后查看该选区的解析报告。");
+        refreshResourceSettings();
         exitViewerMode(false);
         playerHighlight.stop();
         viewport.clearPlayerHighlight();
@@ -538,7 +559,7 @@ public final class MapViewerController {
                 ViewerPerformanceProfile.values()));
         viewerProfileComboBox.getSelectionModel().select(viewerProfile);
         replaceViewerRanges(viewerRange);
-        viewerRangeComboBox.setTooltip(new Tooltip("自由框选：左键拖动选择或重画，右键拖动地图，滚轮缩放，Esc 取消。增强档最多 256 个区块，基础档最多 9 个，单边最多 32。"));
+        viewerRangeComboBox.setTooltip(new Tooltip("自由框选：左键拖动选择，取消选区后可重新框选；右键拖动地图，滚轮缩放，Esc 取消。增强档最多 256 个区块，基础档最多 9 个，单边最多 32。"));
         viewerProfileComboBox.valueProperty().addListener((observable, oldValue, value) -> {
             if (value == null || value == viewerProfile) {
                 return;
@@ -598,10 +619,7 @@ public final class MapViewerController {
     }
 
     private void previewViewerSelection(ChunkRectangle selection) {
-        if (viewerTaskRunning) {
-            cancelViewerTask(false);
-        }
-        viewerLockedSelection = null;
+        if (viewerTaskRunning || viewerLockedSelection != null) return;
         activeViewerTarget = null;
         viewerConfirmButton.setDisable(true);
         long width = (long) selection.maxX() - selection.minX() + 1;
@@ -633,7 +651,9 @@ public final class MapViewerController {
 
     @FXML
     private void handleViewerCancel(ActionEvent event) {
-        cancelViewerTask(true);
+        boolean wasRunning = viewerTaskRunning;
+        cancelViewerTask(false);
+        clearViewerSelection((wasRunning ? "已取消生成；" : "") + viewerSelectionHint());
     }
 
     private void enterViewerMode() {
@@ -669,27 +689,24 @@ public final class MapViewerController {
     }
 
     private void handleViewerEscape() {
-        if (viewerTaskRunning) {
-            cancelViewerTask(true);
-        } else if (viewerLockedSelection != null) {
-            clearViewerSelection(viewerSelectionHint());
+        if (viewerTaskRunning || viewerLockedSelection != null) {
+            handleViewerCancel(null);
         } else {
             exitViewerMode(false);
         }
     }
 
     private void lockViewerSelection(ChunkRectangle selection) {
-        if (!viewport.isViewerSelectionMode() || !viewerProfile.allows(selection)) {
+        if (viewerTaskRunning || !viewport.isViewerSelectionMode() || !viewerProfile.allows(selection)
+                || (viewerLockedSelection != null && !viewerLockedSelection.equals(selection))) {
             return;
         }
-        if (viewerTaskRunning) {
-            cancelViewerTask(false);
-        }
         viewerLockedSelection = selection;
+        viewport.lockViewerSelection(selection);
         activeViewerTarget = null;
         viewerSelectionLabel.setText(formatViewerSelection(selection));
         viewerConfirmButton.setText(isCachedArea(selection) ? "打开三维预览" : "生成三维预览");
-        viewerConfirmButton.setDisable(viewerResourceLookup != null);
+        updateViewerSelectionActions();
     }
 
     private void clearViewerSelection(String message) {
@@ -703,6 +720,7 @@ public final class MapViewerController {
             viewerConfirmButton.setText("生成三维预览");
             viewerConfirmButton.setDisable(true);
         }
+        updateViewerSelectionActions();
     }
 
     static String formatViewerSelection(ChunkRectangle selection) {
@@ -757,8 +775,10 @@ public final class MapViewerController {
         viewerCacheInspectionId++;
         keys.forEach(viewerCoordinator::removeCachedArea);
         updateViewerAreaList(viewerCachedPreviews.stream().filter(candidate -> !keys.contains(candidate.key())).toList());
-        if (keys.stream().anyMatch(key -> key.target().equals(viewerLockedSelection)))
+        if (keys.stream().anyMatch(key -> key.target().equals(viewerLockedSelection))) {
+            viewport.invalidateViewerLoadedSelection();
             viewerConfirmButton.setText("生成三维预览");
+        }
         statusLabel.setText(clearList ? "已清空当前列表及对应三维内存缓存；原存档未修改"
                 : "已删除区域及三维内存缓存；原存档未修改");
         refreshViewerCachedAreas();
@@ -823,6 +843,7 @@ public final class MapViewerController {
             viewerCoordinator = new VoxelPreviewCoordinator(
                     new LwjglViewerWindow(), viewerProfile);
         }
+        viewerCoordinator.setModelRules(modelPluginSelection.rules());
         viewerCoordinator.setResource(viewerResourcePath, world.getVersionName(),viewerResourceInstance);
         return viewerCoordinator;
     }
@@ -833,7 +854,7 @@ public final class MapViewerController {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("选择与存档版本对应的 Minecraft Java 客户端 JAR");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("客户端 JAR", "*.jar"));
-        File selected = chooser.showOpenDialog(viewportHost.getScene().getWindow());
+        File selected = chooser.showOpenDialog(resourceSettingsWindow());
         if (selected == null) return;
         startViewerResourceLookup(selected.toPath());
     }
@@ -857,8 +878,9 @@ public final class MapViewerController {
         }
         viewerResourceInstance=null;
         setViewerResource(null);
+        viewport.invalidateViewerLoadedSelection();
         updateViewerAreaList(List.of());
-        viewerResourceDiagnostic="已恢复自动匹配资源，重新生成后显示诊断";
+        invalidateResourceDiagnostics("已恢复自动匹配资源，重新生成后显示诊断");
         startViewerResourceLookup(null);
     }
 
@@ -866,7 +888,7 @@ public final class MapViewerController {
         if(world==null||viewerTaskRunning||shuttingDown)return;
         DirectoryChooser chooser=new DirectoryChooser();chooser.setTitle("选择存档所属的游戏目录（包含 mods、resourcepacks 或 saves）");
         if(viewerResourceInstance!=null&&java.nio.file.Files.isDirectory(viewerResourceInstance))chooser.setInitialDirectory(viewerResourceInstance.toFile());
-        File selected=chooser.showDialog(viewportHost.getScene().getWindow());if(selected==null)return;
+        File selected=chooser.showDialog(resourceSettingsWindow());if(selected==null)return;
         Path path=selected.toPath().toAbsolutePath().normalize();
         if(java.util.stream.Stream.of("mods","resourcepacks","saves","options.txt").noneMatch(name->java.nio.file.Files.exists(path.resolve(name)))) {
             viewerSelectionLabel.setText("请选择游戏目录，包含 mods、resourcepacks、saves 或 options.txt");return;
@@ -879,33 +901,99 @@ public final class MapViewerController {
         viewerResourceInstance=path;
         if(viewerCoordinator!=null)viewerCoordinator.setResource(viewerResourcePath,world.getVersionName(),path);
         viewerCacheInspectionId++;updateViewerAreaList(List.of());
-        viewerResourceDiagnostic="游戏目录已改变，重新生成后显示诊断";
+        viewport.invalidateViewerLoadedSelection();
+        invalidateResourceDiagnostics("游戏目录已改变，重新生成后显示诊断");
         viewerSelectionLabel.setText("已选择游戏目录，可重新生成三维区域");
         if(viewerLockedSelection!=null)viewerConfirmButton.setText("生成三维预览");
         viewerTextureMenu.setTooltip(new Tooltip("游戏目录："+path));
     }
     @FXML private void handleViewerResourceDiagnostics(ActionEvent event) {
-        Alert dialog=new Alert(Alert.AlertType.INFORMATION);dialog.setTitle("三维资源诊断");dialog.setHeaderText("当前区域的资源来源与降级原因");
-        dialog.initOwner(viewportHost.getScene().getWindow());dialog.setResizable(true);
-        TextArea text=new TextArea(viewerResourceDiagnostic);text.setEditable(false);text.setWrapText(true);text.setPrefColumnCount(82);text.setPrefRowCount(22);
-        dialog.getDialogPane().setContent(text);dialog.showAndWait();
+        openResourceSettings(true);
     }
+    @FXML private void handleResourceSettings(ActionEvent event){moreMenuButton.hide();openResourceSettings(false);}
+
+
+    private javafx.stage.Window resourceSettingsWindow(){return resourceSettingsDialog!=null&&resourceSettingsDialog.isShowing()?resourceSettingsDialog.getDialogPane().getScene().getWindow():viewportHost.getScene().getWindow();}
+    private void openResourceSettings(boolean diagnostics){
+        if(shuttingDown)return;
+        if(resourceSettingsDialog!=null){if(diagnostics)resourceSettingsPane.showDiagnostics();resourceSettingsDialog.getDialogPane().getScene().getWindow().requestFocus();return;}
+        var dialog=new javafx.scene.control.Dialog<Void>();dialog.setTitle("资源与插件");dialog.initOwner(viewportHost.getScene().getWindow());dialog.setResizable(true);
+        resourceSettingsPane=new ResourceSettingsPane(modelPlugins,modelPluginSelection.enabled(),new ResourceSettingsPane.Host(){
+            public String world(){return world==null?"尚未选择存档":world.getLevelName();}
+            public String version(){return world==null?"—":world.getVersionName();}
+            public String client(){return viewerResourcePath==null?"自动查找或使用简化颜色":viewerResourcePath.toString();}
+            public String instance(){return viewerResourceInstance==null?"随存档自动查找":viewerResourceInstance.toString();}
+            public String status(){return world==null?"选择存档后可设置对应资源；模型适配设置可直接调整。":viewerTaskRunning?"正在生成预览，完成后可更改设置。":cacheMaintenanceInProgress?"正在清理缓存，完成后可更改设置。":viewerResourceLookup!=null?"正在查找或校验资源…":viewerSelectionLabel.getText();}
+            public String diagnostics(){return viewerResourceDiagnostic;}
+            public ResourceDiagnosticReport diagnosticReport(){return viewerDiagnosticReport;}
+            public void exportDiagnostics(){exportResourceDiagnostics();}
+            public void openPluginGuide(){PluginGuideDialog.show(resourceSettingsWindow());}
+            public String pluginNotice(){return modelPluginNotice;}
+            public boolean canApply(){return !viewerTaskRunning&&!cacheMaintenanceInProgress&&!shuttingDown&&!pluginOperationRunning()&&modelPluginLibrary!=null&&modelPluginLibrary.ready();}
+            public void applyAsync(Set<ResourceLocation> enabled,java.util.function.Consumer<Exception> completion){modelPluginLibrary.apply(enabled,completion);}
+            public boolean externalReady(){return modelPluginLibrary!=null&&modelPluginLibrary.ready();}
+            public boolean canReloadPlugins(){return !viewerTaskRunning&&!cacheMaintenanceInProgress&&!shuttingDown&&!pluginOperationRunning();}
+            public boolean pluginOperationRunning(){return MapViewerController.this.pluginOperationRunning();}
+            public Set<ResourceLocation> externalPlugins(){return modelPluginLibrary==null?Set.of():modelPluginLibrary.external();}
+            public void installPlugin(){modelPluginLibrary.choosePackage(resourceSettingsWindow(),null);}
+            public void updatePlugin(ResourceLocation id){modelPluginLibrary.choosePackage(resourceSettingsWindow(),id);}
+            public void uninstallPlugin(ResourceLocation id){modelPluginLibrary.uninstall(resourceSettingsWindow(),id);}
+            public void reloadPlugins(){modelPluginLibrary.reload();}
+            public boolean resourceActionsAvailable(){return !viewerTaskRunning&&!cacheMaintenanceInProgress&&!shuttingDown&&!pluginOperationRunning()&&world!=null&&world.isParsed()&&viewerResourceLookup==null;}
+            public void automatic(){handleViewerAutomaticTexture(new ActionEvent());}
+            public void chooseClient(){handleViewerTexture(new ActionEvent());}
+            public void chooseInstance(){handleViewerResourceInstance(new ActionEvent());}
+            public void simpleColors(){handleViewerSimpleColors(new ActionEvent());}
+        });
+        dialog.getDialogPane().setContent(resourceSettingsPane);dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
+        dialog.setOnHidden(e->{resourceSettingsDialog=null;resourceSettingsPane=null;});resourceSettingsDialog=dialog;dialog.show();
+        if(diagnostics)resourceSettingsPane.showDiagnostics();
+    }
+
+
+    private void refreshResourceSettings(){if(resourceSettingsPane!=null)resourceSettingsPane.refresh();}
+    private boolean pluginOperationRunning(){return modelPluginLibrary!=null&&modelPluginLibrary.busy();}
+    private void acceptPluginLibrarySnapshot(ModelPluginStore.Snapshot snapshot){
+        if(shuttingDown)return;
+        var selection=snapshot.selection();boolean executionChanged=!modelPluginExecutions.equals(snapshot.executions());
+        boolean changed=executionChanged||!selection.rules().fingerprint().equals(modelPluginSelection.rules().fingerprint());
+        if(viewerCoordinator!=null)viewerCoordinator.setModelRules(selection.rules(),executionChanged);
+        modelPluginExecutions=snapshot.executions();modelPlugins=snapshot.catalog();modelPluginSelection=selection;
+        if(resourceSettingsPane!=null)resourceSettingsPane.replacePlugins(modelPlugins,selection.enabled());
+        if(changed){viewerCacheInspectionId++;updateViewerAreaList(List.of());viewport.invalidateViewerLoadedSelection();invalidateResourceDiagnostics("解析插件已改变，重新生成后显示资源诊断");if(viewerLockedSelection!=null)viewerConfirmButton.setText("生成三维预览");refreshViewerCachedAreas();}
+        refreshResourceSettings();
+    }
+
+
     private static String resourceDiagnostics(ViewerTaskResult result) {
-        var warnings=result.snapshot().warnings();StringBuilder text=new StringBuilder("区域：").append(result.request().world()).append("\n");
-        warnings.stream().filter(w->w.code()==MeshWarning.Code.RESOURCE_CONTEXT||w.code()==MeshWarning.Code.RESOURCE_WARNING).forEach(w->text.append(w.detail()).append('\n'));
-        java.util.Map<String,Long> counts=new java.util.LinkedHashMap<>();
-        var failures=warnings.stream().filter(w->w.code()==MeshWarning.Code.TEXTURE_FALLBACK).sorted(java.util.Comparator.comparingInt(MeshWarning::occurrences).reversed()).toList();
-        for(var failure:failures) {
-            String detail=failure.detail();String group=detail.contains("MISSING_RESOURCE")||detail.contains("缺少 PNG")?"缺少资源":detail.contains("LIMIT_EXCEEDED")||detail.contains("超过")||detail.contains("超限")?"预算限制":detail.contains("UNSUPPORTED_MODEL")?"未支持模型表达":detail.contains("INVALID_")?"非法资源": "其他解析失败";
-            counts.merge(group,(long)failure.occurrences(),Long::sum);
-        }
-        text.append("\n使用简化颜色的方块：").append(failures.stream().mapToLong(MeshWarning::occurrences).sum()).append('\n');
-        counts.forEach((group,count)->text.append(group).append("：").append(count).append('\n'));
-        text.append("\n具体原因（按方块出现次数，最多 100 项）：\n");
-        failures.stream().limit(100).forEach(w->text.append(w.occurrences()).append(" × ").append(w.detail()).append('\n'));
-        text.append("\n资源引用抽样（最多 128 项）：\n");warnings.stream().filter(w->w.code()==MeshWarning.Code.RESOURCE_ORIGIN).limit(128).forEach(w->text.append(w.detail()).append('\n'));
-        text.append("\n静态近似（最多 30 项）：\n");warnings.stream().filter(w->w.code()==MeshWarning.Code.MODEL_APPROXIMATION).limit(30).forEach(w->text.append(w.detail()).append('\n'));
-        return text.toString();
+        return ResourceDiagnosticReport.from(result).toText();
+    }
+    private void invalidateResourceDiagnostics(String explanation){
+        viewerResourceDiagnostic=explanation;viewerDiagnosticReport=ResourceDiagnosticReport.empty(explanation);
+    }
+    private void exportResourceDiagnostics(){
+        var report=viewerDiagnosticReport;if(!report.generated())return;
+        var chooser=new FileChooser();chooser.setTitle("导出当前选区解析诊断");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("解析诊断 JSON","*.json"));
+        chooser.setInitialFileName("mcwe-diagnostics-"+java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))+".json");
+        Path exports=PortablePaths.exportsDirectory();if(java.nio.file.Files.isDirectory(exports))chooser.setInitialDirectory(exports.toFile());
+        File selected=chooser.showSaveDialog(resourceSettingsWindow());if(selected==null)return;
+        var task=new Task<Path>(){
+            @Override protected Path call()throws IOException{
+                Path target=selected.toPath().toAbsolutePath().normalize();
+                Path temporary=java.nio.file.Files.createTempFile(target.getParent(),".mcwe-diagnostics-",".tmp");
+                try{
+                    java.nio.file.Files.writeString(temporary,report.toJson(),java.nio.charset.StandardCharsets.UTF_8);
+                    try{java.nio.file.Files.move(temporary,target,java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);}
+                    catch(java.nio.file.AtomicMoveNotSupportedException unavailable){java.nio.file.Files.move(temporary,target,java.nio.file.StandardCopyOption.REPLACE_EXISTING);}
+                    return target;
+                }finally{java.nio.file.Files.deleteIfExists(temporary);}
+            }
+        };
+        task.setOnSucceeded(event->statusLabel.setText("解析诊断已导出："+task.getValue()));
+        task.setOnFailed(event->{LOGGER.warn("解析诊断导出失败",task.getException());statusLabel.setText("解析诊断导出失败："+shortMessage(task.getException()));});
+        var thread=new Thread(task,"resource-diagnostics-export");thread.setDaemon(true);thread.start();
     }
 
     private List<Path> defaultClientResourceRoots() {
@@ -967,6 +1055,7 @@ public final class MapViewerController {
             viewerTextureMenu.setTooltip(new Tooltip(message + result.path().map(path -> "\n" + path).orElse("")));
             if (viewerLockedSelection == null && viewport.isViewerSelectionMode()) viewerSelectionLabel.setText(message.split("\n")[0]);
             refreshViewerCachedAreas();
+            refreshResourceSettings();
         });
         task.setOnFailed(event -> {
             if (lookupId != viewerResourceLookupId || shuttingDown) return;
@@ -974,6 +1063,7 @@ public final class MapViewerController {
             setViewerResource(null);
             viewerTextureMenu.setTooltip(new Tooltip("资源校验失败：" + shortMessage(task.getException()) + "\n可以重新选择或使用简化颜色"));
             viewerSelectionLabel.setText("资源校验失败：" + shortMessage(task.getException()));
+            refreshResourceSettings();
         });
         Thread thread = new Thread(task, "client-resource-locator");
         thread.setDaemon(true); thread.start();
@@ -982,23 +1072,31 @@ public final class MapViewerController {
     private void setViewerResource(Path path) {
         boolean changed = !Objects.equals(viewerResourcePath, path);
         viewerResourcePath = path;
+        if(changed)invalidateResourceDiagnostics("资源已改变，重新生成后查看解析诊断。");
         if (viewerCoordinator != null) viewerCoordinator.setResource(path, world.getVersionName(),viewerResourceInstance);
         viewerCacheInspectionId++;
-        if (changed) updateViewerAreaList(List.of());
+        if (changed) {
+            updateViewerAreaList(List.of());
+            viewport.invalidateViewerLoadedSelection();
+        }
         viewerTextureMenu.setText(path == null ? "纹理：简化颜色" : "纹理：原版 " + world.getVersionName());
         viewerTextureMenu.setTooltip(new Tooltip(path == null ? "所有方块使用简化颜色"
-                : path + "\n生成时校验资源；按选区实际状态解析；支持标准模型与特殊类型静态预览；缺资源时明确降级。草色使用固定近似值。"));
+                : path + "\n生成时校验资源；按选区实际状态解析；按通用模型与可用存档颜色生成；未支持内容会给出诊断。"));
         if (viewerLockedSelection != null) viewerConfirmButton.setText("生成三维预览");
         viewerConfirmButton.setDisable(viewerTaskRunning || viewerResourceLookup != null || viewerLockedSelection == null);
         viewerSelectionLabel.setText(path == null ? "已切换简化颜色，可重新生成三维区域"
-                : "已选择客户端资源，生成时验证；按资源模型尝试匹配完整方块");
+                : "已选择客户端资源，可生成三维预览");
+        refreshResourceSettings();
     }
 
     private void startViewerTask() {
+        if(pluginOperationRunning()){viewerSelectionLabel.setText("正在处理解析插件，完成后可生成预览");return;}
+        if(modelPluginLibrary!=null&&modelPluginLibrary.needsRestart()){modelPluginLibrary.recoverForPreview(this::startViewerTask);return;}
         if (viewerTaskRunning || viewerResourceLookup != null || viewerLockedSelection == null
                 || world == null || dimension == null || layer == null) {
             return;
         }
+        invalidateResourceDiagnostics("正在生成新选区，完成后显示解析诊断。");
         ChunkRectangle target = viewerLockedSelection;
         MapViewportState mapState = viewport.viewportState();
         ViewerRequest request = new ViewerRequest(
@@ -1013,8 +1111,6 @@ public final class MapViewerController {
                         mapState.visualBlocksPerPixel(), layer));
         activeViewerTarget = target;
         activeViewerExpectedFromCache = isCachedArea(target);
-        viewerLockedSelection = null;
-        viewport.clearViewerLockedSelection();
         setViewerTaskUi(true);
         viewerSelectionLabel.setText("正在准备三维预览");
         if (activeViewerExpectedFromCache) {
@@ -1033,7 +1129,19 @@ public final class MapViewerController {
 
                         @Override
                         public void onSucceeded(long requestId, ViewerTaskResult result) {
-                            Platform.runLater(() -> acceptViewerSuccess(requestId, result));
+                            var diagnostics = new Task<ResourceDiagnosticReport>() {
+                                @Override protected ResourceDiagnosticReport call() {
+                                    return ResourceDiagnosticReport.from(result);
+                                }
+                            };
+                            diagnostics.setOnSucceeded(event -> acceptViewerSuccess(requestId, result, diagnostics.getValue()));
+                            diagnostics.setOnFailed(event -> {
+                                LOGGER.warn("Failed to prepare resource diagnostics", diagnostics.getException());
+                                acceptViewerSuccess(requestId, result, ResourceDiagnosticReport.empty("预览已生成，但解析报告整理失败；请重新生成后重试。"));
+                            });
+                            var thread = new Thread(diagnostics, "resource-diagnostics-prepare");
+                            thread.setDaemon(true);
+                            thread.start();
                         }
 
                         @Override
@@ -1050,6 +1158,7 @@ public final class MapViewerController {
             LOGGER.error("Failed to start voxel preview", e);
             activeViewerRequestId = -1;
             viewerTaskRunning = false;
+            invalidateResourceDiagnostics("三维预览启动失败：" + shortMessage(e));
             setViewerTaskUi(false);
             restoreActiveViewerTarget();
             viewerSelectionLabel.setText("三维预览启动失败：" + shortMessage(e));
@@ -1072,10 +1181,17 @@ public final class MapViewerController {
     }
 
     private void acceptViewerSuccess(long requestId, ViewerTaskResult result) {
+        acceptViewerSuccess(requestId, result, ResourceDiagnosticReport.from(result));
+    }
+
+    private void acceptViewerSuccess(long requestId, ViewerTaskResult result, ResourceDiagnosticReport report) {
         if (requestId != activeViewerRequestId) {
             return;
         }
-        viewerResourceDiagnostic=resourceDiagnostics(result);
+        viewport.markViewerSelectionLoaded();
+        viewerDiagnosticReport=report;
+        viewerResourceDiagnostic=report.summary()+"\n"+String.join("\n",report.contextDetails());
+        refreshResourceSettings();
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
         activeViewerTarget = null;
@@ -1094,12 +1210,18 @@ public final class MapViewerController {
                     .collect(java.util.stream.Collectors.joining("\n"));
             viewerTextureMenu.setTooltip(new Tooltip(viewerResourcePath
                     + "\n"+result.snapshot().warnings().stream().filter(w->w.code()==MeshWarning.Code.RESOURCE_CONTEXT).map(MeshWarning::detail).findFirst().orElse("")
-                    + "\n按选区模型匹配纹理；草色使用固定近似值，随机外观固定选择第一项。"
+                    + "\n按选区模型与可用存档颜色显示；未支持的行为会记录诊断。"
+                    + "\n静态外观不包含存档未保存的屏幕画面等运行时内容。"
                     + (details.isEmpty() ? "" : "\n本次近似或简化显示说明（最多 8 项）：\n" + details)));
         }
         if (result.snapshot().atlas().isPresent()) state += "，资源纹理" + (fallbackBlocks > 0 ? "（" + fallbackBlocks + " 个方块使用简化颜色）" : "");
         if (result.partialSuccess()) state += "，" + result.failedChunks() + " 个区块读取失败";
-        clearViewerSelection(state + "；可继续选择其他区域");
+        if (viewerLockedSelection != null) {
+            lockViewerSelection(viewerLockedSelection);
+            viewerSelectionLabel.setText(state + "；" + formatViewerSelection(viewerLockedSelection));
+        } else {
+            clearViewerSelection(state);
+        }
     }
 
     private void acceptViewerFailure(long requestId, Throwable failure) {
@@ -1107,6 +1229,7 @@ public final class MapViewerController {
             return;
         }
         LOGGER.error("Voxel preview generation failed", failure);
+        invalidateResourceDiagnostics("本次生成失败，未取得完整解析报告："+shortMessage(failure));
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
         activeViewerExpectedFromCache = false;
@@ -1124,8 +1247,9 @@ public final class MapViewerController {
         viewerTaskRunning = false;
         activeViewerExpectedFromCache = false;
         setViewerTaskUi(false);
-        restoreActiveViewerTarget();
-        viewerSelectionLabel.setText("已取消生成");
+        clearViewerSelection("已取消生成；" + viewerSelectionHint());
+        invalidateResourceDiagnostics("本次生成已取消，未取得新的解析报告。");
+        refreshResourceSettings();
     }
 
     private void cancelViewerTask(boolean restoreSelection) {
@@ -1139,6 +1263,7 @@ public final class MapViewerController {
         if (viewerCoordinator != null) {
             viewerCoordinator.cancel();
         }
+        invalidateResourceDiagnostics("本次生成已取消，未取得新的解析报告。");
         setViewerTaskUi(false);
         if (restoreSelection) {
             restoreActiveViewerTarget();
@@ -1146,6 +1271,7 @@ public final class MapViewerController {
         } else {
             activeViewerTarget = null;
         }
+        refreshResourceSettings();
         LOGGER.debug("Cancelled voxel preview request {}", cancelledId);
     }
 
@@ -1153,8 +1279,8 @@ public final class MapViewerController {
         if (activeViewerTarget == null) {
             return;
         }
-        viewerLockedSelection = activeViewerTarget;
-        viewport.lockViewerSelection(activeViewerTarget);
+        if (viewerLockedSelection == null) viewerLockedSelection = activeViewerTarget;
+        viewport.lockViewerSelection(viewerLockedSelection);
         viewerConfirmButton.setDisable(viewerResourceLookup != null);
         activeViewerTarget = null;
     }
@@ -1162,6 +1288,9 @@ public final class MapViewerController {
     private void setViewerTaskUi(boolean running) {
         if (viewerTextureMenu != null) viewerTextureMenu.setDisable(running);
         viewerTaskRunning = running;
+        if (viewport != null) viewport.setViewerTaskRunning(running);
+        updateViewerSelectionActions();
+        refreshResourceSettings();
         if (viewerAreaList != null) viewerAreaList.setAreas(viewerCachedPreviews, viewerProfile, running);
         if (viewerProgressBar == null) {
             return;
@@ -1169,9 +1298,20 @@ public final class MapViewerController {
         viewerProgressBar.setManaged(running);
         viewerProgressBar.setVisible(running);
         viewerProgressBar.setProgress(-1);
-        viewerCancelButton.setManaged(running);
-        viewerCancelButton.setVisible(running);
-        viewerConfirmButton.setDisable(running || viewerResourceLookup != null || viewerLockedSelection == null);
+    }
+
+    private void updateViewerSelectionActions() {
+        boolean canCancel = viewerTaskRunning || viewerLockedSelection != null;
+        if (viewerRangeComboBox != null) viewerRangeComboBox.setDisable(canCancel);
+        if (viewerProfileComboBox != null) viewerProfileComboBox.setDisable(canCancel);
+        if (viewerCancelButton != null) {
+            viewerCancelButton.setManaged(canCancel);
+            viewerCancelButton.setVisible(canCancel);
+            viewerCancelButton.setText(viewerTaskRunning ? "取消生成" : "取消选区");
+        }
+        if (viewerConfirmButton != null) {
+            viewerConfirmButton.setDisable(viewerTaskRunning || viewerResourceLookup != null || viewerLockedSelection == null);
+        }
     }
 
     @FXML
@@ -1257,6 +1397,10 @@ public final class MapViewerController {
     @FXML
     private void handleClearCache(ActionEvent event) {
         moreMenuButton.hide();
+        if (pluginOperationRunning()) {
+            statusLabel.setText("解析插件操作结束后可清理缓存");
+            return;
+        }
         if (world == null) {
             return;
         }
@@ -1302,12 +1446,18 @@ public final class MapViewerController {
     }
 
     private void clearWorldCache(WorldInfo target) {
+        if (pluginOperationRunning()) {
+            clearCacheButton.setDisable(false);
+            statusLabel.setText("解析插件操作结束后可清理缓存");
+            return;
+        }
         long maintenanceId = ++cacheMaintenanceId;
         contextId++;
         scheduler.cancelAll();
         currentRequestId = -1;
         tileLoadTracker.clear();
         cacheMaintenanceInProgress = true;
+        refreshResourceSettings();
         Task<WorldMapCacheCleaner.ClearResult> task = new Task<>() {
             @Override
             protected WorldMapCacheCleaner.ClearResult call() throws IOException {
@@ -1320,6 +1470,7 @@ public final class MapViewerController {
             }
             WorldMapCacheCleaner.ClearResult result = task.getValue();
             cacheMaintenanceInProgress = false;
+            refreshResourceSettings();
             clearCacheButton.setDisable(false);
             if (result.changed() || !result.hasFailures()) {
                 tileService.clearMemory();
@@ -1337,6 +1488,7 @@ public final class MapViewerController {
             LOGGER.error("Failed to clear cache for {}", target.getFolderPath(), task.getException());
             if (world == target && maintenanceId == cacheMaintenanceId) {
                 cacheMaintenanceInProgress = false;
+                refreshResourceSettings();
                 clearCacheButton.setDisable(false);
                 refreshTiles();
                 statusLabel.setText("缓存清理失败：" + shortMessage(task.getException()));

@@ -17,8 +17,42 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkNbtDecoderTest {
+    @Test void preservesSavedBiomeCellsIndependentlyOfAirGeometryAndNegativeSectionCoordinates()throws Exception {
+        var palette=ListBinaryTag.listBinaryTag(BinaryTagTypes.STRING,List.of(net.kyori.adventure.nbt.StringBinaryTag.stringBinaryTag("author:forest"),net.kyori.adventure.nbt.StringBinaryTag.stringBinaryTag("author:desert")));
+        var biomes=CompoundBinaryTag.builder().put("palette",palette).putLongArray("data",new long[]{1L<<63}).build();
+        var airOnly=CompoundBinaryTag.builder().putByte("Y",(byte)-1).put("biomes",biomes).build();
+        var root=CompoundBinaryTag.builder().put("sections",sections(airOnly)).build();
+        var chunk=ChunkNbtDecoder.read(stream(root),-3,2).chunk();
+        assertEquals(BlockState.AIR,chunk.blockState(15,-1,15));assertEquals(java.util.Optional.of("author:desert"),chunk.biomeAtQuart(3,-1,3));
+        assertEquals(java.util.Optional.of("author:forest"),chunk.biomeAtQuart(0,-4,0));assertTrue(chunk.biomeAtQuart(0,0,0).isEmpty());
+        assertTrue(chunk.minY().isEmpty(),"biome-only sections must not expand geometry bounds");
+    }
+    @Test void malformedBiomesDoNotDiscardReadableBlocksOrBecomeDefaults()throws Exception {
+        var valid=section(0,palette(named("minecraft:stone")),new long[0]);
+        var invalid=CompoundBinaryTag.builder().put(valid).put("biomes",CompoundBinaryTag.empty()).build();
+        var chunk=ChunkNbtDecoder.read(stream(modernChunk(invalid))).chunk();
+        assertEquals("minecraft:stone",chunk.blockState(0,0,0).name());assertEquals(com.mcworldexplorer.voxel.data.BiomeSection.Status.INVALID,chunk.biomeSection(0).orElseThrow().status());
+        assertTrue(chunk.biomeAtQuart(0,0,0).isEmpty());
+    }
+    @Test void readsStringAndWrappedModernPaletteEntriesWithoutVersionWhitelist()throws Exception {
+        var strings=ListBinaryTag.listBinaryTag(BinaryTagTypes.STRING,List.of(net.kyori.adventure.nbt.StringBinaryTag.stringBinaryTag("minecraft:stone")));
+        var root=CompoundBinaryTag.builder().put("sections",sections(section(0,strings,new long[0]))).build();
+        assertEquals("minecraft:stone",ChunkNbtDecoder.read(stream(root),0,0).chunk().blockState(0,0,0).name());
+        var wrapped=CompoundBinaryTag.builder().putString("","minecraft:stone").build();
+        var object=CompoundBinaryTag.builder().putString("id","minecraft:oak_log").put("properties",CompoundBinaryTag.builder().putString("axis","z").build()).build();
+        long[] data=new long[256];data[0]=0x10;
+        root=CompoundBinaryTag.builder().put("sections",sections(section(0,palette(wrapped,object),data))).build();
+        var chunk=ChunkNbtDecoder.read(stream(root),0,0).chunk();assertEquals(new BlockState("minecraft:oak_log",Map.of("axis","z")),chunk.blockState(1,0,0));
+        assertEquals(4095,chunk.sections().getFirst().usedStateCounts().get(new BlockState("minecraft:stone",Map.of())));
+    }
+    @Test void conflictingModernAndLegacyStateFieldsRemainErrors()throws Exception {
+        var conflict=CompoundBinaryTag.builder().putString("Name","minecraft:stone").putString("id","minecraft:dirt").build();
+        var root=CompoundBinaryTag.builder().put("sections",sections(section(0,palette(conflict),new long[0]))).build();
+        assertEquals(ChunkDecodeException.Reason.INVALID_PALETTE,assertThrows(ChunkDecodeException.class,()->ChunkNbtDecoder.read(stream(root),0,0)).reason());
+    }
     @Test void readsModernAndLegacyVisualEntitiesAndRejectsSilentTruncation() throws Exception {
         var entity=CompoundBinaryTag.builder().putInt("x",1).putInt("y",0).putInt("z",2).putString("id","minecraft:sign").putString("Text1","Hello").put("Items",ListBinaryTag.empty()).build();
         for(boolean modern:List.of(true,false)) {

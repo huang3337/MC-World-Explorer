@@ -16,10 +16,16 @@ public record ChunkMeshSnapshot(
         int faceCount,
         int vertexCount,
         int indexCount,
-        List<MeshWarning> warnings) {
+        List<MeshWarning> warnings,
+        VoxelTargetIndex.ChunkData targets) {
+    public ChunkMeshSnapshot(ChunkCoordinate coordinate, long worldOriginX, long worldOriginZ, List<MeshBatch> batches,
+                             MeshBounds bounds, int blockCount, int faceCount, int vertexCount, int indexCount, List<MeshWarning> warnings) {
+        this(coordinate,worldOriginX,worldOriginZ,batches,bounds,blockCount,faceCount,vertexCount,indexCount,warnings,VoxelTargetIndex.ChunkData.UNAVAILABLE);
+    }
     public ChunkMeshSnapshot {
         Objects.requireNonNull(coordinate, "coordinate");
         Objects.requireNonNull(bounds, "bounds");
+        Objects.requireNonNull(targets, "targets");
         batches = batches.stream()
                 .sorted(Comparator.comparing(MeshBatch::layer)
                         .thenComparingInt(MeshBatch::rgb))

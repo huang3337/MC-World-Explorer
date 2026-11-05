@@ -29,4 +29,19 @@ class BlockEntityDataTest {
         assertEquals(entity,chunk.blockEntity(-1,64,-1).orElseThrow());
         assertTrue(chunk.blockEntity(15,64,15).isEmpty());
     }
+    @Test void preservesUnknownSavedModelKeysWithoutChangingLegacyVisualIdentity() {
+        var a=BlockEntityData.read(at(0,0).putString("custom_skin","new_mod:block/a").put("Items",ListBinaryTag.empty()).build(),0,0).orElseThrow();
+        var b=BlockEntityData.read(at(1,0).putString("custom_skin","new_mod:block/b").build(),0,0).orElseThrow();
+        assertEquals(a.fingerprint(),b.fingerprint());assertNotEquals(a.modelData().fingerprint(),b.modelData().fingerprint());
+        assertEquals("new_mod:block/a",a.modelData().requireComplete().getString("custom_skin"));
+        assertTrue(a.modelData().values().keySet().contains("Items"));assertFalse(a.modelData().values().keySet().contains("x"));
+        var moved=BlockEntityData.read(at(2,0).putString("custom_skin","new_mod:block/b").build(),0,0).orElseThrow();
+        assertEquals(b.modelData().fingerprint(),moved.modelData().fingerprint());
+    }
+    @Test void genericNbtBudgetIsMarkedAndCannotMasqueradeAsComplete()throws Exception {
+        var builder=at(0,0);for(int i=0;i<20;i++)builder.putString("custom_"+i,"x".repeat(4000));
+        var entity=BlockEntityData.read(builder.build(),0,0).orElseThrow();
+        assertFalse(entity.modelData().complete());assertThrows(IllegalStateException.class,entity.modelData()::requireComplete);
+        var output=new java.io.ByteArrayOutputStream();BinaryTagIO.writer().write(entity.modelData().values(),output,BinaryTagIO.Compression.NONE);assertTrue(output.size()<=65536);
+    }
 }

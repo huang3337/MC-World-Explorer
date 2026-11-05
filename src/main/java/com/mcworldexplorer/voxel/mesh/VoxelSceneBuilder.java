@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class VoxelSceneBuilder {
+    private record DiagnosticWarningKey(MeshWarning.Code code,com.mcworldexplorer.voxel.resource.BlockResourceDiagnostic diagnostic) { }
     private final BlockTextureSet textures;
     public VoxelSceneBuilder() { this(null); }
     public VoxelSceneBuilder(BlockTextureSet textures) { this.textures = textures; }
@@ -79,7 +80,7 @@ public final class VoxelSceneBuilder {
         double maxX = Double.NEGATIVE_INFINITY;
         double maxY = Double.NEGATIVE_INFINITY;
         double maxZ = Double.NEGATIVE_INFINITY;
-        Map<String, MeshWarning> warnings = new LinkedHashMap<>();
+        Map<Object, MeshWarning> warnings = new LinkedHashMap<>();
         for (ChunkMeshSnapshot mesh : meshes) {
             double offsetX = mesh.worldOriginX() - anchorX;
             double offsetZ = mesh.worldOriginZ() - anchorZ;
@@ -90,7 +91,7 @@ public final class VoxelSceneBuilder {
             maxY = Math.max(maxY, mesh.bounds().maxY());
             maxZ = Math.max(maxZ, mesh.bounds().maxZ() + offsetZ);
             for (MeshWarning warning : mesh.warnings()) {
-                String warningKey = (warning.code() == MeshWarning.Code.FALLBACK_BLOCK || warning.code() == MeshWarning.Code.TEXTURE_FALLBACK || warning.code() == MeshWarning.Code.MODEL_APPROXIMATION)
+                Object warningKey = warning.diagnostic().isPresent()?new DiagnosticWarningKey(warning.code(),warning.diagnostic().orElseThrow()):(warning.code() == MeshWarning.Code.FALLBACK_BLOCK || warning.code() == MeshWarning.Code.TEXTURE_FALLBACK || warning.code() == MeshWarning.Code.MODEL_APPROXIMATION)
                         ? warning.code() + ":" + warning.detail()
                         : warning.code() + ":" + warning.coordinate() + ":" + warning.detail();
                 MeshWarning existing = warnings.get(warningKey);
@@ -101,7 +102,7 @@ public final class VoxelSceneBuilder {
                             existing.code(),
                             existing.coordinate(),
                             existing.detail(),
-                            Math.addExact(existing.occurrences(), warning.occurrences())));
+                            Math.addExact(existing.occurrences(), warning.occurrences()),existing.diagnostic()));
                 }
             }
         }

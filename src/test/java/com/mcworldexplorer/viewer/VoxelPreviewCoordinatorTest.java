@@ -30,6 +30,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VoxelPreviewCoordinatorTest {
+    @Test void replacedExecutionInvalidatesSceneCacheWithoutChangingPackageFingerprint()throws Exception {
+        var loads=new AtomicInteger();var window=new FakeWindow();coordinator=coordinator(window,(request,cancel,monitor)->{loads.incrementAndGet();return area(request.target());});
+        var rules=com.mcworldexplorer.voxel.resource.ModelRuleRegistry.defaults();coordinator.setModelRules(rules);
+        var first=new RecordingListener();coordinator.start(request(0),first);assertFalse(first.success.get(3,TimeUnit.SECONDS).fromCache());
+        var cached=new RecordingListener();coordinator.start(request(0),cached);assertTrue(cached.success.get(3,TimeUnit.SECONDS).fromCache());
+        var replacement=new com.mcworldexplorer.voxel.resource.ModelRuleRegistry(rules.rules());assertEquals(rules.fingerprint(),replacement.fingerprint());
+        coordinator.setModelRules(replacement,true);assertTrue(coordinator.cachedAreas().isEmpty());assertEquals(1,window.cleared.get());
+        var restarted=new RecordingListener();coordinator.start(request(0),restarted);assertFalse(restarted.success.get(3,TimeUnit.SECONDS).fromCache());assertEquals(2,loads.get());
+    }
     private static final RegionSourceSignature SIGNATURE = new RegionSourceSignature(List.of());
     private static final VoxelSceneSnapshot SCENE = new VoxelSceneSnapshot(
             0, 0, List.of(), new MeshBounds(0, 0, 0, 0, 0, 0),
@@ -285,6 +294,8 @@ class VoxelPreviewCoordinatorTest {
 
     private static final class FakeWindow implements ViewerWindow {
         private final AtomicInteger shown = new AtomicInteger();
+        private final AtomicInteger cleared = new AtomicInteger();
+        @Override public void clear(){cleared.incrementAndGet();}
         private volatile boolean closed;
 
         @Override

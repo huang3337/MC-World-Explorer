@@ -30,16 +30,18 @@
                 </MenuButton>
                 <MenuButton fx:id="playerListButton" disable="true" mnemonicParsing="false" text="玩家列表"/>
                 <ToggleButton fx:id="viewerModeButton" disable="true" mnemonicParsing="false"
-                              onAction="#handleViewerMode" text="选择区域看三维" styleClass="primary-action"/>
-                <MenuButton fx:id="moreMenuButton" text="更多" mnemonicParsing="false">
+                              onAction="#handleViewerMode" text="三维选区" styleClass="mode-switch"/>
+                <Button fx:id="resourceSettingsButton" text="资源与插件…" mnemonicParsing="false" onAction="#handleResourceSettings"/>
+                <MenuButton fx:id="moreMenuButton" text="工具" mnemonicParsing="false">
                     <items>
                         <CustomMenuItem hideOnClick="false">
                             <content>
                                 <VBox spacing="8.0" prefWidth="245.0" styleClass="popover-content">
-                                    <Label text="导出与维护" styleClass="section-title"/>
+                                    <Label text="导出地图" styleClass="section-title"/>
                                     <Button fx:id="exportButton" disable="true" mnemonicParsing="false"
                                             onAction="#handleExport" text="导出当前视口 PNG" maxWidth="Infinity"/>
                                     <Separator/>
+                                    <Label text="缓存维护" styleClass="section-title"/>
                                     <Button fx:id="clearCacheButton" disable="true" mnemonicParsing="false"
                                             onAction="#handleClearCache" text="清理存档缓存并重新加载" maxWidth="Infinity"/>
                                     <Label text="只清理程序缓存，不修改原存档。" wrapText="true" styleClass="muted-text"/>
@@ -50,11 +52,29 @@
                 </MenuButton>
             </children>
         </FlowPane>
-        <FlowPane fx:id="viewerSelectionBar" alignment="CENTER_LEFT" managed="false" visible="false"
-                  hgap="8.0" vgap="8.0" styleClass="viewer-selection-bar">
-            <children>
-                <Label text="范围"/><ComboBox fx:id="viewerRangeComboBox" prefWidth="112.0"/>
-                <Label text="性能"/><ComboBox fx:id="viewerProfileComboBox" prefWidth="92.0"/>
+        <VBox fx:id="viewerSelectionBar" managed="false" visible="false" spacing="8.0" styleClass="viewer-selection-bar">
+            <FlowPane alignment="CENTER_LEFT" hgap="8.0" vgap="6.0">
+                <HBox alignment="CENTER_LEFT" spacing="6.0">
+                    <Label text="选区范围" styleClass="muted-text"/>
+                    <ComboBox fx:id="viewerRangeComboBox" prefWidth="112.0"/>
+                </HBox>
+                <Button fx:id="viewerConfirmButton" disable="true" mnemonicParsing="false"
+                        onAction="#handleViewerConfirm" text="生成三维预览" styleClass="primary-action"/>
+                <Button fx:id="viewerCancelButton" managed="false" visible="false"
+                        mnemonicParsing="false" onAction="#handleViewerCancel" text="取消生成"/>
+            </FlowPane>
+            <HBox alignment="CENTER_LEFT" spacing="12.0">
+                <Label fx:id="viewerSelectionLabel" text="在地图上点击以锁定三维区域" wrapText="true"
+                       minWidth="0.0" minHeight="0.0" maxHeight="40.0" maxWidth="Infinity" HBox.hgrow="ALWAYS" styleClass="muted-text"/>
+                <ProgressBar fx:id="viewerProgressBar" managed="false" visible="false" prefWidth="110.0" progress="-1.0"/>
+            </HBox>
+            <TitledPane fx:id="viewerAdvancedOptions" text="性能与资源" expanded="false" animated="false" styleClass="preview-options">
+                <content>
+                    <FlowPane alignment="CENTER_LEFT" hgap="12.0" vgap="8.0">
+                        <HBox alignment="CENTER_LEFT" spacing="6.0">
+                            <Label text="性能档位" styleClass="muted-text"/>
+                            <ComboBox fx:id="viewerProfileComboBox" prefWidth="92.0"/>
+                        </HBox>
                 <HBox alignment="CENTER_LEFT" spacing="6.0">
                     <MenuButton fx:id="viewerTextureMenu" text="纹理：自动" mnemonicParsing="false">
                         <items>
@@ -71,20 +91,15 @@
                                      text="默认按存档版本尝试加载本机原版资源，并从所属游戏目录读取 Mod 和已启用资源包。选择“自动匹配资源”可清除该存档的手动 JAR 和游戏目录绑定，重新自动查找。&#10;&#10;未找到时，选择“手动选择 JAR”，指向与存档版本对应的 Minecraft Java 客户端 JAR。&#10;&#10;常见位置（以 1.21.1 为例）：游戏目录下的&#10;.minecraft\versions\1.21.1\1.21.1.jar&#10;部分启动器的游戏目录直接包含 versions 文件夹。&#10;&#10;“手动选择 JAR”请选择原版客户端，不要选择 Mod 或服务端。&#10;&#10;Mod 未自动匹配时，使用“手动选择游戏目录”，指向包含 mods、resourcepacks 或 saves 的游戏目录，不是某个 Mod JAR。可在旁边的“资源诊断”查看来源与降级原因。按存档版本尝试加载；未兼容的方块会降级。没有对应资源时，可选择“使用简化颜色”。"/>
                         </tooltip>
                     </Label>
-                    <Button fx:id="viewerResourceDiagnosticsButton" text="资源诊断" mnemonicParsing="false"
+                    <Button fx:id="viewerResourceDiagnosticsButton" text="查看解析诊断" mnemonicParsing="false"
                             onAction="#handleViewerResourceDiagnostics" disable="${viewerTextureMenu.disable}">
-                        <tooltip><Tooltip text="查看最近一次三维预览的资源来源、降级原因与静态近似说明。"/></tooltip>
+                        <tooltip><Tooltip text="按 Mod 查看最近选区的解析问题与插件开发线索。"/></tooltip>
                     </Button>
                 </HBox>
-                <Label fx:id="viewerSelectionLabel" text="在地图上点击以锁定三维区域" wrapText="true"
-                       minHeight="0.0" maxHeight="44.0" maxWidth="300.0"/>
-                <ProgressBar fx:id="viewerProgressBar" managed="false" visible="false" prefWidth="120.0" progress="-1.0"/>
-                <Button fx:id="viewerConfirmButton" disable="true" mnemonicParsing="false"
-                        onAction="#handleViewerConfirm" text="生成三维预览" styleClass="primary-action"/>
-                <Button fx:id="viewerCancelButton" managed="false" visible="false"
-                        mnemonicParsing="false" onAction="#handleViewerCancel" text="取消生成"/>
-            </children>
-        </FlowPane>
+                    </FlowPane>
+                </content>
+            </TitledPane>
+        </VBox>
         <StackPane VBox.vgrow="ALWAYS" minHeight="160.0" styleClass="map-surface">
             <children>
                 <StackPane fx:id="viewportHost" minHeight="0.0" minWidth="0.0" styleClass="map-viewport"/>

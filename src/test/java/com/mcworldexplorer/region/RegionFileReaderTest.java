@@ -55,6 +55,18 @@ class RegionFileReaderTest {
             assertFalse(chunk.isPresent());
         }
     }
+    @Test void zeroByteRegionRemainsEmptyWithoutWritingAHeader()throws IOException {
+        Path region=tempDir.resolve("zero.mca");Files.createFile(region);
+        try(var reader=new RegionFileReader(region)){assertFalse(reader.readChunk(0,0).isPresent());assertFalse(reader.readChunk(31,31).isPresent());}
+        assertEquals(0,Files.size(region));
+    }
+    @Test void acceptsCompleteLastPayloadWithoutSectorPaddingButRejectsPayloadTruncation()throws IOException {
+        Path region=tempDir.resolve("unpadded.mca");writeRegion(region,0,0,0,ChunkCompression.UNCOMPRESSED.id(),NBT_BYTES);
+        int length=RegionFileReader.HEADER_BYTES+5+NBT_BYTES.length;byte[] complete=java.util.Arrays.copyOf(Files.readAllBytes(region),length);Files.write(region,complete);
+        try(var reader=new RegionFileReader(region)){assertArrayEquals(NBT_BYTES,reader.readChunk(0,0).orElseThrow().openNbtStream().readAllBytes());}
+        Files.write(region,java.util.Arrays.copyOf(complete,length-1));
+        try(var reader=new RegionFileReader(region)){assertReason(RegionReadException.Reason.INVALID_CHUNK_LENGTH,()->reader.readChunk(0,0));}
+    }
 
     @Test
     void rejectsInvalidFileTypeAndTruncatedHeader() throws IOException {
