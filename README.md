@@ -1,132 +1,96 @@
 <p align="center">
-  <img src="docs/assets/mc-world-explorer.png" alt="MC World Explorer 图标" width="144">
+  <img src="docs/assets/mc-world-explorer.png" alt="MC World Explorer：放大镜与草方块" width="144">
 </p>
 
 <h1 align="center">MC World Explorer</h1>
 
-<p align="center">
-  只读的 Minecraft Java 版存档与交互地图浏览工具
-</p>
+<p align="center">无需启动 Minecraft，浏览你的 Java 版存档、地图和三维场景。</p>
 
 <p align="center">
-  <a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><img src="https://img.shields.io/github/v/release/huang3337/MC-World-Explorer?label=Release&color=2f81f7" alt="最新版本"></a>
+  <a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><img src="https://img.shields.io/github/v/release/huang3337/MC-World-Explorer?label=Release&amp;color=2f81f7" alt="最新发布版本"></a>
   <img src="https://img.shields.io/badge/Windows-x64-0078D4?logo=windows" alt="Windows x64">
-  <img src="https://img.shields.io/badge/Java-21-E76F00?logo=openjdk&logoColor=white" alt="Java 21">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-2da44e" alt="GPL-3.0 许可证"></a>
 </p>
 
 <p align="center">
-  <strong><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest">下载最新软件包</a></strong>
+  <strong><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest">下载 Windows 便携版</a></strong>
   ·
-  <strong><a href="PROJECT_ROADMAP.md">查看项目路线图</a></strong>
-  ·
-  <strong><a href="docs/FAQ.md">常见问题</a></strong>
-  ·
-  <strong><a href="#从源码运行">从源码运行</a></strong>
+  <strong><a href="docs/README.md">使用与开发文档</a></strong>
 </p>
 
-## 当前软件包
+## 可以做什么
 
-| 最新软件包 | 支持平台 | 运行环境 |
-|---|---|---|
-| **V0.6.0** | Windows x64 | 内置 Java 21 |
+- **整理存档**：扫描游戏目录、整合包实例或单个世界，查看版本、种子、游玩时间和保存位置。
+- **浏览地图**：在主世界、下界、末地及可识别的 Mod 维度间切换，拖动缩放地图，查看地表或洞穴高度带。
+- **找回位置**：按 X/Z 坐标跳转，查看玩家、出生点和已加载地图内的下界传送门。
+- **查看三维场景**：从二维地图选择有限区块范围，在独立窗口里查看建筑和地形。
+- **保存地图图片**：将当前二维视口导出为 PNG，方便记录或分享。
 
-当前便携版无需另外安装 Java，完整解压后即可运行。
+浏览过程只读存档。程序配置、缓存、日志和导出文件与 Minecraft 世界数据分开保存。
 
-[下载最新软件包](https://github.com/huang3337/MC-World-Explorer/releases/latest)
+## 实际效果
 
-## 源码开发状态
+以下为 **0.7.4 的实际界面**，使用 Minecraft **1.21.1** 的 `test001` 存档。
 
-| 最新完成源码 | 状态 | 当前开发阶段 | 状态 |
-|---|---|---|---|
-| **V0.7.3 / 0.7.3** | 实例资源与通用Mod模型解析已收口，未发布 | **等待后续指令** | 未开始下一版本 |
+**二维地图**：拖动、缩放，连续浏览存档中已生成的区域，地图内容随视野按需加载。
 
-Java 主线 V0.7.3 已接入存档所属游戏目录的Mod/启用资源包，按资源引用解析标准模型与常见声明式格式，并提供统一自动匹配与独立资源诊断；仍有连接贴图/运行时模型等兼容边界；世界查找和地点回访暂缓，地点展示与发布加固的长期目标保留。自由三维流送、巡航和动态壁纸保留为 V1.0 后评估方向。
+![二维地图：浏览 test001 存档中的湖泊、森林与地形](docs/assets/map-overview.png)
 
-已完成源码基线为0.7.3，后续开发等待指令，最新已发布软件包仍为 V0.6.0；V0.7 尚未发布。工作区新增按区块对齐的矩形框选，基础档最多 9 个、增强档最多 256 个目标区块，单边最多 32；保留原固定档。工作区还加入带二维地图缩略图的“已加载区域”列表，可重新打开或删除本次会话的三维内存缓存；退出程序后清空，二维磁盘瓦片缓存另行保留。详细范围见[项目路线图](PROJECT_ROADMAP.md)，实际进度见[当前阶段](docs/progress/CURRENT.md)。
+**三维预览**：查看选区内的地表与洞穴，在已加载选区内自由移动、转向和升降。
 
-> [!NOTE]
-> V0.4 和 V0.5 是三维技术验证与内部基础阶段，没有对应的用户软件包。详细原因见[常见问题](docs/FAQ.md#为什么没有-v04-和-v05-软件包)。
+![三维预览：已加载选区的地表与地下洞穴](docs/assets/viewer-overview.png)
 
-## 关于项目
+<details>
+<summary>查看三维近景与方块信息</summary>
 
-MC World Explorer 可以在不启动 Minecraft 的情况下扫描本地 Java 版世界、查看存档信息，并通过交互地图浏览已有区块、不同维度、玩家和传送门位置。
+准星与线框帮助确认目标方块，并显示原始 ID、归属、坐标和显示状态。
 
-项目坚持严格只读访问 Minecraft 存档，缓存、日志、配置和导出文件均与原存档分离。
+![三维近景：准星目标、方块线框与信息显示](docs/assets/viewer-target.png)
 
-## 软件包发布路线
+</details>
 
-| 版本 | 发布状态 | 主要内容 |
-|---|---|---|
-| **V0.1.1** | 已发布 | 存档扫描、基础信息展示与只读能力加固 |
-| **V0.2.1** | 已发布 | 多维度预览、地表总览、洞穴高度带与便携运行环境 |
-| **V0.3.1** | 已发布 | 整合 V0.3 交互地图能力并完成最后完善 |
-| **V0.6.0** | 当前最新软件包 | 首次加入受控范围选择和独立窗口三维预览 |
+## 下载与版本
 
-> [!NOTE]
-> V0.3 是仅同步源码的开发版本，因此不列入已发布软件包版本。
+| 版本 | 当前状态 |
+|---|---|
+| **V0.7.4** | 本次正式版，Windows x64 便携版，自带 Java 21，零预装插件 |
+| **V0.6.0** | 历史版本，使用简化颜色与方块几何进行三维预览 |
 
-## 核心能力
+从 [V0.7.4 Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.4) 下载软件包及 SHA-256 校验文件。
 
-| 存档浏览 | 交互地图 | 定位与标记 |
-|---|---|---|
-| 扫描原版及版本隔离存档<br>支持游戏目录、实例和单个世界<br>显示世界信息、图标和基础坐标<br>后台加载并反馈空目录或错误 | 浏览主世界、下界、末地和可识别的 Mod 维度<br>地表总览与 32 格洞穴高度带<br>地图自由拖动与七级缩放<br>地图块缓存、缓存清理和视口 PNG 导出 | 输入 X/Z 坐标快速跳转<br>显示玩家和世界出生点<br>在已加载地图区块中标记下界传送门<br>读取多人玩家最后保存位置<br>从玩家列表跨维度定位 |
+### 0.7.4 新体验
 
-## 小范围三维预览
+- **资源与纹理**：使用所选游戏目录和资源包中的常见模型与纹理，显示地形与建筑的原有外观。
+- **自由视角**：在已加载场景内使用 WASD 和鼠标浏览，升降、释放鼠标及恢复视角；准星与选中线框帮助确认目标方块。
+- **方块信息与解析诊断**：查看方块 ID、归属、坐标及显示状态；按 Mod 查看本次选区的问题、资源来源，并导出报告。
+- **清楚的功能分区**：“资源与插件”分为资源、解析诊断和插件三页。可以安装、启停和卸载可信的第三方解析插件，应用不附带任何插件。
 
-V0.6 可以从二维地图选择 `1x1`、`3x3`、`5x5` 或 `8x8` 区块范围，在后台生成简化三维场景，并在独立窗口中查看。左键拖动旋转，右键拖动平移旋转中心，滚轮缩放，`R` 恢复默认视图，`Esc` 关闭三维窗口。当前使用简化颜色和立方体几何，原版纹理与更完整的视觉资源属于后续版本范围。
+目前无法完整显示所有 Mod 的模型和颜色。遇到不支持的内容，程序会保留方块身份并说明原因。三维移动限于已加载选区，不会随着相机移动自动加载新区块。诊断只代表本次实际生成的区域。
 
 ## 快速开始
 
-1. 打开 [Releases](https://github.com/huang3337/MC-World-Explorer/releases) 页面自行选择版本，推荐下载带有 `Latest` 标记的最新版 Windows x64 便携版 ZIP。
-2. 将 ZIP 完整解压到普通文件夹。
-3. 双击 `MC World Explorer.exe`。
-4. 点击“选择 Minecraft 目录...”，选择游戏目录、存档目录、整合包实例或单个世界。
+1. 从本仓库的 [Releases 页面](https://github.com/huang3337/MC-World-Explorer/releases) 下载 Windows x64 便携版 ZIP。
+2. **完整解压**到普通文件夹，双击 `MC World Explorer.exe`。便携版无需另装 Java。
+3. 点击选择目录按钮，选择 Minecraft 游戏目录、实例、存档目录或单个世界。
+4. 在左侧选择世界，通过地图上的维度、定位和图层工具浏览。
+5. 打开三维选区，选择范围并生成预览。第一次使用建议从较小范围开始。
 
-请保留 EXE、`app` 和 `runtime` 的原有目录结构，不要单独移动 EXE，也不要直接在压缩包内运行。
+保留 EXE、`app` 和 `runtime` 的相对位置，不要直接在压缩包内运行。配置、缓存、日志和导出文件位于程序目录中的 `config/`、`cache/`、`logs/` 和 `exports/`。
 
-> [!NOTE]
-> 软件包尚未进行代码签名。Windows SmartScreen 可能显示安全提示，请从本仓库的正式 Release 下载，并核对发布页提供的 SHA-256。
+### 三维操作
 
-## 存档安全
+在二维地图中锁定选区后，方框保持在所选区块：加载时为蓝色，成功后为绿色。点击“取消生成”或“取消选区”可重新选择位置，地图仍可拖动和缩放。
 
-程序只读访问以下 Minecraft 存档数据：
+**V0.6.0 历史版**：左键拖动旋转，右键拖动平移旋转中心，滚轮缩放；`R` 复位，`Esc` 关闭三维窗口。
 
-- `level.dat`
-- `playerdata/*.dat`
-- `icon.png`
-- 目录元数据
-- 各维度的 Region 文件
+**V0.7.4**：点击画面捕获鼠标，`W/A/S/D` 移动，鼠标转向，`Space` 上升、`Shift` 下降；`Alt` 切换捕获与释放，`Esc` 释放鼠标，已释放时再按 `Esc` 关闭三维窗口；`O` 切换环绕模式，`R` 复位。切走窗口后释放输入，回来点击画面继续。
 
-程序不会修改、移动或删除 Minecraft 存档。日志、缩略图和地图块缓存、导出图片及配置分别保存在程序根目录的 `logs/`、`cache/`、`exports/` 和 `config/`。
+主界面右上角“关于”可查看版本、作者和项目主页，并复制工具信息。
 
-对于重要存档，仍建议保持正常的备份习惯。
+## 反馈问题
 
-## 从源码运行
+可在仓库的 [Issues](https://github.com/huang3337/MC-World-Explorer/issues) 描述问题。请注明应用版本、Minecraft 版本、复现步骤，以及实际与预期表现；0.7.4 的资源问题可以附上相关诊断条目。分享前检查报告中的本机路径，不必上传完整存档或 Mod 文件。
 
-需要安装 JDK 21。在 Windows PowerShell 或命令提示符中进入项目根目录后运行：
+## 技术与许可
 
-```powershell
-.\gradlew.bat run
-```
-
-首次构建需要下载 Gradle 和项目依赖。应用日志位于项目根目录 `logs/mc-world-explorer.log`；运行数据位于同一根目录下的 `cache/`、`exports/` 和 `config/`。
-
-## 项目文档
-
-- [项目路线图](PROJECT_ROADMAP.md)
-- [界面设计规范](docs/UI_DESIGN_GUIDE.md)
-- [常见问题](docs/FAQ.md)
-- [方块颜色规则](docs/方块颜色规则.md)
-- [V0.1.1 开发与验收记录](docs/progress/V0.1.1.md)
-- [V0.2 开发与验收记录](docs/progress/V0.2.md)
-- [V0.2.1 开发与验收记录](docs/progress/V0.2.1.md)
-- [V0.3 开发与验收记录](docs/progress/V0.3.md)
-- [V0.3.1 开发与验收记录](docs/progress/V0.3.1.md)
-- [V0.6 开发与验收记录](docs/progress/V0.6.md)
-- [V0.4 三维技术可行性验证记录](docs/progress/V0.4.md)
-- [重大开发决策](docs/decisions/)
-
-## 许可证
-
-本项目基于 [GNU General Public License v3.0](LICENSE) 发布。
+使用 Java 21、JavaFX、LWJGL/OpenGL 和 Gradle，主界面与三维窗口独立运行。项目采用 [GNU GPL v3.0](LICENSE) 许可证。

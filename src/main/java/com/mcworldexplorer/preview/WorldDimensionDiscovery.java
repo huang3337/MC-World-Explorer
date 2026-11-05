@@ -25,14 +25,16 @@ public final class WorldDimensionDiscovery {
         List<WorldDimension> dimensions = new ArrayList<>();
         dimensions.add(WorldDimension.overworld(worldFolder));
 
-        if (Files.isDirectory(worldFolder.resolve("DIM-1").resolve("region"))) {
+        if (Files.isDirectory(WorldDimension.nether(worldFolder).regionDirectory())) {
             dimensions.add(WorldDimension.nether(worldFolder));
         }
-        if (Files.isDirectory(worldFolder.resolve("DIM1").resolve("region"))) {
+        if (Files.isDirectory(WorldDimension.end(worldFolder).regionDirectory())) {
             dimensions.add(WorldDimension.end(worldFolder));
         }
 
         List<WorldDimension> modDimensions = new ArrayList<>(discoverModDimensions(worldFolder));
+        var vanillaIds=dimensions.stream().map(WorldDimension::id).collect(java.util.stream.Collectors.toSet());
+        modDimensions.removeIf(dimension->vanillaIds.contains(dimension.id()));
         modDimensions.sort(Comparator.comparing(WorldDimension::id));
         dimensions.addAll(modDimensions);
         return List.copyOf(dimensions);

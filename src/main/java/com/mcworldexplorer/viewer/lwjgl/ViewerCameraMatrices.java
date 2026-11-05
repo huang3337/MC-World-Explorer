@@ -11,12 +11,16 @@ final class ViewerCameraMatrices {
         if (camera == null || width <= 0 || height <= 0) {
             throw new IllegalArgumentException("camera and positive viewport dimensions are required");
         }
-        ViewerOrbitCameraState.CameraPose pose = camera.pose();
+        return viewProjection(camera.pose(), camera.distance(), width, height);
+    }
+
+    static Matrix4f viewProjection(ViewerOrbitCameraState.CameraPose pose, double distance, int width, int height) {
+        if (pose == null || width <= 0 || height <= 0) throw new IllegalArgumentException("valid pose and viewport required");
         Matrix4f projection = new Matrix4f().perspective(
                 (float) ViewerOrbitCameraState.VERTICAL_FOV_RADIANS,
                 (float) width / height,
                 0.1f,
-                (float) Math.max(10_000, camera.distance() * 20));
+                (float) Math.max(10_000, distance * 20));
         Matrix4f view = new Matrix4f().lookAt(
                 new Vector3f((float) pose.eyeX(), (float) pose.eyeY(), (float) pose.eyeZ()),
                 new Vector3f((float) pose.focusX(), (float) pose.focusY(), (float) pose.focusZ()),

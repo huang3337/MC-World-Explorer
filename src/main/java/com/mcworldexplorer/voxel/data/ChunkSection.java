@@ -32,6 +32,18 @@ public final class ChunkSection {
     public boolean contains(String blockName) {
         return palette.stream().anyMatch(state -> state.name().equals(blockName));
     }
+    /** Exact used-state counts, including single-entry sections; unused palette entries are excluded. */
+    public java.util.Map<BlockState,Integer> usedStateCounts()throws ChunkDecodeException {
+        if(palette.size()==1)return java.util.Map.of(palette.getFirst(),BLOCKS_PER_SECTION);
+        int[] counts=new int[palette.size()];
+        for(int index=0;index<BLOCKS_PER_SECTION;index++) {
+            int entry=storage.paletteIndex(index);
+            if(entry<0||entry>=palette.size())throw new ChunkDecodeException(ChunkDecodeException.Reason.PALETTE_INDEX_OUT_OF_RANGE,sectionY,"palette index "+entry+" is invalid at block index "+index);
+            counts[entry]++;
+        }
+        var result=new java.util.LinkedHashMap<BlockState,Integer>();for(int i=0;i<counts.length;i++)if(counts[i]!=0)result.merge(palette.get(i),counts[i],Integer::sum);
+        return java.util.Collections.unmodifiableMap(result);
+    }
 
     public BlockState blockState(int localX, int localY, int localZ)
             throws ChunkDecodeException {

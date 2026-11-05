@@ -35,6 +35,7 @@ public record ResourceLocation(String namespace, String path) {
         TEXTURE("textures/", ".png", 8 * 1024 * 1024),
         TEXTURE_META("textures/", ".png.mcmeta", 64*1024),
         RAW_ASSET("", "", 4*1024*1024),
+        RAW_DATA("", "", 1024*1024),
         BANNER_PATTERN("banner_pattern/", ".json", 64*1024);
 
         private final String folder;
@@ -52,7 +53,7 @@ public record ResourceLocation(String namespace, String path) {
 
     public String entryName(Kind kind) {
         Objects.requireNonNull(kind, "kind");
-        return (kind==Kind.BANNER_PATTERN?"data/":"assets/") + namespace + "/" + kind.folder + path + kind.extension;
+        return (kind==Kind.BANNER_PATTERN||kind==Kind.RAW_DATA?"data/":"assets/") + namespace + "/" + kind.folder + path + kind.extension;
     }
 
     @Override public String toString() { return namespace + ":" + path; }

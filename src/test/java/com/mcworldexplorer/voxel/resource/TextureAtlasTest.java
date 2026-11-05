@@ -37,7 +37,7 @@ class TextureAtlasTest {
     @Test void decodesPngAndRejectsMalformedOversizedAndAnimationStrips() throws Exception {
         assertEquals(16, TextureAtlas.decode(png(16,16)).getWidth());
         assertThrows(IOException.class, () -> TextureAtlas.decode(new byte[64]));
-        assertThrows(IOException.class, () -> TextureAtlas.decode(png(257,257)));
+        assertThrows(IOException.class, () -> TextureAtlas.decode(png(TextureAtlas.MAX_IMAGE_SIZE+1,TextureAtlas.MAX_IMAGE_SIZE+1)));
         assertEquals(16,TextureAtlas.decode(png(16,32)).getHeight());
         assertThrows(IOException.class, () -> TextureAtlas.decode(png(16,31)));
         byte[] truncated = java.util.Arrays.copyOf(png(16,16), 35);
@@ -62,13 +62,13 @@ class TextureAtlasTest {
         for (int i=0; i<49; i++) large.add("large"+i,big);
         assertThrows(IOException.class, () -> large.add("no-space",big));
     }
-    @Test void compositesTintedGrassWithoutChangingItsOpaqueBase() throws Exception {
+    @Test void compositesExplicitRgbWithoutChangingItsOpaqueBase() throws Exception {
         BufferedImage base = new BufferedImage(1,1,BufferedImage.TYPE_INT_ARGB);
         BufferedImage overlay = new BufferedImage(1,1,BufferedImage.TYPE_INT_ARGB);
         base.setRGB(0,0,0xFF806040); overlay.setRGB(0,0,0xFFFFFFFF);
-        assertEquals(0xFF91BD59, BlockTextureSet.composite(base,-1,overlay,0).getRGB(0,0));
+        assertEquals(0xFF91BD59, BlockTextureSet.composite(base,-1,overlay,0x191BD59).getRGB(0,0));
         overlay.setRGB(0,0,0x00FFFFFF);
-        assertEquals(0xFF806040, BlockTextureSet.composite(base,-1,overlay,0).getRGB(0,0));
+        assertEquals(0xFF806040, BlockTextureSet.composite(base,-1,overlay,0x191BD59).getRGB(0,0));
         base.setRGB(0,0,0x00806040);
         assertEquals(0x00806040, BlockTextureSet.composite(base,-1,null,-1).getRGB(0,0));
     }
@@ -88,6 +88,14 @@ class TextureAtlasTest {
         var top=new BufferedImage(4,2,BufferedImage.TYPE_INT_ARGB);top.setRGB(3,1,0xFF0000FF);
         var result=BlockTextureSet.composite(base,-1,top,-1);assertEquals(4,result.getWidth());assertEquals(2,result.getHeight());
         assertEquals(0xFFFF0000,result.getRGB(1,1));assertEquals(0xFF00FF00,result.getRGB(2,1));assertEquals(0xFF0000FF,result.getRGB(3,1));
+    }
+    @Test void highResolutionRectanglesAndAnimationFramesKeepOriginalPixelsWithinTheSameAtlasBudget()throws Exception {
+        var image=new BufferedImage(512,128,BufferedImage.TYPE_INT_ARGB);image.setRGB(511,127,0xFF123456);var output=new ByteArrayOutputStream();ImageIO.write(image,"png",output);
+        var decoded=TextureAtlas.decodeResource(output.toByteArray(),Optional.empty());assertEquals(512,decoded.getWidth());assertEquals(128,decoded.getHeight());assertEquals(0xFF123456,decoded.getRGB(511,127));
+        var builder=new TextureAtlas.Builder();var tile=builder.add("high",decoded);var atlas=builder.build();assertEquals(0xFF123456,atlas.pixels()[(tile.y()+127)*atlas.width()+tile.x()+511]);assertTrue(atlas.estimatedBytes()<=4L*2048*2048);
+        var frames=new BufferedImage(1024,512,BufferedImage.TYPE_INT_ARGB);frames.setRGB(512,0,0xFF00FF00);output.reset();ImageIO.write(frames,"png",output);
+        var frame=TextureAtlas.decodeResource(output.toByteArray(),Optional.of("{\"animation\":{\"width\":512,\"height\":512,\"frames\":[1]}}"));assertEquals(512,frame.getWidth());assertEquals(512,frame.getHeight());assertEquals(0xFF00FF00,frame.getRGB(0,0));
+        assertThrows(IOException.class,()->TextureAtlas.decodeResource(png(1025,128),Optional.empty()));
     }
     private static byte[] png(int w,int h) throws IOException {
         var output = new ByteArrayOutputStream();

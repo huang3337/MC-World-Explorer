@@ -2,6 +2,7 @@ package com.mcworldexplorer.voxel.mesh;
 
 import com.mcworldexplorer.voxel.resource.BlockModelResolver.Direction;
 import com.mcworldexplorer.voxel.resource.BlockTextureSet;
+import com.mcworldexplorer.voxel.resource.BlockResourceDiagnostic;
 import com.mcworldexplorer.voxel.resource.ModelOcclusion;
 import com.mcworldexplorer.voxel.data.BlockState;
 import com.mcworldexplorer.voxel.data.ChunkCoordinate;
@@ -21,7 +22,9 @@ import java.util.Map;
 public final class ChunkMesher {
     private final BlockTextureSet textures;
     public ChunkMesher() { this(null); }
-    public ChunkMesher(BlockTextureSet textures) { this.textures = textures; }
+    private final VoxelTargetIndex.Budget targetBudget;
+    public ChunkMesher(BlockTextureSet textures) { this(textures,new VoxelTargetIndex.Budget()); }
+    ChunkMesher(BlockTextureSet textures, VoxelTargetIndex.Budget targetBudget) { this.textures = textures; this.targetBudget = targetBudget; }
     public ChunkMeshSnapshot build(
             VoxelAreaLoadResult area,
             ChunkCoordinate target,
@@ -40,9 +43,10 @@ public final class ChunkMesher {
         VoxelChunk chunk = targetResult.chunk();
         BlockNeighborhood neighborhood = new BlockNeighborhood(area);
         Map<MaterialKey, BatchBuilder> builders = new HashMap<>();
-        Map<String, WarningAccumulator> warnings = new LinkedHashMap<>();
+        Map<Object, WarningAccumulator> warnings = new LinkedHashMap<>();
         BoundsBuilder bounds = new BoundsBuilder();
         int blockCount = 0;
+        var targets = new VoxelTargetIndex.Builder(targetBudget);
         Map<BlockState,List<ModelOcclusion.Box>> occlusion = new HashMap<>();
         long originX = Math.multiplyExact((long) target.x(), 16L);
         long originZ = Math.multiplyExact((long) target.z(), 16L);
@@ -51,6 +55,7 @@ public final class ChunkMesher {
             int sectionBaseY = Math.multiplyExact(section.sectionY(), 16);
             Map<BlockState, List<BlockTextureSet.Surface>> sectionTextures = new HashMap<>();
             Map<BlockState, String> sectionFallbacks = new HashMap<>();
+            Map<DiagnosticStateKey,List<WarningAccumulator>> sectionDiagnosticWarnings=new HashMap<>();
             for (int localY = 0; localY < 16; localY++) {
                 if (cancellation.isCancelled() || Thread.currentThread().isInterrupted()) {
                     throw new java.util.concurrent.CancellationException("mesh generation cancelled");
@@ -59,7 +64,9 @@ public final class ChunkMesher {
                 for (int localZ = 0; localZ < 16; localZ++) {
                     for (int localX = 0; localX < 16; localX++) {
                         BlockState state = section.blockState(localX, localY, localZ);
+                        BlockState originalState = state;
                         if(textures!=null)state=BlockTextureSet.visualState(state,chunk.blockEntity(originX+localX,y,originZ+localZ).orElse(null));
+                        if(textures!=null)state=textures.renderState(state,originX+localX,y,originZ+localZ);
                         final BlockState renderState=state;
                         BlockRenderClass classification = BlockClassifier.classify(state);
                         if (classification.isAir()) {
@@ -72,28 +79,27 @@ public final class ChunkMesher {
                             if (faces == null) sectionFallbacks.put(state, state.name() + ": " + textures.fallbackReason(state));
                         }
                         var texturedFaces = sectionTextures.get(state);
+                        targets.add(localX,y,localZ,originalState,state,textures,texturedFaces);
                         if (texturedFaces == null && classification.kind() == BlockRenderClass.Kind.FALLBACK) {
-                            warnings.computeIfAbsent(
-                                    "fallback:" + state.name(),
-                                    ignored -> new WarningAccumulator(
-                                            MeshWarning.Code.FALLBACK_BLOCK,
-                                            target,
-                                            renderState.name()))
-                                    .increment();
+                            if(textures==null){
+                                sectionDiagnosticWarnings.computeIfAbsent(new DiagnosticStateKey(originalState,renderState),ignored->{
+                                    var diagnostic=new BlockResourceDiagnostic(originalState,BlockResourceDiagnostic.Severity.DEGRADED,"SIMPLE_COLORS","未使用资源模型，显示简化方块",List.of(),List.of(),false);
+                                    return List.of(warnings.computeIfAbsent(new DiagnosticWarningKey(MeshWarning.Code.FALLBACK_BLOCK,diagnostic),key->new WarningAccumulator(MeshWarning.Code.FALLBACK_BLOCK,target,renderState.name(),diagnostic)));
+                                }).getFirst().increment();
+                            }else warnings.computeIfAbsent("fallback:"+state.name(),ignored->new WarningAccumulator(MeshWarning.Code.FALLBACK_BLOCK,target,renderState.name())).increment();
                         }
 
-                        if (textures != null && texturedFaces == null) {
-                            String detail = sectionFallbacks.get(state);
-                            warnings.computeIfAbsent("texture:" + detail, ignored -> new WarningAccumulator(
-                                    MeshWarning.Code.TEXTURE_FALLBACK, target, detail)).increment();
+                        if(textures!=null){
+                            sectionDiagnosticWarnings.computeIfAbsent(new DiagnosticStateKey(originalState,renderState),ignored->textures.diagnostics(renderState).stream().map(d->{
+                                var diagnostic=d.originalState(originalState);
+                                var code=texturedFaces==null?MeshWarning.Code.TEXTURE_FALLBACK:MeshWarning.Code.MODEL_APPROXIMATION;
+                                String detail=texturedFaces==null?sectionFallbacks.get(renderState):renderState.name()+": "+diagnostic.detail();
+                                return warnings.computeIfAbsent(new DiagnosticWarningKey(code,diagnostic),key->new WarningAccumulator(code,target,detail,diagnostic));
+                            }).toList()).forEach(WarningAccumulator::increment);
                         }
                         long worldX = originX + localX;
                         long worldZ = originZ + localZ;
                         if(texturedFaces!=null) {
-                            for(String note:textures.notes(state)) {
-                                String detail=state.name()+": "+note;
-                                warnings.computeIfAbsent("model:"+detail,ignored->new WarningAccumulator(MeshWarning.Code.MODEL_APPROXIMATION,target,detail)).increment();
-                            }
                             List<ModelOcclusion.Box> own=occlusion.computeIfAbsent(state,ignored->ModelOcclusion.boxes(texturedFaces));
                             BatchBuilder primary=null;
                             boolean fluid=FluidGeometry.liquid(state);
@@ -110,8 +116,9 @@ public final class ChunkMesher {
                                     Face side=Face.valueOf(cull.name());
                                     var neighbor=neighborhood.query(worldX+side.deltaX,Math.addExact(y,side.deltaY),worldZ+side.deltaZ);
                                     if(fluid&&liquidSurface&&FluidGeometry.hidden(state,neighbor.state(),cull,column))continue;
-                                    var neighborFaces=textures.surfaces(neighbor.state());
-                                    var boxes=occlusion.computeIfAbsent(neighbor.state(),ignored->ModelOcclusion.boxes(neighborFaces));
+                                    var neighborState=textures.renderState(neighbor.state(),worldX+side.deltaX,Math.addExact(y,side.deltaY),worldZ+side.deltaZ);
+                                    var neighborFaces=textures.surfaces(neighborState);
+                                    var boxes=occlusion.computeIfAbsent(neighborState,ignored->ModelOcclusion.boxes(neighborFaces));
                                     if(ModelOcclusion.covers(surface,boxes,side.deltaX,side.deltaY,side.deltaZ))continue;
                                 }
                                 builder.addTexturedFace(surface,localX,y,localZ);
@@ -139,8 +146,9 @@ public final class ChunkMesher {
                                         .increment();
                             }
                             boolean visible=visibleFace(state,classification,neighbor);
-                            if(textures!=null&&textures.surfaces(neighbor.state())!=null) {
-                                var boxes=occlusion.computeIfAbsent(neighbor.state(),ignored->ModelOcclusion.boxes(textures.surfaces(neighbor.state())));
+                            BlockState neighborState=textures==null?neighbor.state():textures.renderState(neighbor.state(),worldX+face.deltaX,Math.addExact(y,face.deltaY),worldZ+face.deltaZ);
+                            if(textures!=null&&textures.surfaces(neighborState)!=null) {
+                                var boxes=occlusion.computeIfAbsent(neighborState,ignored->ModelOcclusion.boxes(textures.surfaces(neighborState)));
                                 visible=!ModelOcclusion.covers(face.surface(),boxes,face.deltaX,face.deltaY,face.deltaZ);
                             }
                             if (visible) {
@@ -170,7 +178,7 @@ public final class ChunkMesher {
                 faceCount,
                 vertexCount,
                 indexCount,
-                warnings.values().stream().map(WarningAccumulator::build).toList());
+                warnings.values().stream().map(WarningAccumulator::build).toList(), targets.build());
     }
 
     private static boolean visibleFace(
@@ -372,16 +380,23 @@ public final class ChunkMesher {
         }
     }
 
+    private record DiagnosticWarningKey(MeshWarning.Code code,BlockResourceDiagnostic diagnostic) { }
+    // Render preparation may normalize internal keys; diagnostics must retain each raw saved identity.
+    private record DiagnosticStateKey(BlockState original,BlockState rendered) { }
+
     private static final class WarningAccumulator {
         private final MeshWarning.Code code;
         private final ChunkCoordinate coordinate;
         private final String detail;
+        private final BlockResourceDiagnostic diagnostic;
         private int occurrences;
 
         private WarningAccumulator(
                 MeshWarning.Code code,
                 ChunkCoordinate coordinate,
-                String detail) {
+                String detail) {this(code,coordinate,detail,null);}
+        private WarningAccumulator(MeshWarning.Code code,ChunkCoordinate coordinate,String detail,BlockResourceDiagnostic diagnostic) {
+            this.diagnostic=diagnostic;
             this.code = code;
             this.coordinate = coordinate;
             this.detail = detail;
@@ -392,7 +407,7 @@ public final class ChunkMesher {
         }
 
         private MeshWarning build() {
-            return new MeshWarning(code, coordinate, detail, occurrences);
+            return new MeshWarning(code, coordinate, detail, occurrences, java.util.Optional.ofNullable(diagnostic));
         }
     }
 }

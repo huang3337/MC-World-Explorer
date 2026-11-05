@@ -1,0 +1,80 @@
+{
+  "version": "1.20.1",
+  "classes": [
+    {
+      "type": "net.minecraft.client.color.block.BlockColors",
+      "name": "eoo",
+      "sha256": "865bc645b29a0b3044096672cc9b5ed6d155c96b522b1a933d0611d103611419"
+    },
+    {
+      "type": "net.minecraft.client.renderer.BiomeColors",
+      "name": "fji",
+      "sha256": "7edca6b0ee5cbe2294df85c8bddce237d3f664d0ed673b8a8c4d53b0ee75a51a"
+    },
+    {
+      "type": "net.minecraft.world.level.FoliageColor",
+      "name": "cmg",
+      "sha256": "5fc36f9772b0a0175f6963d779cc4ace136c13896c0ea4b20efa4560f1a1e8c6"
+    },
+    {
+      "type": "net.minecraft.world.level.block.RedStoneWireBlock",
+      "name": "cvo",
+      "sha256": "9a3596d14fc4862967aaf770e8a8f180e5f6312d420cf1dd8409872d1e01be37"
+    },
+    {
+      "type": "net.minecraft.util.FastColor$ARGB32",
+      "name": "aok$b",
+      "sha256": "01e2adc6d8d5c0a541785720596729911aad8083cce797620fcd49f1b398e5e4"
+    }
+  ],
+  "handlers": [
+    {
+      "method": "m",
+      "kind": "DOUBLE_GRASS"
+    },
+    {
+      "method": "l",
+      "kind": "GRASS"
+    },
+    {
+      "method": "k",
+      "kind": "GRASS_NONZERO"
+    },
+    {
+      "method": "j",
+      "kind": "SPRUCE"
+    },
+    {
+      "method": "i",
+      "kind": "BIRCH"
+    },
+    {
+      "method": "h",
+      "kind": "FOLIAGE"
+    },
+    {
+      "method": "g",
+      "kind": "WATER"
+    },
+    {
+      "method": "f",
+      "kind": "REDSTONE"
+    },
+    {
+      "method": "e",
+      "kind": "GRASS"
+    },
+    {
+      "method": "d",
+      "kind": "ATTACHED_STEM"
+    },
+    {
+      "method": "c",
+      "kind": "STEM"
+    },
+    {
+      "method": "b",
+      "kind": "LILY_PAD"
+    }
+  ]
+}

@@ -91,8 +91,7 @@ public final class MapViewport extends Region {
     private ViewerPerformanceProfile viewerProfile = ViewerPerformanceProfile.BASIC;
     private Consumer<ChunkRectangle> viewerSelectionChanged = ignored -> {};
     private ViewerRangePreset viewerRangePreset = ViewerRangePreset.THREE;
-    private ChunkRectangle viewerCandidate;
-    private ChunkRectangle viewerLockedSelection;
+    private final ViewerSelectionState viewerSelection = new ViewerSelectionState();
     private Set<ChunkRectangle> viewerCachedAreas = Set.of();
     private String viewerCachedAreaContext = "";
     private double lastPointerX;
@@ -135,16 +134,15 @@ public final class MapViewport extends Region {
                 pressedFailedKey = viewerSelectionMode
                         ? null
                         : failedTileAt(event.getX(), event.getY());
-                if (viewerSelectionMode && viewerFreeSelection && state != null) {
+                if (viewerSelectionMode && viewerFreeSelection && viewerSelection.canSelect() && state != null) {
                     zoomAnimation.stop();
-                    viewerLockedSelection = null;
                     viewerDragStart = viewerSelectionAt(state, pressX, pressY,
                             canvas.getWidth(), canvas.getHeight(), ViewerRangePreset.ONE);
                     updateViewerCandidate(pressX, pressY);
                     requestFocus();
                     draw();
                 }
-                canvas.setCursor(viewerSelectionMode && viewerFreeSelection ? Cursor.CROSSHAIR
+                canvas.setCursor(viewerSelectionMode && viewerFreeSelection && viewerSelection.canSelect() ? Cursor.CROSSHAIR
                         : pressedFailedKey == null ? Cursor.CLOSED_HAND : Cursor.HAND);
             }
         });
@@ -192,10 +190,11 @@ public final class MapViewport extends Region {
                     && primaryPressed
                     && (!dragging || viewerFreeSelection)
                     && viewerSelectionMode
-                    && viewerCandidate != null
-                    && viewerProfile.allows(viewerCandidate)) {
-                viewerLockedSelection = viewerCandidate;
-                viewerSelectionLocked.accept(viewerLockedSelection);
+                    && viewerSelection.canSelect()
+                    && viewerSelection.candidate() != null
+                    && viewerProfile.allows(viewerSelection.candidate())) {
+                viewerSelection.lock(viewerSelection.candidate());
+                viewerSelectionLocked.accept(viewerSelection.locked());
                 requestFocus();
             } else if (event.getButton() == MouseButton.PRIMARY
                     && primaryPressed
@@ -212,7 +211,7 @@ public final class MapViewport extends Region {
             primaryPressed = false;
             dragging = false;
             pressedFailedKey = null;
-            canvas.setCursor(viewerSelectionMode ? Cursor.CROSSHAIR : Cursor.DEFAULT);
+            canvas.setCursor(viewerSelectionCursor());
             draw();
         });
         canvas.setOnScroll(event -> {
@@ -243,12 +242,12 @@ public final class MapViewport extends Region {
             lastPointerY = event.getY();
             if (viewerSelectionMode) {
                 updateViewerCandidate(event.getX(), event.getY());
-                Optional<String> cachedText = viewerCandidate != null
-                        && viewerCachedAreas.contains(viewerCandidate)
-                        ? Optional.of(viewerCachedTooltip(viewerCandidate))
+                Optional<String> cachedText = viewerSelection.candidate() != null
+                        && viewerCachedAreas.contains(viewerSelection.candidate())
+                        ? Optional.of(viewerCachedTooltip(viewerSelection.candidate()))
                         : Optional.empty();
                 showTooltip(cachedText, event.getScreenX(), event.getScreenY());
-                canvas.setCursor(Cursor.CROSSHAIR);
+                canvas.setCursor(viewerSelectionCursor());
                 draw();
                 return;
             }
@@ -267,11 +266,11 @@ public final class MapViewport extends Region {
         canvas.setOnMouseExited(event -> {
             pointerInside = false;
             hideMarkerTooltip();
-            if (viewerSelectionMode && viewerLockedSelection == null && !primaryPressed) {
-                viewerCandidate = null;
+            if (viewerSelectionMode && viewerSelection.canSelect() && !primaryPressed) {
+                viewerSelection.clearCandidate();
                 draw();
             }
-            canvas.setCursor(viewerSelectionMode ? Cursor.CROSSHAIR : Cursor.DEFAULT);
+            canvas.setCursor(viewerSelectionCursor());
         });
         setOnKeyPressed(event -> {
             if (viewerSelectionMode && event.getCode() == KeyCode.ESCAPE) {
@@ -287,6 +286,7 @@ public final class MapViewport extends Region {
         zoomAnimation.stop();
         zoomAnimation.getKeyFrames().clear();
         this.state = state;
+        viewerSelection.clear();
         clearTiles();
         draw();
     }
@@ -332,14 +332,13 @@ public final class MapViewport extends Region {
         viewerDragStart = null;
         viewerSelectionMode = enabled;
         if (!enabled) {
-            viewerCandidate = null;
-            viewerLockedSelection = null;
+            viewerSelection.clear();
             hideMarkerTooltip();
         } else {
             requestFocus();
             updateViewerCandidateFromPointer();
         }
-        canvas.setCursor(enabled ? Cursor.CROSSHAIR : Cursor.DEFAULT);
+        canvas.setCursor(viewerSelectionCursor());
         draw();
     }
 
@@ -367,20 +366,43 @@ public final class MapViewport extends Region {
         primaryPressed = false;
         secondaryPanning = false;
         viewerDragStart = null;
-        viewerCandidate = null;
-        viewerLockedSelection = null;
+        viewerSelection.clear();
         updateViewerCandidateFromPointer();
+        canvas.setCursor(viewerSelectionCursor());
         draw();
     }
 
     public void lockViewerSelection(ChunkRectangle selection) {
-        viewerLockedSelection = java.util.Objects.requireNonNull(selection, "selection");
-        viewerCandidate = selection;
+        viewerSelection.lock(selection);
+        canvas.setCursor(viewerSelectionCursor());
         draw();
     }
 
     public Optional<ChunkRectangle> viewerLockedSelection() {
-        return Optional.ofNullable(viewerLockedSelection);
+        return Optional.ofNullable(viewerSelection.locked());
+    }
+
+    public void setViewerTaskRunning(boolean running) {
+        if (running) {
+            viewerSelection.beginLoading();
+        } else {
+            viewerSelection.finishLoading(false);
+        }
+        draw();
+    }
+
+    public void markViewerSelectionLoaded() {
+        viewerSelection.finishLoading(true);
+        draw();
+    }
+
+    public void invalidateViewerLoadedSelection() {
+        viewerSelection.invalidateLoaded();
+        draw();
+    }
+
+    private Cursor viewerSelectionCursor() {
+        return viewerSelectionMode && viewerSelection.canSelect() ? Cursor.CROSSHAIR : Cursor.DEFAULT;
     }
 
     public void setViewerCachedAreas(Iterable<ChunkRectangle> areas) {
@@ -468,8 +490,8 @@ public final class MapViewport extends Region {
         dragging = false;
         pressedFailedKey = null;
         highlightedPlayerIdentifier = null;
-        viewerCandidate = null;
-        viewerLockedSelection = null;
+        // Map tile invalidation must not unlock a three-dimensional selection.
+        viewerSelection.clearCandidate();
         hideMarkerTooltip();
         draw();
     }
@@ -660,21 +682,23 @@ public final class MapViewport extends Region {
         if (!viewerSelectionMode || state == null) {
             return;
         }
+        ChunkRectangle active = viewerSelection.active();
         for (ChunkRectangle cached : viewerCachedAreas) {
+            if (cached.equals(active)) continue;
             drawViewerRectangle(graphics, cached, Color.rgb(68, 199, 103, 0.08),
                     Color.rgb(68, 199, 103, 0.75), 2);
         }
-        ChunkRectangle active = viewerLockedSelection != null
-                ? viewerLockedSelection
-                : viewerCandidate;
         if (active != null) {
-            boolean locked = viewerLockedSelection != null;
+            boolean locked = !viewerSelection.canSelect();
+            boolean loaded = viewerSelection.loaded();
             drawViewerRectangle(
                     graphics,
                     active,
                     !viewerProfile.allows(active) ? Color.rgb(220, 65, 65, 0.16)
+                            : loaded ? Color.rgb(68, 199, 103, 0.16)
                             : locked ? Color.rgb(47, 128, 237, 0.22) : Color.rgb(47, 128, 237, 0.13),
                     !viewerProfile.allows(active) ? Color.rgb(220, 65, 65)
+                            : loaded ? Color.rgb(68, 199, 103)
                             : locked ? Color.rgb(47, 128, 237, 1.0) : Color.rgb(105, 171, 255, 0.9),
                     locked ? 3 : 2);
         }
@@ -704,13 +728,13 @@ public final class MapViewport extends Region {
     private void updateViewerCandidateFromPointer() {
         if (pointerInside) {
             updateViewerCandidate(lastPointerX, lastPointerY);
-        } else if (viewerLockedSelection == null) {
-            viewerCandidate = null;
+        } else if (viewerSelection.canSelect()) {
+            viewerSelection.clearCandidate();
         }
     }
 
     private void updateViewerCandidate(double screenX, double screenY) {
-        if (!viewerSelectionMode || state == null || viewerLockedSelection != null) {
+        if (!viewerSelectionMode || state == null || !viewerSelection.canSelect()) {
             return;
         }
         if (viewerFreeSelection) {
@@ -719,17 +743,17 @@ public final class MapViewport extends Region {
             }
             ChunkRectangle end = viewerSelectionAt(state, screenX, screenY,
                     canvas.getWidth(), canvas.getHeight(), ViewerRangePreset.ONE);
-            viewerCandidate = rectangleBetween(viewerDragStart, end);
-            viewerSelectionChanged.accept(viewerCandidate);
+            viewerSelection.preview(rectangleBetween(viewerDragStart, end));
+            viewerSelectionChanged.accept(viewerSelection.candidate());
             return;
         }
-        viewerCandidate = viewerSelectionAt(
+        viewerSelection.preview(viewerSelectionAt(
                 state,
                 screenX,
                 screenY,
                 canvas.getWidth(),
                 canvas.getHeight(),
-                viewerRangePreset);
+                viewerRangePreset));
     }
 
     static ChunkRectangle rectangleBetween(ChunkRectangle start, ChunkRectangle end) {

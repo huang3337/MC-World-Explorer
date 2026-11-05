@@ -1,0 +1,697 @@
+{
+  "version": "1.21.1",
+  "mappingSha1": "2244b6f072256667bcd9a73df124d6c58de77992",
+  "types": {
+    "Direction": "ji",
+    "Direction$Axis": "ji$a",
+    "Direction$Plane": "ji$c",
+    "Item": "cul",
+    "Item$Properties": "cul$a",
+    "Items": "cut",
+    "BlockItem": "cso",
+    "ItemNameBlockItem": "cup",
+    "Block": "dfy",
+    "Blocks": "dga",
+    "BlockState": "dtc",
+    "BlockBehaviour": "dtb",
+    "BlockBehaviour$Properties": "dtb$d",
+    "StateDefinition": "dtd",
+    "StateDefinition$Builder": "dtd$a",
+    "StateDefinition$Factory": "dtd$b",
+    "StateHolder": "dte",
+    "Property": "duf",
+    "BlockStateProperties": "dts",
+    "BooleanProperty": "dtt",
+    "IntegerProperty": "duc",
+    "EnumProperty": "dua",
+    "DirectionProperty": "dtw",
+    "StringRepresentable": "azk",
+    "ResourceLocation": "akr",
+    "ResourceKey": "akq",
+    "Registry": "jz",
+    "BuiltInRegistries": "lt",
+    "CrossCollisionBlock": "dhu",
+    "FenceBlock": "diw",
+    "VineBlock": "dov",
+    "DataComponentMap": "km",
+    "DataComponentMap$Builder": "km$a",
+    "DataComponentMap$Builder$SimpleMap": "km$a$a",
+    "DataComponents": "kq",
+    "TypedDataComponent": "ks"
+  },
+  "methods": [
+    [
+      "Direction",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;IIIILjava/lang/String;Lji$b;Lji$a;Lkh;)V"
+    ],
+    [
+      "Direction",
+      "getName",
+      "n",
+      "()Ljava/lang/String;"
+    ],
+    [
+      "Direction",
+      "getSerializedName",
+      "c",
+      "()Ljava/lang/String;"
+    ],
+    [
+      "Direction$Axis",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;ILjava/lang/String;)V"
+    ],
+    [
+      "Direction$Axis",
+      "getName",
+      "a",
+      "()Ljava/lang/String;"
+    ],
+    [
+      "Direction$Axis",
+      "getSerializedName",
+      "c",
+      "()Ljava/lang/String;"
+    ],
+    [
+      "Direction$Plane",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;I[Lji;[Lji$a;)V"
+    ],
+    [
+      "Item",
+      "<init>",
+      "<init>",
+      "(Lcul$a;)V"
+    ],
+    [
+      "Item",
+      "getName",
+      "n",
+      "(Lcuq;)Lwz;"
+    ],
+    [
+      "Item$Properties",
+      "<init>",
+      "<init>",
+      "()V"
+    ],
+    [
+      "Items",
+      "<init>",
+      "<init>",
+      "()V"
+    ],
+    [
+      "Items",
+      "registerBlock",
+      "a",
+      "(Ldfy;)Lcul;"
+    ],
+    [
+      "Items",
+      "registerBlock",
+      "a",
+      "(Ldfy;Ljava/util/function/UnaryOperator;)Lcul;"
+    ],
+    [
+      "Items",
+      "registerBlock",
+      "a",
+      "(Ldfy;[Ldfy;)Lcul;"
+    ],
+    [
+      "Items",
+      "registerBlock",
+      "a",
+      "(Lcso;)Lcul;"
+    ],
+    [
+      "Items",
+      "registerBlock",
+      "a",
+      "(Ldfy;Lcul;)Lcul;"
+    ],
+    [
+      "Items",
+      "registerItem",
+      "a",
+      "(Ljava/lang/String;Lcul;)Lcul;"
+    ],
+    [
+      "Items",
+      "registerItem",
+      "a",
+      "(Lakr;Lcul;)Lcul;"
+    ],
+    [
+      "Items",
+      "registerItem",
+      "a",
+      "(Lakq;Lcul;)Lcul;"
+    ],
+    [
+      "BlockItem",
+      "<init>",
+      "<init>",
+      "(Ldfy;Lcul$a;)V"
+    ],
+    [
+      "BlockItem",
+      "getBlock",
+      "d",
+      "()Ldfy;"
+    ],
+    [
+      "ItemNameBlockItem",
+      "<init>",
+      "<init>",
+      "(Ldfy;Lcul$a;)V"
+    ],
+    [
+      "Block",
+      "<init>",
+      "<init>",
+      "(Ldtb$d;)V"
+    ],
+    [
+      "Block",
+      "getName",
+      "f",
+      "()Lxn;"
+    ],
+    [
+      "Block",
+      "createBlockStateDefinition",
+      "a",
+      "(Ldtd$a;)V"
+    ],
+    [
+      "Block",
+      "getStateDefinition",
+      "l",
+      "()Ldtd;"
+    ],
+    [
+      "Block",
+      "registerDefaultState",
+      "k",
+      "(Ldtc;)V"
+    ],
+    [
+      "Block",
+      "defaultBlockState",
+      "o",
+      "()Ldtc;"
+    ],
+    [
+      "Blocks",
+      "<init>",
+      "<init>",
+      "()V"
+    ],
+    [
+      "Blocks",
+      "register",
+      "a",
+      "(Ljava/lang/String;Ldfy;)Ldfy;"
+    ],
+    [
+      "Blocks",
+      "register",
+      "a",
+      "(Lakq;Ldfy;)Ldfy;"
+    ],
+    [
+      "BlockState",
+      "<init>",
+      "<init>",
+      "(Ldfy;Lit/unimi/dsi/fastutil/objects/Reference2ObjectArrayMap;Lcom/mojang/serialization/MapCodec;)V"
+    ],
+    [
+      "BlockBehaviour",
+      "<init>",
+      "<init>",
+      "(Ldtb$d;)V"
+    ],
+    [
+      "BlockBehaviour$Properties",
+      "<init>",
+      "<init>",
+      "()V"
+    ],
+    [
+      "StateDefinition",
+      "<init>",
+      "<init>",
+      "(Ljava/util/function/Function;Ljava/lang/Object;Ldtd$b;Ljava/util/Map;)V"
+    ],
+    [
+      "StateDefinition",
+      "any",
+      "b",
+      "()Ldte;"
+    ],
+    [
+      "StateDefinition$Builder",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/Object;)V"
+    ],
+    [
+      "StateDefinition$Builder",
+      "add",
+      "a",
+      "([Lduf;)Ldtd$a;"
+    ],
+    [
+      "StateDefinition$Builder",
+      "create",
+      "a",
+      "(Ljava/util/function/Function;Ldtd$b;)Ldtd;"
+    ],
+    [
+      "StateDefinition$Factory",
+      "create",
+      "create",
+      "(Ljava/lang/Object;Lit/unimi/dsi/fastutil/objects/Reference2ObjectArrayMap;Lcom/mojang/serialization/MapCodec;)Ljava/lang/Object;"
+    ],
+    [
+      "StateHolder",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/Object;Lit/unimi/dsi/fastutil/objects/Reference2ObjectArrayMap;Lcom/mojang/serialization/MapCodec;)V"
+    ],
+    [
+      "StateHolder",
+      "setValue",
+      "a",
+      "(Lduf;Ljava/lang/Comparable;)Ljava/lang/Object;"
+    ],
+    [
+      "Property",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;Ljava/lang/Class;)V"
+    ],
+    [
+      "Property",
+      "getName",
+      "f",
+      "()Ljava/lang/String;"
+    ],
+    [
+      "Property",
+      "getPossibleValues",
+      "a",
+      "()Ljava/util/Collection;"
+    ],
+    [
+      "Property",
+      "getName",
+      "a",
+      "(Ljava/lang/Comparable;)Ljava/lang/String;"
+    ],
+    [
+      "BlockStateProperties",
+      "<init>",
+      "<init>",
+      "()V"
+    ],
+    [
+      "BooleanProperty",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;)V"
+    ],
+    [
+      "BooleanProperty",
+      "getPossibleValues",
+      "a",
+      "()Ljava/util/Collection;"
+    ],
+    [
+      "BooleanProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;)Ldtt;"
+    ],
+    [
+      "BooleanProperty",
+      "getName",
+      "a",
+      "(Ljava/lang/Boolean;)Ljava/lang/String;"
+    ],
+    [
+      "BooleanProperty",
+      "getName",
+      "a",
+      "(Ljava/lang/Comparable;)Ljava/lang/String;"
+    ],
+    [
+      "IntegerProperty",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;II)V"
+    ],
+    [
+      "IntegerProperty",
+      "getPossibleValues",
+      "a",
+      "()Ljava/util/Collection;"
+    ],
+    [
+      "IntegerProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;II)Lduc;"
+    ],
+    [
+      "IntegerProperty",
+      "getName",
+      "a",
+      "(Ljava/lang/Integer;)Ljava/lang/String;"
+    ],
+    [
+      "IntegerProperty",
+      "getName",
+      "a",
+      "(Ljava/lang/Comparable;)Ljava/lang/String;"
+    ],
+    [
+      "EnumProperty",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;Ljava/lang/Class;Ljava/util/Collection;)V"
+    ],
+    [
+      "EnumProperty",
+      "getPossibleValues",
+      "a",
+      "()Ljava/util/Collection;"
+    ],
+    [
+      "EnumProperty",
+      "getName",
+      "a",
+      "(Ljava/lang/Enum;)Ljava/lang/String;"
+    ],
+    [
+      "EnumProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;Ljava/lang/Class;)Ldua;"
+    ],
+    [
+      "EnumProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;Ljava/lang/Class;Ljava/util/function/Predicate;)Ldua;"
+    ],
+    [
+      "EnumProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;Ljava/lang/Class;[Ljava/lang/Enum;)Ldua;"
+    ],
+    [
+      "EnumProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;Ljava/lang/Class;Ljava/util/Collection;)Ldua;"
+    ],
+    [
+      "EnumProperty",
+      "getName",
+      "a",
+      "(Ljava/lang/Comparable;)Ljava/lang/String;"
+    ],
+    [
+      "DirectionProperty",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;Ljava/util/Collection;)V"
+    ],
+    [
+      "DirectionProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;)Ldtw;"
+    ],
+    [
+      "DirectionProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;Ljava/util/function/Predicate;)Ldtw;"
+    ],
+    [
+      "DirectionProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;[Lji;)Ldtw;"
+    ],
+    [
+      "DirectionProperty",
+      "create",
+      "a",
+      "(Ljava/lang/String;Ljava/util/Collection;)Ldtw;"
+    ],
+    [
+      "StringRepresentable",
+      "getSerializedName",
+      "c",
+      "()Ljava/lang/String;"
+    ],
+    [
+      "ResourceLocation",
+      "<init>",
+      "<init>",
+      "(Ljava/lang/String;Ljava/lang/String;)V"
+    ],
+    [
+      "ResourceLocation",
+      "parse",
+      "a",
+      "(Ljava/lang/String;)Lakr;"
+    ],
+    [
+      "ResourceLocation",
+      "withDefaultNamespace",
+      "b",
+      "(Ljava/lang/String;)Lakr;"
+    ],
+    [
+      "ResourceKey",
+      "create",
+      "a",
+      "(Lakq;Lakr;)Lakq;"
+    ],
+    [
+      "ResourceKey",
+      "create",
+      "a",
+      "(Lakr;Lakr;)Lakq;"
+    ],
+    [
+      "ResourceKey",
+      "<init>",
+      "<init>",
+      "(Lakr;Lakr;)V"
+    ],
+    [
+      "Registry",
+      "getKey",
+      "b",
+      "(Ljava/lang/Object;)Lakr;"
+    ],
+    [
+      "Registry",
+      "register",
+      "a",
+      "(Ljz;Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;"
+    ],
+    [
+      "Registry",
+      "register",
+      "a",
+      "(Ljz;Lakr;Ljava/lang/Object;)Ljava/lang/Object;"
+    ],
+    [
+      "Registry",
+      "register",
+      "a",
+      "(Ljz;Lakq;Ljava/lang/Object;)Ljava/lang/Object;"
+    ],
+    [
+      "BuiltInRegistries",
+      "<init>",
+      "<init>",
+      "()V"
+    ],
+    [
+      "Item",
+      "byBlock",
+      "a",
+      "(Ldfy;)Lcul;"
+    ],
+    [
+      "BlockItem",
+      "registerBlocks",
+      "a",
+      "(Ljava/util/Map;Lcul;)V"
+    ],
+    [
+      "Block",
+      "asItem",
+      "r",
+      "()Lcul;"
+    ]
+  ],
+  "fields": [
+    [
+      "BlockItem",
+      "block",
+      "a",
+      "Ldfy;"
+    ],
+    [
+      "Block",
+      "stateDefinition",
+      "E",
+      "Ldtd;"
+    ],
+    [
+      "Block",
+      "defaultBlockState",
+      "d",
+      "Ldtc;"
+    ],
+    [
+      "BuiltInRegistries",
+      "BLOCK",
+      "e",
+      "Ljh;"
+    ],
+    [
+      "BuiltInRegistries",
+      "ITEM",
+      "g",
+      "Ljh;"
+    ],
+    [
+      "Item",
+      "BY_BLOCK",
+      "d",
+      "Ljava/util/Map;"
+    ]
+  ],
+  "kernels": {
+    "Block": "b58f93af515b4b28f67e4bef77d9cfa69306243ee1787e6dfbc99bf066e639a6",
+    "BlockBehaviour": "4f491c3bda8e7c68c6ff435ed1b8fa8bb44e4afbfd5aedc0dd6f9d59058a32bb",
+    "StateDefinition": "71835e30ed02d36ff24f658a9c2a4bc2163d69a983d35715c177ba9ef08f28cc",
+    "StateDefinition$Builder": "5e77bb217da21e1eb83c6d4fff23150febe292fb92c70681dae1017d759eeda5",
+    "StateHolder": "ab9cd140e15e40b6cd704f9d9688e2a4cb38376ad341ea72ea5a6916de06735c",
+    "BlockState": "372b14c67e7a6945282818a166ff714ad818207643d811a5f4b1161e4c2e76e0",
+    "Property": "038efb42a3a3ed3b08e6d0d3c6cfa1b3ed74a820ee793a7674051fd43094d6dc",
+    "BooleanProperty": "d8aba236bd71928d40cc69ffa077a540381396c82875ca93ae7e44efb9312bb2",
+    "IntegerProperty": "89d5b13474514ae68f559feb17dd6df574dab8a4b2778cdd0392add5204f08ca",
+    "EnumProperty": "0f8d5d33e3f8a2f264610ea2e1be2a411a5b521bfa67014f79faa1f83a67fff0",
+    "DirectionProperty": "80856ad1be17618792cdb31944bbf51308fab70af9e092bc9308c70373f465dd",
+    "Direction": "f7dda28326b73e7f84552b57b84e76e8bbf5acf6348e6bbc6906441d737532c5",
+    "Direction$Axis": "fe933a7a42a0cadffad20a1adca1fa7471b7f03705d87de448b70d6a962cdf0e",
+    "Direction$Plane": "de2b46584ead281bfac998e858e52e5277c9589cebe475a80e3791a023035648"
+  },
+  "registryTails": {
+    "Blocks": "2bddc77657739152decf801f2f9a9d7e5576e1cf1d67c8c296e6f0da44875a96"
+  },
+  "methodKernels": [
+    [
+      "Items",
+      "a",
+      "(Ljava/lang/String;Lcul;)Lcul;",
+      "c9644be179c34a439c2d6113389ae5cbde674d70f294dca6f228a54ddb0e1974"
+    ],
+    [
+      "Items",
+      "a",
+      "(Lakr;Lcul;)Lcul;",
+      "b8d335376ed083bb4f241694466453bb10455516067f299f5185c23fd8d6e158"
+    ],
+    [
+      "Items",
+      "a",
+      "(Lakq;Lcul;)Lcul;",
+      "4ad5da9967e93db8ef827004a648f144e9de7f8066de6c8aa1916af24f722330"
+    ],
+    [
+      "Items",
+      "a",
+      "(Ldfy;Ljava/util/function/UnaryOperator;)Lcul;",
+      "9330a13b20144e6d3e1f93f988edfaba7e482595a5886efc83716e76b34e45c5"
+    ],
+    [
+      "Items",
+      "a",
+      "(Ldfy;[Ldfy;)Lcul;",
+      "0b55e550b792d8efee967c81a55cb122e175a2600c94c2dc6883ebbb2eeda23b"
+    ]
+  ],
+  "constructorCaches": [
+    {
+      "owner": "CrossCollisionBlock",
+      "descriptor": "(FFFFFLdtb$d;)V",
+      "begin": 6,
+      "end": 90,
+      "concreteTypes": [
+        "FenceBlock"
+      ],
+      "proofs": {
+        "CrossCollisionBlock": "280711f9bbe910b2db4badf5ec5910c475ece35b7cdd7435b46471d2653c4030",
+        "FenceBlock": "ed1593958504fd28da5eec852aaf06ad94b832fc0b39c0ab980d3a304d0a6de7"
+      }
+    },
+    {
+      "owner": "FenceBlock",
+      "descriptor": "(Ldtb$d;)V",
+      "begin": 92,
+      "end": 108,
+      "concreteTypes": [
+        "FenceBlock"
+      ],
+      "proofs": {
+        "CrossCollisionBlock": "280711f9bbe910b2db4badf5ec5910c475ece35b7cdd7435b46471d2653c4030",
+        "FenceBlock": "ed1593958504fd28da5eec852aaf06ad94b832fc0b39c0ab980d3a304d0a6de7"
+      }
+    },
+    {
+      "owner": "VineBlock",
+      "descriptor": "(Ldtb$d;)V",
+      "begin": 84,
+      "end": 120,
+      "concreteTypes": [
+        "VineBlock"
+      ],
+      "proofs": {
+        "VineBlock": "27dd2f1b2679af73f1684602812bcd37d78c5a261b2da76eaa69a8f530eecf94"
+      }
+    }
+  ],
+  "itemMetadataSetters": [
+    {
+      "name": "a",
+      "descriptor": "(Lcpr;)Lcul$a;",
+      "proofs": {
+        "Item$Properties": "a5d8ecda1526188720523b9bfb704906b30f38a214d7a98cc8065002a5635212",
+        "DataComponentMap": "10d0449eab6b959c95070f5e7b844e09c9d56545e54d54d9434a94cc3ea705d5",
+        "DataComponentMap$Builder": "5db74d77e1b1b63cac7df8f2333533aeb69369d62ff5df4af1b3b6b16e43ac92",
+        "DataComponentMap$Builder$SimpleMap": "8f987f8b711f9774faeec9a34ad073ea8f9f767231b9a2b8f804139b23ddea86",
+        "DataComponents": "f2ac40108cf8410b8ffeef0d0ffc51fe98fd3d7314eb297b8bd2f3417e8240fd",
+        "TypedDataComponent": "eaa26361f71b71d23273a9254c047e1c4d6c48615b0df52fb00c2b077d4c5721"
+      }
+    }
+  ]
+}

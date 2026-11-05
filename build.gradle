@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.mcworldexplorer'
-version = '0.7.3'
+version = '0.7.4'
 
 repositories {
     maven { url 'https://maven.aliyun.com/repository/public/' }
@@ -70,4 +70,85 @@ tasks.register('runV05Lwjgl', JavaExec) {
 
 test {
     useJUnitPlatform()
+}
+
+// Use a fresh output tree so postponed classes cannot survive incremental compilation.
+layout.buildDirectory = layout.projectDirectory.dir('build/core-0.7.4')
+
+// Both repository sources and the actual host archive must remain independent of deferred work.
+tasks.register('verifyCoreIsolation') {
+    group = 'verification'
+    dependsOn tasks.named('jar')
+    doLast {
+        def forbiddenRoots = ['model-plugins', 'sdk-template', 'src/sdkTools', 'src/modelTestKit']
+        if (forbiddenRoots.any { file(it).exists() })
+            throw new GradleException('Deferred plugin/SDK sources are not part of 0.7.4')
+        if (sourceSets.names.toSet() != ['main', 'test'].toSet())
+            throw new GradleException('Only core main/test source sets are allowed')
+        def deferredNames = ['ApiSurfaceGenerator', 'AthenaConnectedRule', 'AthenaPaneRule', 'AthenaPatternRule', 'BlockRegistrationInfo', 'BlockRegistrationProvider', 'BlockRegistrationRegistry', 'BookPileDefinitions', 'BookPileRule', 'BuiltinModelPlugins', 'ClientBlockConstants', 'ClientBlockProperties', 'ClientBlockStates', 'ClientCanonicalItems', 'ClientEntityAppearance', 'ClientEntityMesh', 'ClientEntityModelTemplate', 'ClientEntityModels', 'ClientEntityRegistration', 'ClientEntityRequest', 'ClientModelSymbols', 'DiagonalBlocksRule', 'ExtraRotationRule', 'FabricLootrModels', 'FlowerBoxPlacement', 'FlowerBoxPlants', 'FrameBlockRule', 'FrameworkPlugin', 'GeneratedResourcePlan', 'GobletModelRule', 'IeMirrorRule', 'IeMultiblockRegistration', 'IeObjRule', 'IeSplitRule', 'ItemModelGeometry', 'ItemModelRequest', 'ItemModelTemplate', 'JarModelRule', 'LoaderBlockItemProtocol', 'LootrModelRule', 'MigrationModelRules', 'ModelPluginTestKit', 'MoonlightFluidRegistry', 'OfflineModelContext', 'PaintingRule', 'PatchModelRule', 'QuarkHedges', 'QuarkRegistrationPlugin', 'QuarkRegistrations', 'RandomRotationRule', 'RopeKnotRule', 'SavedEntityModel', 'SavedModelState', 'SoftFluidAppearance', 'SoftFluidMaterial', 'SoftFluidRequest', 'SplitModelGeometry', 'SupplementariesJarRegistration', 'SupplementariesPlugin', 'SupplementariesRegistrations', 'TwilightForestPlugin', 'VerifyFramework', 'VerifyGiant', 'WallLanternRule'].toSet()
+        def forbidden = ~/.*(MigrationModelRules|PatchModelRule|SoftFluid|ClientEntity|ItemModelGeometry|ItemModelRequest|ItemModelTemplate|BlockRegistrationProvider|BlockRegistrationRegistry|LoaderBlockItemProtocol|GeneratedResourcePlan).*/
+        def sourceLeaks = fileTree('src').files.findAll { it.name ==~ forbidden || deferredNames.contains(it.name.replace('.java', '')) || it.name == 'mcwe-model-plugin.json' }
+        if (!sourceLeaks.isEmpty()) throw new GradleException("Deferred source found: ${sourceLeaks}")
+        new java.util.jar.JarFile(tasks.named('jar').get().archiveFile.get().asFile).withCloseable { jar ->
+            def leaks = jar.entries().findAll { entry ->
+                entry.name ==~ forbidden || deferredNames.contains(entry.name.tokenize('/').last().split('\\$')[0].replace('.class', '')) || entry.name.startsWith('org/mcwe/plugins/') ||
+                    entry.name.endsWith('mcwe-model-plugin.json') || entry.name.contains('/sdktools/') || entry.name.endsWith('/ObjModelReader$GroupStyle.class')
+            }.collect { it.name }
+            if (!leaks.isEmpty()) throw new GradleException("Deferred code leaked into application: ${leaks}")
+        }
+    }
+}
+['check', 'installDist', 'distZip', 'distTar'].each { name ->
+    tasks.named(name) { dependsOn tasks.named('verifyCoreIsolation') }
+}
+
+// Host version for inert plugin compatibility checks; no plugin or SDK is built here.
+def buildMetadata = layout.buildDirectory.dir('generated/build-metadata')
+tasks.register('generateBuildMetadata') {
+    inputs.property('version', project.version.toString())
+    outputs.dir(buildMetadata)
+    doLast {
+        def target = buildMetadata.get().file('mcwe-build.properties').asFile
+        target.parentFile.mkdirs()
+        target.text = "version=${project.version}\n"
+    }
+}
+sourceSets.main.resources.srcDir(buildMetadata)
+tasks.named('processResources') { dependsOn tasks.named('generateBuildMetadata') }
+// Offline documentation only; no plugin implementation, SDK artifact or template is bundled.
+tasks.named('processResources') {
+    from('docs/PLUGIN_DEVELOPMENT.md') { into 'help' }
+}
+tasks.named('test') {
+    doFirst {
+        systemProperty 'mcwe.plugin.workerClasspath', sourceSets.main.runtimeClasspath.asPath
+        systemProperty 'mcwe.plugin.testCompileClasspath', sourceSets.main.runtimeClasspath.asPath
+    }
+}
+
+// Exact inputs for the reusable Windows packager, independent of old output directories.
+tasks.register('prepareWindowsPackaging') {
+    group = 'distribution'
+    dependsOn tasks.named('installDist')
+    inputs.files(configurations.runtimeClasspath)
+    inputs.file(tasks.named('jar').flatMap { it.archiveFile })
+    def manifest = layout.buildDirectory.file('packaging/runtime-files.json')
+    outputs.file(manifest)
+    doLast {
+        def files = configurations.runtimeClasspath.files + tasks.named('jar').get().archiveFile.get().asFile
+        if (files.collect { it.name }.toSet().size() != files.size())
+            throw new GradleException('Packaging inputs have duplicate file names')
+        def hashes = files.sort { it.name }.collectEntries { input ->
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+            input.withInputStream { stream ->
+                byte[] buffer = new byte[65536]
+                int count
+                while ((count = stream.read(buffer)) != -1) digest.update(buffer, 0, count)
+            }
+            [(input.name): digest.digest().encodeHex().toString()]
+        }
+        def target = manifest.get().asFile
+        target.parentFile.mkdirs()
+        target.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(hashes)), 'UTF-8')
+    }
 }

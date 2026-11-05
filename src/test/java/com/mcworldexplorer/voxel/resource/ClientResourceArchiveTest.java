@@ -27,6 +27,21 @@ class ClientResourceArchiveTest {
     @TempDir Path home;
     private int sequence;
 
+    @Test void explicitClientClassesHaveTheirOwnCapabilityCacheAndStillValidateChangedOrClosedSources()throws Exception {
+        byte[] inert={1,2,3,4};Path file=fixture(Map.of("fixture/DoesNotExecute.class",inert));var source=ClientResourceArchive.open(file,"1.21.1");
+        assertEquals(java.util.Optional.of("1.21.1"),source.baseClientVersion());
+        var receipt=source.clientClass("fixture/DoesNotExecute").orElseThrow();assertArrayEquals(inert,receipt.bytes());assertEquals(source.fingerprint().sha256(),receipt.sourceFingerprint());var changed=receipt.bytes();changed[0]=9;assertArrayEquals(inert,source.clientClass("fixture/DoesNotExecute").orElseThrow().bytes());
+        for(int i=0;i<4200;i++)assertTrue(source.clientClass("fixture/Absent").isEmpty());assertThrows(IllegalArgumentException.class,()->source.clientClass("../escape"));
+        Files.setLastModifiedTime(file,FileTime.fromMillis(source.fingerprint().modifiedMillis()+5000));assertThrows(ResourceAccessException.class,()->source.clientClass("fixture/DoesNotExecute"));source.close();assertEquals(CLOSED,assertThrows(ResourceAccessException.class,()->source.clientClass("fixture/DoesNotExecute")).reason());
+        try(var oversized=ClientResourceArchive.open(fixture(Map.of("fixture/Large.class",new byte[RegistrationClass.MAX_BYTES+1])),"1.21.1")){assertEquals(LIMIT_EXCEEDED,assertThrows(ResourceAccessException.class,()->oversized.clientClass("fixture/Large")).reason());}
+    }
+
+    @Test void reportsBaseDataRegistryPresenceWithoutAssumingAVersionOrExecutingCode()throws Exception {
+        var archive=ClientResourceArchive.open(fixture(Map.of("data/minecraft/painting_variant/arbitrary.json","{}".getBytes(StandardCharsets.UTF_8))),"1.21.1");
+        try{assertEquals(java.util.Optional.of(true),archive.baseDataRegistry("painting_variant"));assertEquals(java.util.Optional.of(false),archive.baseDataRegistry("absent_registry"));assertEquals(java.util.Optional.of(true),archive.baseDataRegistry("painting_variant"));assertThrows(IllegalArgumentException.class,()->archive.baseDataRegistry("../escape"));}finally{archive.close();}
+        assertEquals(CLOSED,assertThrows(ResourceAccessException.class,()->archive.baseDataRegistry("painting_variant")).reason());
+    }
+
     @Test void cancelsFingerprintingWhenTheLookupThreadIsInterrupted() throws Exception {
         Path file=fixture(Map.of());
         try {
@@ -144,6 +159,16 @@ class ClientResourceArchiveTest {
                     archive.metadata().versionId(), archive.metadata().worldVersion(),
                     archive.metadata().resourcePackVersion(), archive.fingerprint().sha256());
         } finally { assertEquals(before, stamp(file), "客户端资源发生变化"); }
+    }
+
+    @Test void readsMajorMinorFormatsWithoutRelaxingVersionIdentity()throws Exception {
+        String modern="{\"id\":\"26.3\",\"world_version\":5023,\"pack_version\":{\"resource_major\":97,\"resource_minor\":1}}";
+        try(var archive=ClientResourceArchive.open(fixture(Map.of("version.json",modern.getBytes(StandardCharsets.UTF_8))),"26.3")) {
+            assertEquals(97,archive.metadata().resourcePackVersion());assertEquals(1,archive.metadata().resourcePackMinor());
+        }
+        assertReason(INVALID_METADATA,()->ClientResourceArchive.open(fixture(Map.of("version.json",modern.replace("\"resource_minor\":1","\"resource_minor\":-1").getBytes(StandardCharsets.UTF_8))),"26.3"));
+        assertReason(INVALID_METADATA,()->ClientResourceArchive.open(fixture(Map.of("version.json",modern.replace("\"resource_major\":97","\"resource\":96,\"resource_major\":97").getBytes(StandardCharsets.UTF_8))),"26.3"));
+        assertReason(VERSION_MISMATCH,()->ClientResourceArchive.open(fixture(Map.of("version.json",modern.getBytes(StandardCharsets.UTF_8))),"1.21.1"));
     }
 
     private Path fixture(Map<String, byte[]> overrides) throws IOException {

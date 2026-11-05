@@ -12,7 +12,7 @@ import java.util.Map;
 
 /** Nearest-filtered static PNG atlas, with a one-pixel extruded border per tile. */
 public final class TextureAtlas {
-    public static final int MAX_IMAGE_SIZE = 256;
+    public static final int MAX_IMAGE_SIZE = 1024;
     public static final int MAX_SIZE = 2048;
     public static final int MAX_TILES = 1024;
     private final int width, height;
@@ -36,8 +36,8 @@ public final class TextureAtlas {
         try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(png))) {
             reader.setInput(input, true, true);
             int w = reader.getWidth(0), h = reader.getHeight(0);
-            if (w < 1 || w > MAX_IMAGE_SIZE || h < 1 || (animationStrip ? h < w || h % w != 0 || h / w > 256 : h > MAX_IMAGE_SIZE))
-                throw new IOException("纹理须为不超过 256 像素的方形或有界纵向动画帧条");
+            if (w < 1 || w > MAX_IMAGE_SIZE || h < 1 || (long)w*h>16_777_216 || (animationStrip ? h < w || h % w != 0 || h / w > 256 : h > MAX_IMAGE_SIZE))
+                throw new IOException("纹理须为不超过 "+MAX_IMAGE_SIZE+" 像素的方形或有界纵向动画帧条");
             var parameters=reader.getDefaultReadParam();
             parameters.setSourceRegion(new java.awt.Rectangle(0,0,w,animationStrip?w:h));
             return reader.read(0,parameters); // Static preview uses frame zero, not animation playback.
@@ -63,7 +63,7 @@ public final class TextureAtlas {
             var animation=root.getAsJsonObject("animation");
             int fw=animation.has("width")?positive(animation.get("width")):animation.has("height")?width:Math.min(width,height);
             int fh=animation.has("height")?positive(animation.get("height")):animation.has("width")?height:Math.min(width,height);
-            if(fw>MAX_IMAGE_SIZE||fh>MAX_IMAGE_SIZE||width%fw!=0||height%fh!=0)throw new IOException("动画帧尺寸无效或超过 256 像素");
+            if(fw>MAX_IMAGE_SIZE||fh>MAX_IMAGE_SIZE||width%fw!=0||height%fh!=0)throw new IOException("动画帧尺寸无效或超过 "+MAX_IMAGE_SIZE+" 像素");
             if(animation.has("frametime"))positive(animation.get("frametime"));
             int frame=0;
             if(animation.has("frames")) {

@@ -49,4 +49,13 @@ class WorldDimensionDiscoveryTest {
         assertEquals(WorldDimension.OVERWORLD_ID, dimensions.getFirst().id());
         assertEquals(worldFolder.resolve("region"), dimensions.getFirst().regionDirectory());
     }
+    @Test void modernVanillaDirectoriesAreRecognizedOnceWithVanillaKinds()throws IOException {
+        Path world=Files.createDirectory(tempDir.resolve("modern"));Files.createDirectories(world.resolve("region"));
+        for(String name:List.of("overworld","the_nether","the_end"))Files.createDirectories(world.resolve("dimensions/minecraft/"+name+"/region"));
+        Files.createDirectories(world.resolve("dimensions/new_author/caves/region"));
+        var dimensions=WorldDimensionDiscovery.discover(new WorldInfo(world));assertEquals(4,dimensions.size());
+        assertEquals(List.of(WorldDimension.OVERWORLD_ID,WorldDimension.NETHER_ID,WorldDimension.END_ID,"new_author:caves"),dimensions.stream().map(WorldDimension::id).toList());
+        assertEquals(List.of(DimensionKind.OVERWORLD,DimensionKind.NETHER,DimensionKind.END,DimensionKind.MOD),dimensions.stream().map(WorldDimension::kind).toList());
+        assertEquals(world.resolve("dimensions/minecraft/overworld/region"),dimensions.getFirst().regionDirectory());
+    }
 }

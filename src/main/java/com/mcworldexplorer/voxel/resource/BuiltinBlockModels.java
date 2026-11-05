@@ -18,6 +18,19 @@ final class BuiltinBlockModels implements BlockResourceSource {
 
     BuiltinBlockModels(BlockResourceSource source,Map<String,BlockEntityData> entities){this.source=source;this.entities=Map.copyOf(entities);}
     @Override public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return source.origin(kind,id);}
+    @Override public Set<ResourceLocation> jsonFiles(ResourceLocation.Kind kind,String folder)throws IOException{return source.jsonFiles(kind,folder);}
+
+    @Override public Optional<Boolean> hasMod(String id)throws IOException{return source.hasMod(id);}
+    @Override public Optional<Boolean> baseDataRegistry(String directory)throws IOException{return source.baseDataRegistry(directory);}
+    @Override public Optional<String> platform()throws IOException{return source.platform();}
+    @Override public Optional<String> platform(String modId)throws IOException{return source.platform(modId);}
+
+
+    @Override public Optional<String> baseClientVersion(){return source.baseClientVersion();}
+    @Override public Optional<Long> worldSeed()throws IOException{return source.worldSeed();}
+    @Override public Optional<Integer> biomeBlendRadius()throws IOException{return source.biomeBlendRadius();}
+    @Override public Optional<DimensionHeight> dimensionHeight(ResourceLocation dimension)throws IOException{return source.dimensionHeight(dimension);}
+    @Override public Optional<RegistrationClass> clientClass(String name)throws IOException{return source.clientClass(name);}
     @Override public void validate()throws IOException{source.validate();}
     @Override public ClientResourceArchive.Fingerprint fingerprint(){return source.fingerprint();}
     @Override public Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id)throws IOException{return kind==ResourceLocation.Kind.TEXTURE&&generated.containsKey(id)?Optional.of(generated.get(id)):source.read(kind,id);}

@@ -50,6 +50,7 @@ final class ObjModelReader {
                     case "usemtl" -> materialName=line.substring(6).trim();
                     case "o","g" -> group=fields.length>1?fields[1]:"";
                     case "s" -> { /* Preview uses face normals, independent of smoothing groups. */ }
+                    case "l" -> { /* NeoForge's block OBJ parser does not bake polyline records into face geometry. */ }
                     case "f" -> {
                         if(!visibility.getOrDefault(group,true))continue;
                         int count=1;while(count<fields.length&&!fields[count].startsWith("#"))count++;count--;
@@ -65,10 +66,11 @@ final class ObjModelReader {
                         ResourceLocation texture=texture(mat.texture==null?"#particle":mat.texture);
                         Source reference=new Source(ResourceLocation.Kind.TEXTURE,texture);if(!trace.contains(reference))trace.add(reference);
                         int tint=mat.rgb==0xFFFFFF?-1:0x1000000|mat.rgb;
-                        if(count==4)add(faces,points,coords,texture,tint,mat.opacity,shade&&!mat.emissive);
+                        float opacity=mat.opacity;boolean faceShade=shade&&!mat.emissive;
+                        if(count==4)add(faces,points,coords,texture,tint,opacity,faceShade);
                         else {
                             if(count>4&&!convex(points))throw problem(Reason.UNSUPPORTED_MODEL,"OBJ 凹多边形需先三角化");
-                            for(int i=1;i<count-1;i++)add(faces,List.of(points.getFirst(),points.get(i),points.get(i+1),points.get(i+1)),List.of(coords.getFirst(),coords.get(i),coords.get(i+1),coords.get(i+1)),texture,tint,mat.opacity,shade&&!mat.emissive);
+                            for(int i=1;i<count-1;i++)add(faces,List.of(points.getFirst(),points.get(i),points.get(i+1),points.get(i+1)),List.of(coords.getFirst(),coords.get(i),coords.get(i+1),coords.get(i+1)),texture,tint,opacity,faceShade);
                         }
                     }
                     default -> throw problem(Reason.UNSUPPORTED_MODEL,"OBJ 指令未支持："+fields[0]);

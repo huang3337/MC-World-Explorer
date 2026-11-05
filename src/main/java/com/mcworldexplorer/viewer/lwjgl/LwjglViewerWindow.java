@@ -62,6 +62,17 @@ public final class LwjglViewerWindow implements ViewerWindow {
     private GLFWErrorCallback errorCallback;
     private LwjglSceneRenderer renderer;
     private GlfwViewerOrbitController controller;
+    private ViewerNavigationOverlay overlay;
+    private ViewerNavigationOverlay targetOverlay;
+    private ViewerTargetOutline targetOutline;
+    private com.mcworldexplorer.voxel.mesh.MeshBounds targetBounds;
+    private long targetAnchorX, targetAnchorZ;
+    private com.mcworldexplorer.voxel.mesh.VoxelTargetIndex targets;
+    private long lastTargetNanos;
+    private com.mcworldexplorer.voxel.mesh.VoxelTargetIndex.Query previousTarget;
+    private java.util.List<String> targetLines = java.util.List.of();
+    private ViewerLoadedArea loadedArea;
+    private long lastFrameNanos;
     private long window;
     private boolean glfwInitialized;
     private boolean capabilitiesCreated;
@@ -81,6 +92,11 @@ public final class LwjglViewerWindow implements ViewerWindow {
             return;
         }
         commands.offer(new ShowCommand(content, completion));
+    }
+
+    @Override
+    public void clear() {
+        if (!closeRequested.get()) commands.offer(ClearCommand.INSTANCE);
     }
 
     @Override
@@ -112,6 +128,10 @@ public final class LwjglViewerWindow implements ViewerWindow {
                 if (command != null) {
                     if (command == CloseCommand.INSTANCE) {
                         break;
+                    }
+                    if (command == ClearCommand.INSTANCE) {
+                        destroyWindow();
+                        continue;
                     }
                     handleShow((ShowCommand) command);
                 }
@@ -149,6 +169,9 @@ public final class LwjglViewerWindow implements ViewerWindow {
                     return;
                 }
                 controller.reset(command.content().snapshot().bounds());
+                loadedArea = new ViewerLoadedArea(command.content().snapshot());
+                resetTargets(command.content().snapshot());
+                lastFrameNanos = System.nanoTime();
                 glfwSetWindowTitle(window, command.content().title());
                 glfwFocusWindow(window);
             }
@@ -190,6 +213,12 @@ public final class LwjglViewerWindow implements ViewerWindow {
             return false;
         }
         controller = new GlfwViewerOrbitController(window, content.snapshot().bounds());
+        loadedArea = new ViewerLoadedArea(content.snapshot());
+        overlay = new ViewerNavigationOverlay();
+        targetOverlay = new ViewerNavigationOverlay();
+        targetOutline = new ViewerTargetOutline();
+        resetTargets(content.snapshot());
+        lastFrameNanos = System.nanoTime();
         glfwShowWindow(window);
         glfwFocusWindow(window);
         return true;
@@ -208,19 +237,49 @@ public final class LwjglViewerWindow implements ViewerWindow {
     }
 
     private void drawFrame() {
+        glfwPollEvents();
+        long now = System.nanoTime();
+        controller.update((now - lastFrameNanos) / 1_000_000_000.0);
+        lastFrameNanos = now;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer width = stack.mallocInt(1);
             IntBuffer height = stack.mallocInt(1);
             glfwGetFramebufferSize(window, width, height);
-            int framebufferWidth = Math.max(1, width.get(0));
-            int framebufferHeight = Math.max(1, height.get(0));
+            int framebufferWidth = width.get(0);
+            int framebufferHeight = height.get(0);
+            if (framebufferWidth <= 0 || framebufferHeight <= 0) {
+                org.lwjgl.glfw.GLFW.glfwWaitEventsTimeout(.05); return;
+            }
             glViewport(0, 0, framebufferWidth, framebufferHeight);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            renderer.draw(ViewerCameraMatrices.viewProjection(
-                    controller.state(), framebufferWidth, framebufferHeight));
+            var navigation = controller.navigation();
+            var viewProjection = ViewerCameraMatrices.viewProjection(navigation.pose(), controller.state().distance(), framebufferWidth, framebufferHeight);
+            renderer.draw(viewProjection);
+            var scaleX = stack.mallocFloat(1); var scaleY = stack.mallocFloat(1);
+            org.lwjgl.glfw.GLFW.glfwGetWindowContentScale(window, scaleX, scaleY);
+            String status = loadedArea.notice(navigation.pose()) + (navigation.orbitMode() ? "" : " · 速度 " + Math.round(navigation.speed()) + " 格/秒");
+            if (now-lastTargetNanos >= 33_000_000L || targetLines.isEmpty()) {
+                var pose = navigation.pose();
+                var query = targets.query(pose.eyeX(),pose.eyeY(),pose.eyeZ(),
+                        pose.focusX()-pose.eyeX(),pose.focusY()-pose.eyeY(),pose.focusZ()-pose.eyeZ());
+                if (!query.sameTarget(previousTarget)) {
+                    targetLines = targets.lines(query);
+                    targetBounds = ViewerTargetOutline.bounds(query.hit().orElse(null), targetAnchorX, targetAnchorZ);
+                }
+                previousTarget = query;
+                lastTargetNanos = now;
+            }
+            targetOutline.draw(viewProjection, targetBounds, framebufferWidth, framebufferHeight);
+            overlay.draw(framebufferWidth, framebufferHeight, scaleY.get(0), navigation.controls(), status, true);
+            targetOverlay.drawTarget(framebufferWidth,framebufferHeight,scaleY.get(0),targetLines);
             glfwSwapBuffers(window);
-            glfwPollEvents();
         }
+    }
+
+    private void resetTargets(com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot snapshot) {
+        targets = new com.mcworldexplorer.voxel.mesh.VoxelTargetIndex(snapshot);
+        targetAnchorX = snapshot.anchorWorldX(); targetAnchorZ = snapshot.anchorWorldZ(); targetBounds = null;
+        targetLines = java.util.List.of(); previousTarget = null; lastTargetNanos = 0;
     }
 
     private void destroyWindow() {
@@ -228,11 +287,19 @@ public final class LwjglViewerWindow implements ViewerWindow {
             return;
         }
         try {
+            if (controller != null) controller.release();
+            if (overlay != null) overlay.close();
+            if (targetOverlay != null) targetOverlay.close();
+            if (targetOutline != null) targetOutline.close();
             if (renderer != null) {
                 renderer.close();
             }
         } finally {
             renderer = null;
+            overlay = null;
+            targetOverlay = null; targets = null; previousTarget = null; targetLines = java.util.List.of();
+            targetOutline = null; targetBounds = null;
+            loadedArea = null;
             controller = null;
             if (capabilitiesCreated) {
                 GL.setCapabilities(null);
@@ -265,13 +332,15 @@ public final class LwjglViewerWindow implements ViewerWindow {
         }
     }
 
-    private sealed interface Command permits ShowCommand, CloseCommand {
+    private sealed interface Command permits ShowCommand, CloseCommand, ClearCommand {
     }
 
     private record ShowCommand(
             ViewerWindowContent content,
             Completion completion) implements Command {
     }
+
+    private enum ClearCommand implements Command { INSTANCE }
 
     private enum CloseCommand implements Command {
         INSTANCE
