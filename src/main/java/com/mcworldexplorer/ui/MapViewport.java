@@ -11,8 +11,6 @@ import com.mcworldexplorer.map.MapZoomLevel;
 import com.mcworldexplorer.viewer.ViewerRangePreset;
 import com.mcworldexplorer.viewer.ViewerPerformanceProfile;
 import com.mcworldexplorer.voxel.data.ChunkRectangle;
-import javafx.animation.KeyFrame;
-import javafx.animation.Timeline;
 import javafx.animation.PauseTransition;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -44,10 +42,48 @@ public final class MapViewport extends Region {
     private static final double MAX_VISUAL_ZOOM = MapDisplayZoom.BLOCKS_16.blocksPerPixel();
     private static final double WHEEL_ZOOM_DIVISOR = 240;
     private static final double CLICK_DRAG_THRESHOLD = 4;
-    private static final int ZOOM_ANIMATION_MILLIS = 120;
 
+    private boolean displayBatch, displayDirty;
+    public void beginDisplayBatch() { displayBatch = true; }
+    public void endDisplayBatch() {
+        displayBatch = false;
+        if (displayDirty) { displayDirty = false; draw(); }
+    }
+    public Map<MapTileKey, Image> completeTiles() {
+        var ready = new HashMap<MapTileKey, Image>();
+        for (var key : validatedKeys) if (tiles.containsKey(key)) ready.put(key, tiles.get(key));
+        return Map.copyOf(ready);
+    }
+    public boolean isRevalidatingVisibleTiles() {
+        return targetKeys.stream().anyMatch(k -> tiles.containsKey(k) && !validatedKeys.contains(k));
+    }
+    private void trimDisplayImages() {
+        // At most 80 image slots: 64 current + 16 temporary fallback, including partials.
+        var old = new LinkedHashSet<>(tiles.keySet());
+        old.addAll(partialTiles.keySet());
+        for (var key : old) if ((tiles.size() + partialTiles.size() > 80 || estimatedDisplayBytes() > (20L << 20)) && !targetKeys.contains(key)) {
+            tiles.remove(key); tileMarkers.remove(key);
+            partialTiles.remove(key); partialTileMarkers.remove(key); incompleteReasons.remove(key);
+        }
+    }
+    public long estimatedDisplayBytes() {
+        return (long)(tiles.size() + partialTiles.size()) * (256 * 256 * 4 + 512)
+                + tileMarkers.values().stream().mapToLong(v -> v.size() * 192L).sum()
+                + partialTileMarkers.values().stream().mapToLong(v -> v.size() * 192L).sum()
+                + incompleteReasons.values().stream().mapToLong(v -> 64L + v.length() * 2L).sum();
+    }
+    public void discardTile(MapTileKey key) {
+        validatedKeys.remove(key); tiles.remove(key); tileMarkers.remove(key); partialTiles.remove(key); partialTileMarkers.remove(key); incompleteReasons.remove(key); draw();
+    }
+    private void enforceDisplayBudget(MapTileKey key) {
+        trimDisplayImages();
+        if (estimatedDisplayBytes() > (20L << 20)) {
+            discardTile(key); throw new IllegalStateException("Map display budget exceeded; reduce viewport size");
+        }
+    }
     private final Canvas canvas = new Canvas();
-    private final Map<MapTileKey, Image> tiles = new HashMap<>();
+    private final Map<MapTileKey, Image> tiles = new java.util.LinkedHashMap<>(16, .75f, true);
+    private final Set<MapTileKey> validatedKeys = new LinkedHashSet<>();
     private final Map<MapTileKey, List<MapMarker>> tileMarkers = new HashMap<>();
     private final Map<MapTileKey, Image> partialTiles = new HashMap<>();
     private final Map<MapTileKey, List<MapMarker>> partialTileMarkers = new HashMap<>();
@@ -57,9 +93,9 @@ public final class MapViewport extends Region {
     private final BooleanProperty showSpawn = new SimpleBooleanProperty(true);
     private final BooleanProperty showPortals = new SimpleBooleanProperty(true);
     private final PauseTransition zoomSettle = new PauseTransition(Duration.millis(150));
-    private final Timeline zoomAnimation = new Timeline();
     private Set<MapTileKey> targetKeys = Set.of();
     private Set<MapTileKey> failedKeys = Set.of();
+    private final Map<MapTileKey, String> incompleteReasons = new HashMap<>();
     private Set<MapTileKey> loadingKeys = Set.of();
     private MapViewportState state;
     private Runnable viewportChanged = () -> {
@@ -135,8 +171,7 @@ public final class MapViewport extends Region {
                         ? null
                         : failedTileAt(event.getX(), event.getY());
                 if (viewerSelectionMode && viewerFreeSelection && viewerSelection.canSelect() && state != null) {
-                    zoomAnimation.stop();
-                    viewerDragStart = viewerSelectionAt(state, pressX, pressY,
+                            viewerDragStart = viewerSelectionAt(state, pressX, pressY,
                             canvas.getWidth(), canvas.getHeight(), ViewerRangePreset.ONE);
                     updateViewerCandidate(pressX, pressY);
                     requestFocus();
@@ -219,7 +254,6 @@ public final class MapViewport extends Region {
             if (state == null || event.getDeltaY() == 0 || (viewerFreeSelection && primaryPressed)) {
                 return;
             }
-            zoomAnimation.stop();
             zoomAnchorX = event.getX();
             zoomAnchorY = event.getY();
             double factor = Math.pow(2, -event.getDeltaY() / WHEEL_ZOOM_DIVISOR);
@@ -258,7 +292,7 @@ public final class MapViewport extends Region {
             Optional<String> text = marker == null
                     ? failedKey == null
                             ? Optional.empty()
-                            : Optional.of("加载失败，点击重试")
+                            : Optional.of(incompleteReasons.getOrDefault(failedKey, "加载失败，点击重试"))
                     : displayMarkerTooltipText(marker);
             showTooltip(text, event.getScreenX(), event.getScreenY());
             canvas.setCursor(marker == null && failedKey == null ? Cursor.DEFAULT : Cursor.HAND);
@@ -283,8 +317,6 @@ public final class MapViewport extends Region {
     public void setViewportState(MapViewportState state) {
         hideMarkerTooltip();
         zoomSettle.stop();
-        zoomAnimation.stop();
-        zoomAnimation.getKeyFrames().clear();
         this.state = state;
         viewerSelection.clear();
         clearTiles();
@@ -428,6 +460,8 @@ public final class MapViewport extends Region {
     }
 
     public void showTile(MapTileKey key, Image image, List<MapMarker> markers) {
+        incompleteReasons.remove(key);
+        validatedKeys.add(key);
         tiles.put(key, image);
         tileMarkers.put(key, List.copyOf(markers));
         partialTiles.remove(key);
@@ -435,15 +469,27 @@ public final class MapViewport extends Region {
         failedKeys = without(failedKeys, key);
         loadingKeys = without(loadingKeys, key);
         releaseFallbackIfCovered();
+        enforceDisplayBudget(key);
         draw();
     }
 
+    public void showIncompleteTile(MapTileKey key, Image image, List<MapMarker> markers, String reason) {
+        tiles.remove(key);
+        validatedKeys.remove(key);
+        tileMarkers.remove(key);
+        incompleteReasons.put(key, reason);
+        showPartialTile(key, image, markers);
+    }
+
     public void showPartialTile(MapTileKey key, Image image, List<MapMarker> markers) {
+        // A preview is not a validated replacement for a retained complete image.
+        // Terminal success or failure owns replacement; new regions still stream partials.
         if (tiles.containsKey(key) || !targetKeys.contains(key)) {
             return;
         }
         partialTiles.put(key, image);
         partialTileMarkers.put(key, List.copyOf(markers));
+        enforceDisplayBudget(key);
         draw();
     }
 
@@ -451,24 +497,45 @@ public final class MapViewport extends Region {
         Map<MapTileKey, Boolean> requested = new HashMap<>();
         keys.forEach(key -> requested.put(key, true));
         targetKeys = Set.copyOf(requested.keySet());
+        validatedKeys.retainAll(targetKeys);
         if (targetKeys.isEmpty()) {
             return;
         }
-        MapZoomLevel targetZoom = targetKeys.iterator().next().zoom();
-        tiles.keySet().removeIf(key ->
-                key.zoom() == targetZoom && !targetKeys.contains(key));
-        tileMarkers.keySet().removeIf(key ->
-                key.zoom() == targetZoom && !targetKeys.contains(key));
-        partialTiles.keySet().removeIf(key -> !targetKeys.contains(key));
-        partialTileMarkers.keySet().removeIf(key -> !targetKeys.contains(key));
+        var context = targetKeys.iterator().next();
+        tiles.keySet().removeIf(k -> !sameContext(k, context));
+        tileMarkers.keySet().retainAll(tiles.keySet());
+        for (var key : targetKeys) tiles.get(key); // Touch recent visible images for bounded eviction.
+        partialTiles.keySet().removeIf(key -> !retainPartialFallback(key));
+        partialTileMarkers.keySet().retainAll(partialTiles.keySet());
+        incompleteReasons.keySet().removeIf(key -> !targetKeys.contains(key));
         failedKeys = intersection(failedKeys, targetKeys);
         loadingKeys = intersection(loadingKeys, targetKeys);
         releaseFallbackIfCovered();
+        trimDisplayImages();
         draw();
+    }
+
+    private static boolean sameContext(MapTileKey a, MapTileKey b) {
+        return a.worldId().equals(b.worldId()) && a.dimensionId().equals(b.dimensionId())
+                && a.layer().equals(b.layer()) && a.renderVersion().equals(b.renderVersion());
+    }
+
+    private boolean retainPartialFallback(MapTileKey old) {
+        if (targetKeys.contains(old)) return true;
+        if (incompleteReasons.containsKey(old)) return false;
+        var b = old.bounds();
+        return targetKeys.stream().anyMatch(k -> old.worldId().equals(k.worldId())
+                && old.dimensionId().equals(k.dimensionId()) && old.layer().equals(k.layer())
+                && old.renderVersion().equals(k.renderVersion())
+                && b.minX() < k.bounds().maxXExclusive() && b.maxXExclusive() > k.bounds().minX()
+                && b.minZ() < k.bounds().maxZExclusive() && b.maxZExclusive() > k.bounds().minZ());
     }
 
     public void setTileLoadStates(Set<MapTileKey> failedKeys, Set<MapTileKey> loadingKeys) {
         this.failedKeys = intersection(Set.copyOf(failedKeys), targetKeys);
+        for (var key : this.failedKeys) if (!validatedKeys.contains(key)) {
+            tiles.remove(key); tileMarkers.remove(key);
+        }
         this.loadingKeys = intersection(Set.copyOf(loadingKeys), targetKeys);
         if (pressedFailedKey != null && !this.failedKeys.contains(pressedFailedKey)) {
             pressedFailedKey = null;
@@ -480,9 +547,11 @@ public final class MapViewport extends Region {
         secondaryPanning = false;
         viewerDragStart = null;
         tiles.clear();
+        validatedKeys.clear();
         tileMarkers.clear();
         partialTiles.clear();
         partialTileMarkers.clear();
+        incompleteReasons.clear();
         targetKeys = Set.of();
         failedKeys = Set.of();
         loadingKeys = Set.of();
@@ -531,13 +600,13 @@ public final class MapViewport extends Region {
 
     public void zoomIn() {
         if (state != null) {
-            animateToZoom(state.displayZoom().zoomIn(), getWidth() / 2, getHeight() / 2);
+            changeZoomTo(state.displayZoom().zoomIn(), getWidth() / 2, getHeight() / 2);
         }
     }
 
     public void zoomOut() {
         if (state != null) {
-            animateToZoom(state.displayZoom().zoomOut(), getWidth() / 2, getHeight() / 2);
+            changeZoomTo(state.displayZoom().zoomOut(), getWidth() / 2, getHeight() / 2);
         }
     }
 
@@ -545,7 +614,6 @@ public final class MapViewport extends Region {
         if (state != null) {
             hideMarkerTooltip();
             zoomSettle.stop();
-            zoomAnimation.stop();
             state.reset();
             draw();
             viewportChanged.run();
@@ -584,74 +652,32 @@ public final class MapViewport extends Region {
     }
 
     public boolean isShowingTemporaryScale() {
-        return state != null && (Math.abs(
-                state.visualBlocksPerPixel() - state.displayZoom().blocksPerPixel()) > 0.000001
-                || tiles.keySet().stream().anyMatch(key -> key.zoom() != state.zoom()));
+        return state != null && !hasCompleteTargetCoverage() && tiles.keySet().stream()
+                .anyMatch(key -> key.zoom() != state.zoom() && retainPartialFallback(key));
     }
 
     public boolean hasCompleteTargetCoverage() {
-        return !targetKeys.isEmpty() && targetKeys.stream().allMatch(tiles::containsKey);
+        return !targetKeys.isEmpty() && targetKeys.stream().allMatch(k -> validatedKeys.contains(k) && tiles.containsKey(k));
     }
 
     private void settleVisualZoom() {
-        if (state == null) {
-            return;
-        }
-        animateToZoom(
-                MapDisplayZoom.nearest(state.visualBlocksPerPixel()),
-                zoomAnchorX,
-                zoomAnchorY);
+        if (state == null) return;
+        // Commit only the raster detail level. The camera stays at the exact wheel ratio.
+        state.commitZoom(MapDisplayZoom.nearest(state.visualBlocksPerPixel()));
+        visualChanged.run();
+        zoomTargetChanged.run();
     }
 
-    private void animateToZoom(
-            MapDisplayZoom target,
-            double pointerX,
-            double pointerY) {
+    private void changeZoomTo(MapDisplayZoom target, double pointerX, double pointerY) {
         zoomSettle.stop();
-        zoomAnimation.stop();
-        zoomAnimation.getKeyFrames().clear();
-        zoomAnimation.setOnFinished(null);
-        double start = state.visualBlocksPerPixel();
-        double end = target.blocksPerPixel();
-        if (isSettledAtZoom(state.displayZoom(), start, target)) {
-            return;
-        }
-        state.commitZoom(target);
-        if (Math.abs(start - end) < 0.000001) {
-            draw();
-            visualChanged.run();
-            zoomTargetChanged.run();
-            return;
-        }
-
-        int frames = Math.max(1, ZOOM_ANIMATION_MILLIS / 16);
-        double startLog = Math.log(start);
-        double endLog = Math.log(end);
-        for (int frame = 1; frame <= frames; frame++) {
-            double progress = (double) frame / frames;
-            double eased = 1 - Math.pow(1 - progress, 3);
-            double value = Math.exp(startLog + (endLog - startLog) * eased);
-            zoomAnimation.getKeyFrames().add(new KeyFrame(
-                    Duration.millis((double) ZOOM_ANIMATION_MILLIS * progress),
-                    event -> {
-                        state.zoomVisualAt(
-                                value,
-                                pointerX,
-                                pointerY,
-                                getWidth(),
-                                getHeight());
-                        draw();
-                        visualChanged.run();
-                    }));
-        }
-        zoomAnimation.setOnFinished(event -> {
-            visualChanged.run();
-            zoomTargetChanged.run();
-        });
-        zoomAnimation.playFromStart();
+        state.zoomAt(target, pointerX, pointerY, getWidth(), getHeight());
+        draw();
+        visualChanged.run();
+        zoomTargetChanged.run();
     }
 
     private void draw() {
+        if (displayBatch) { displayDirty = true; return; }
         GraphicsContext graphics = canvas.getGraphicsContext2D();
         graphics.setImageSmoothing(isShowingTemporaryScale());
         graphics.setFill(Color.web("#20262b"));
@@ -660,7 +686,8 @@ public final class MapViewport extends Region {
             return;
         }
         drawTiles(graphics, false);
-        drawPartialTiles(graphics);
+        drawPartialTiles(graphics, false);
+        drawPartialTiles(graphics, true);
         drawTiles(graphics, true);
         drawFailedTiles(graphics);
         drawLoadingTiles(graphics);
@@ -796,8 +823,21 @@ public final class MapViewport extends Region {
         }
     }
 
-    private void drawPartialTiles(GraphicsContext graphics) {
+    private void drawPartialTiles(GraphicsContext graphics, boolean target) {
+        graphics.save();
+        // A completed target's transparent pixels must not expose old fallback terrain.
+        if (!target) {
+            graphics.beginPath();
+            for (var key : targetKeys) if (!tiles.containsKey(key)) {
+                var b = key.bounds();
+                graphics.rect(state.screenXFor(b.minX(), canvas.getWidth()),
+                        state.screenYFor(b.minZ(), canvas.getHeight()),
+                        b.blockWidth() / state.visualBlocksPerPixel(), b.blockHeight() / state.visualBlocksPerPixel());
+            }
+            graphics.clip();
+        }
         for (Map.Entry<MapTileKey, Image> entry : partialTiles.entrySet()) {
+            if (targetKeys.contains(entry.getKey()) != target) continue;
             MapTileBounds bounds = entry.getKey().bounds();
             double x = state.screenXFor(bounds.minX(), canvas.getWidth());
             double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
@@ -809,10 +849,12 @@ public final class MapViewport extends Region {
                     Math.ceil(size),
                     Math.ceil(size));
         }
+        graphics.restore();
     }
 
     private void drawFailedTiles(GraphicsContext graphics) {
         for (MapTileKey key : failedKeys) {
+            if (incompleteReasons.containsKey(key)) continue; // The partial image marks only its unreadable coverage.
             MapTileBounds bounds = key.bounds();
             double x = state.screenXFor(bounds.minX(), canvas.getWidth());
             double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
@@ -863,10 +905,11 @@ public final class MapViewport extends Region {
         if (!hasCompleteTargetCoverage() || state == null) {
             return;
         }
-        tiles.keySet().removeIf(key -> !targetKeys.contains(key));
-        tileMarkers.keySet().removeIf(key -> !targetKeys.contains(key));
+        // Keep recently viewed complete images within the existing display budget.
+        trimDisplayImages();
         partialTiles.clear();
         partialTileMarkers.clear();
+        incompleteReasons.clear();
     }
 
     private static double clampVisualZoom(double value) {
@@ -951,8 +994,8 @@ public final class MapViewport extends Region {
     private List<DisplayMapMarker> visibleMarkers() {
         List<DisplayMapMarker> markers = new ArrayList<>(fixedMarkers);
         List<MapMarker> portals = java.util.stream.Stream.concat(
-                        tileMarkers.values().stream(),
-                        partialTileMarkers.values().stream())
+                        tileMarkers.entrySet().stream().filter(e -> validatedKeys.contains(e.getKey())).map(Map.Entry::getValue),
+                        partialTileMarkers.entrySet().stream().filter(e -> targetKeys.contains(e.getKey())).map(Map.Entry::getValue))
                 .flatMap(List::stream)
                 .filter(marker -> marker.type() == MapMarkerType.NETHER_PORTAL)
                 .toList();

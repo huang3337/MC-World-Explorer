@@ -4,7 +4,8 @@ import java.awt.image.BufferedImage;
 
 public final class MapTileRenderer {
     private static final int MISSING_COLOR = 0xFF20262B;
-    private static final int PIXEL_COUNT = MapTileBounds.TILE_PIXELS * MapTileBounds.TILE_PIXELS;
+    private static final int STRIDE = MapTileBounds.TILE_PIXELS + 1;
+    private static final int PIXEL_COUNT = STRIDE * STRIDE;
 
     private final long[] redSums = new long[PIXEL_COUNT];
     private final long[] greenSums = new long[PIXEL_COUNT];
@@ -19,20 +20,18 @@ public final class MapTileRenderer {
             long worldZ,
             int rgb,
             int height) {
-        long relativeX = worldX - bounds.minX();
-        long relativeZ = worldZ - bounds.minZ();
-        if (relativeX < 0 || relativeX >= bounds.blockWidth()
-                || relativeZ < 0 || relativeZ >= bounds.blockHeight()) {
-            return;
-        }
-        int pixelX = Math.toIntExact(relativeX / zoom.blocksPerPixel());
-        int pixelZ = Math.toIntExact(relativeZ / zoom.blocksPerPixel());
-        int index = pixelX + pixelZ * MapTileBounds.TILE_PIXELS;
-        redSums[index] += rgb >>> 16 & 0xFF;
-        greenSums[index] += rgb >>> 8 & 0xFF;
-        blueSums[index] += rgb & 0xFF;
-        heightSums[index] += height;
-        counts[index]++;
+        acceptAggregate(bounds, zoom, worldX, worldZ, rgb >>> 16 & 255, rgb >>> 8 & 255,
+                rgb & 255, height, 1);
+    }
+
+    void acceptAggregate(MapTileBounds bounds, MapZoomLevel zoom, long worldX, long worldZ,
+                         long red, long green, long blue, long height, int count) {
+        long x = Math.floorDiv(worldX - bounds.minX(), zoom.blocksPerPixel());
+        long z = Math.floorDiv(worldZ - bounds.minZ(), zoom.blocksPerPixel());
+        if (x < -1 || z < -1 || x >= 256 || z >= 256 || (x == -1 && z == -1)) return;
+        int index = (int) (x + 1 + (z + 1) * STRIDE);
+        redSums[index] += red; greenSums[index] += green; blueSums[index] += blue;
+        heightSums[index] += height; counts[index] += count;
     }
 
     public BufferedImage render() {
@@ -62,19 +61,19 @@ public final class MapTileRenderer {
                 BufferedImage.TYPE_INT_ARGB);
         for (int z = 0; z < MapTileBounds.TILE_PIXELS; z++) {
             for (int x = 0; x < MapTileBounds.TILE_PIXELS; x++) {
-                int index = x + z * MapTileBounds.TILE_PIXELS;
+                int index = x + 1 + (z + 1) * STRIDE;
                 if (counts[index] == 0) {
                     image.setRGB(x, z, transparentMissing ? 0 : MISSING_COLOR);
                     continue;
                 }
                 int neighborHeight = averageHeights[index];
                 int neighborCount = 0;
-                if (x > 0 && counts[index - 1] > 0) {
+                if (counts[index - 1] > 0) {
                     neighborHeight += averageHeights[index - 1];
                     neighborCount++;
                 }
-                if (z > 0 && counts[index - MapTileBounds.TILE_PIXELS] > 0) {
-                    neighborHeight += averageHeights[index - MapTileBounds.TILE_PIXELS];
+                if (counts[index - STRIDE] > 0) {
+                    neighborHeight += averageHeights[index - STRIDE];
                     neighborCount++;
                 }
                 double shade = 1.0;

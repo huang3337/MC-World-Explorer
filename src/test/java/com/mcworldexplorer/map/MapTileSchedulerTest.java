@@ -18,6 +18,28 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MapTileSchedulerTest {
+    @Test void zoomInRetainsOnlyNeededChunksAndLeavingOrClosingCancelsOrphans() throws Exception {
+        var started=new CountDownLatch(1);var release=new CountDownLatch(1);
+        var token=new java.util.concurrent.atomic.AtomicReference<MapTileScheduler.Cancellation>();
+        var base=key(0);
+        var broad=new MapTileKey(base.worldId(),base.dimensionId(),base.layer(),MapZoomLevel.BLOCKS_8,0,0,base.renderVersion());
+        var narrow=key(1);
+        var scheduler=new MapTileScheduler();
+        try {
+            long request=scheduler.beginRequest(Set.of(broad));
+            scheduler.submitTerrain(broad,0,request,null,c->{token.set(c);started.countDown();
+                release.await(10,TimeUnit.SECONDS);return null;},r->{},e->{});
+            assertTrue(started.await(10,TimeUnit.SECONDS));
+            scheduler.beginRequest(Set.of(narrow));
+            assertFalse(token.get().isCancelled());assertTrue(token.get().isObsolete());
+            assertTrue(token.get().needsChunk(16,0));assertTrue(token.get().needsChunk(15,0));
+            assertFalse(token.get().needsChunk(0,0));assertFalse(token.get().needsChunk(32,0));
+            scheduler.beginRequest(Set.of(key(100)));
+            assertTrue(token.get().isCancelled());
+            scheduler.close();assertTrue(token.get().isCancelled());
+        } finally {release.countDown();scheduler.close();}
+    }
+
     @Test
     void limitsConcurrencyToTwoWorkers() throws Exception {
         AtomicInteger active = new AtomicInteger();

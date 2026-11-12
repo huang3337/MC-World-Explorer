@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.mcworldexplorer'
-version = '0.7.4'
+version = '0.7.5-SNAPSHOT'
 
 repositories {
     maven { url 'https://maven.aliyun.com/repository/public/' }
@@ -118,6 +118,8 @@ tasks.named('processResources') { dependsOn tasks.named('generateBuildMetadata')
 // Offline documentation only; no plugin implementation, SDK artifact or template is bundled.
 tasks.named('processResources') {
     from('docs/PLUGIN_DEVELOPMENT.md') { into 'help' }
+    // Share the approved artwork with the README instead of keeping a second source copy.
+    from('docs/assets/mc-world-explorer.png') { into 'images' }
 }
 tasks.named('test') {
     doFirst {

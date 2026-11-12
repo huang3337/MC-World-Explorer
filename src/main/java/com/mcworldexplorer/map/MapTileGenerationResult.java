@@ -11,7 +11,14 @@ public record MapTileGenerationResult(
         int missingChunks,
         int failedChunks,
         int populatedColumns,
-        int unknownBlockColumns) {
+        int unknownBlockColumns,
+        MapReadIssues unreadable) {
+
+    public MapTileGenerationResult(BufferedImage image, List<MapMarker> markers, int totalChunks,
+            int sampledChunks, int missingChunks, int failedChunks, int populatedColumns, int unknownBlockColumns) {
+        this(image, markers, totalChunks, sampledChunks, missingChunks, failedChunks,
+                populatedColumns, unknownBlockColumns, new MapReadIssues());
+    }
 
     public MapTileGenerationResult {
         if (image == null || markers == null) {

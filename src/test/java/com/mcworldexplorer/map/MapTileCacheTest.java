@@ -44,7 +44,7 @@ class MapTileCacheTest {
                 fixture.world, fixture.dimension, fixture.key, image());
 
         assertTrue(stored.imagePath().startsWith(
-                WorldCachePaths.worldDirectory(fixture.world).resolve("map-v03")));
+                WorldCachePaths.worldDirectory(fixture.world).resolve("map-v075")));
         assertTrue(new MapTileCache().findReusable(
                 fixture.world, fixture.dimension, fixture.key).isPresent());
     }

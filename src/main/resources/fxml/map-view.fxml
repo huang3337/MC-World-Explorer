@@ -13,6 +13,8 @@
                 </HBox>
                 <MenuButton fx:id="locateMenuButton" text="定位" mnemonicParsing="false">
                     <items>
+                        <MenuItem text="查看已保存范围…" onAction="#handleSavedRange"/>
+                        <SeparatorMenuItem/>
                         <CustomMenuItem hideOnClick="false">
                             <content>
                                 <VBox spacing="10.0" prefWidth="250.0" styleClass="popover-content">
