@@ -1,6 +1,6 @@
 # 文档目录
 
-从使用问题进入对应说明，或展开开发、版本和决策分类。当前 Java 主线定版为 **0.7.4**，已完成正式发布；[正式版获取入口](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.4)。具体结果、已知边界和未测项以[当前进度](progress/CURRENT.md)为准。
+从使用问题进入对应说明，或展开开发、版本和决策分类。**[CURRENT](progress/CURRENT.md) 是现行代码版本、发布状态、验证结论及下一步的唯一记录入口**；其他文档不复制动态状态。
 
 <details>
 <summary><strong>使用与排查</strong></summary>
@@ -33,17 +33,18 @@
 .\gradlew.bat run
 ```
 
-Windows 下也可双击根目录的 `run-app.bat`。首次构建需要下载 Gradle 和依赖。当前正式构建输出位于 `build/core-0.7.4/`；本体不会构建或预装专用 Mod 插件，也不提供旧探索版本的 SDK 分发包。插件编译与接口限制请按上方开发说明操作。
+Windows 下也可双击根目录的 `run-app.bat`。首次构建需要下载 Gradle 和依赖。构建输出暂沿用 `build/core-0.7.4/` 目录名，应用版本以构建元数据为准；本体不会构建或预装专用 Mod 插件，也不提供旧探索版本的 SDK 分发包。插件编译与接口限制请按上方开发说明操作。
 
 </details>
 
 <details>
 <summary><strong>版本进度 · 由新到旧</strong></summary>
 
-[当前进度](progress/CURRENT.md)记录接续位置；[版本进度目录](progress/README.md)汇总各阶段。[0.7.4 版本说明](releases/V0.7.4.md)记录本期交付内容与限制。开发版本不一定对应已发布软件包。
+[当前进度](progress/CURRENT.md)记录接续位置；[版本进度目录](progress/README.md)汇总各阶段。[0.7.4 版本说明](releases/V0.7.4.md)记录该版本交付内容与限制。开发版本不一定对应已发布软件包。
 
 | 版本 | 记录 |
 |---|---|
+| [V0.7.5](progress/V0.7.5.md) | 二维浏览、缓存与交付边界记录 |
 | [V0.7.4](progress/V0.7.4.md) | 纯本体通用解析、三维交互与本期收尾 |
 | [V0.7.3](progress/V0.7.3.md) | 实例资源接入与通用模型解析 |
 | [V0.7.2](progress/V0.7.2.md) | 资源驱动的完整与非完整方块 |

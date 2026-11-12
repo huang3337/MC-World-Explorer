@@ -28,6 +28,14 @@ public final class MapTileLoadTracker {
         return true;
     }
 
+    /** Source coverage is terminal for this request; only an explicit retry/refresh should repeat it. */
+    public void recordIncomplete(MapTileKey key) {
+        Entry entry = entries.computeIfAbsent(key, ignored -> new Entry());
+        entry.loading = false;
+        entry.failed = true;
+        entry.automaticFailures = MAX_AUTOMATIC_FAILURES;
+    }
+
     public FailureAction recordFailure(MapTileKey key) {
         Entry entry = entries.get(key);
         if (entry == null || !entry.loading) {
@@ -83,6 +91,13 @@ public final class MapTileLoadTracker {
                 })
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
+
+    public void fail(MapTileKey key) {
+        Entry entry = entries.computeIfAbsent(key, ignored -> new Entry());
+        entry.loading = false; entry.failed = true;
+    }
+
+    public void retain(Set<MapTileKey> keys) { entries.keySet().retainAll(keys); }
 
     public void clear() {
         entries.clear();

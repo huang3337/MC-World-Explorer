@@ -1,5 +1,6 @@
 package com.mcworldexplorer.ui;
 
+import com.mcworldexplorer.map.MapDisplayQueue;
 import com.mcworldexplorer.voxel.mesh.MeshWarning;
 import com.mcworldexplorer.voxel.resource.ClientResourceLocator;
 import com.mcworldexplorer.voxel.resource.ClientResourceArchive;
@@ -12,6 +13,7 @@ import com.mcworldexplorer.map.MapMarker;
 import com.mcworldexplorer.map.MapMarkerType;
 import com.mcworldexplorer.map.MapTileCacheResult;
 import com.mcworldexplorer.map.MapTileGenerationMonitor;
+import com.mcworldexplorer.map.MapTileGenerator;
 import com.mcworldexplorer.map.MapTilePartialResult;
 import com.mcworldexplorer.map.MapTileKey;
 import com.mcworldexplorer.map.MapTileLoadTracker;
@@ -92,7 +94,7 @@ import java.util.Set;
 
 public final class MapViewerController {
     private static final Logger LOGGER = LoggerFactory.getLogger(MapViewerController.class);
-    private static final String RENDER_VERSION = "v03-r1";
+    private static final String RENDER_VERSION = "v075-p3-r1";
     private static final MapZoomLevel DEFAULT_ZOOM = MapZoomLevel.BLOCKS_2;
 
     private final MapTileService tileService = new MapTileService();
@@ -110,6 +112,29 @@ public final class MapViewerController {
     private String modelPluginNotice="";
     private Map<ResourceLocation,String> modelPluginExecutions=Map.of();
     private final MapTileLoadTracker tileLoadTracker = new MapTileLoadTracker();
+    private SavedRangeOverview savedOverview;
+    private final MapDisplayQueue displayQueue = new MapDisplayQueue();
+    private int clippedTiles;
+    private final javafx.animation.AnimationTimer displayPulse = new javafx.animation.AnimationTimer() {
+        @Override public void handle(long now) {
+            if (viewport == null) return;
+            long started = System.nanoTime(); int count = 0;
+            viewport.beginDisplayBatch();
+            try {
+                while (count < 2 && System.nanoTime() - started < 4_000_000L) {
+                    var delivery = displayQueue.poll(); if (delivery == null) break;
+                    try { delivery.apply(); }
+                    catch (RuntimeException failure) {
+                        LOGGER.warn("Failed to display map tile {}", delivery.key(), failure);
+                        readyKeys.remove(delivery.key()); tileLoadTracker.fail(delivery.key());
+                        viewport.discardTile(delivery.key()); syncTileLoadStates(); updateStatus();
+                    }
+                    count++;
+                }
+            } finally { viewport.endDisplayBatch(); }
+            if (count > 0) refillVisibleTiles();
+        }
+    };
     private final PauseTransition viewportDebounce = new PauseTransition(Duration.millis(200));
     private final PauseTransition playerHighlight = new PauseTransition(Duration.seconds(3));
     private final Map<String, DimensionState> dimensionStates = new HashMap<>();
@@ -266,6 +291,7 @@ public final class MapViewerController {
         viewerAreaList.setOnClear(() -> removeViewerAreas(viewerCachedPreviews, true));
         viewerAreasHost.getChildren().setAll(viewerAreaList);
         viewport = new MapViewport();
+        displayPulse.start();
         Label placeholderTitle = new Label("开始浏览你的世界");
         placeholderTitle.getStyleClass().add("map-placeholder-title");
         Label placeholderMessage = new Label();
@@ -287,7 +313,7 @@ public final class MapViewerController {
         });
         viewport.setOnVisualChanged(this::updateStatus);
         viewport.setOnZoomTargetChanged(() -> {
-            tileLoadTracker.clear();
+            // Retain terminal source failures for retained keys; zoom is not an explicit retry.
             updateStatus();
             refreshTiles();
         });
@@ -374,6 +400,8 @@ public final class MapViewerController {
         cancelViewerTask(false);
         exitViewerMode(false);
         contextId++;
+        displayQueue.retain(contextId, Set.of());
+        closeSavedOverview();
         playerLoadId++;
         cacheMaintenanceId++;
         viewerCacheInspectionId++;
@@ -433,6 +461,8 @@ public final class MapViewerController {
         viewerTextureHelp.getTooltip().hide();
         cancelViewerResourceLookup();
         contextId++;
+        displayQueue.retain(contextId, Set.of());
+        closeSavedOverview();
         playerLoadId++;
         cacheMaintenanceId++;
         viewerCacheInspectionId++;
@@ -440,7 +470,12 @@ public final class MapViewerController {
         viewerTaskRunning = false;
         viewportDebounce.stop();
         playerHighlight.stop();
+        displayPulse.stop();
+        displayQueue.close();
         scheduler.close();
+        var persistenceExit = tileService.closeAndAwait(2000);
+        if (persistenceExit != MapTileService.ExitState.STOPPED)
+            org.slf4j.LoggerFactory.getLogger(MapViewerController.class).warn("二维保存退出未确认完成: {}", persistenceExit);
         if (viewerCoordinator != null) {
             viewerCoordinator.close();
             viewerCoordinator = null;
@@ -459,6 +494,8 @@ public final class MapViewerController {
             pendingPlayerNavigation = null;
         }
         contextId++;
+        displayQueue.retain(contextId, Set.of());
+        closeSavedOverview();
         scheduler.cancelAll();
         tileLoadTracker.clear();
         readyKeys.clear();
@@ -1349,6 +1386,8 @@ public final class MapViewerController {
         DimensionState state = dimensionStates.get(dimension.id());
         dimensionStates.put(dimension.id(), state.withLayer(nextLayer));
         contextId++;
+        displayQueue.retain(contextId, Set.of());
+        closeSavedOverview();
         scheduler.cancelAll();
         tileLoadTracker.clear();
         readyKeys.clear();
@@ -1453,6 +1492,8 @@ public final class MapViewerController {
         }
         long maintenanceId = ++cacheMaintenanceId;
         contextId++;
+        displayQueue.retain(contextId, Set.of());
+        closeSavedOverview();
         scheduler.cancelAll();
         currentRequestId = -1;
         tileLoadTracker.clear();
@@ -1461,6 +1502,7 @@ public final class MapViewerController {
         Task<WorldMapCacheCleaner.ClearResult> task = new Task<>() {
             @Override
             protected WorldMapCacheCleaner.ClearResult call() throws IOException {
+                tileService.forceReload(target);
                 return cacheCleaner.clear(target);
             }
         };
@@ -1567,6 +1609,23 @@ public final class MapViewerController {
         }
     }
 
+    private void closeSavedOverview() {
+        if (savedOverview != null) { savedOverview.close(); savedOverview = null; }
+    }
+
+    @FXML private void handleSavedRange(ActionEvent event) {
+        locateMenuButton.hide();
+        if (world == null || dimension == null || cacheMaintenanceInProgress) return;
+        closeSavedOverview();
+        refreshTiles(); // Retain visible work and cancel speculative prefetch before indexing.
+        savedOverview = new SavedRangeOverview(viewportHost.getScene().getWindow(), dimension.regionDirectory(),
+                scheduler, viewport::completeTiles, (x, z) -> {
+                    viewport.viewportState().setView(x, z, MapZoomLevel.BLOCKS_16);
+                    viewport.centerOn(x, z);
+                    refreshTiles();
+                });
+    }
+
     private void refreshTiles() {
         if (cacheMaintenanceInProgress) {
             return;
@@ -1587,6 +1646,8 @@ public final class MapViewerController {
                 viewport.getWidth(),
                 viewport.getHeight(),
                 RENDER_VERSION);
+        clippedTiles = Math.max(0, requestedKeys.size() - 64);
+        if (clippedTiles > 0) requestedKeys = List.copyOf(requestedKeys.subList(0, 64));
         prefetchKeys = coordinator.prefetchKeys(
                 com.mcworldexplorer.storage.WorldCachePaths.worldDirectoryName(world),
                 dimension.id(),
@@ -1596,6 +1657,8 @@ public final class MapViewerController {
                 viewport.getHeight(),
                 RENDER_VERSION);
         Set<MapTileKey> requested = Set.copyOf(requestedKeys);
+        displayQueue.retain(contextId, requested);
+        tileLoadTracker.retain(requested);
         WorldInfo requestedWorld = world;
         WorldDimension requestedDimension = dimension;
         readyKeys.retainAll(requested);
@@ -1633,20 +1696,18 @@ public final class MapViewerController {
             WorldDimension requestedDimension,
             double focusX,
             double focusZ) {
-        scheduler.submit(
-                key,
-                priority,
-                request,
-                cancellation -> tileService.load(
-                        requestedWorld,
-                        requestedDimension,
-                        key,
-                        new MapTileGenerationMonitor() {
+        java.util.function.Function<MapTileScheduler.Cancellation, MapTileGenerationMonitor> monitor =
+                cancellation -> new MapTileGenerationMonitor() {
+                            @Override
+                            public boolean centerFirst() { return true; }
+
                             @Override
                             public boolean isCancelled() {
                                 return cancellation.isCancelled();
                             }
 
+                            @Override public boolean isObsolete() { return cancellation.isObsolete(); }
+                            @Override public boolean needsChunk(int x, int z) { return cancellation.needsChunk(x, z); }
                             @Override
                             public void onProgress(int completedChunks, int totalChunks) {
                             }
@@ -1663,39 +1724,57 @@ public final class MapViewerController {
 
                             @Override
                             public void onPartial(MapTilePartialResult partial) {
-                                Platform.runLater(() -> acceptPartialTile(
-                                        taskContext,
-                                        key,
-                                        partial));
+                                var frame = MapDisplayQueue.Frame.prepare(partial.image(), partial.markers());
+                                displayQueue.offer(taskContext, key, frame, false,
+                                        ready -> acceptPartialTile(taskContext, key, ready));
                             }
-                        }),
-                result -> Platform.runLater(() ->
-                        acceptTile(taskContext, request, key, result)),
-                failure -> Platform.runLater(() ->
-                        acceptTileFailure(
-                                taskContext,
-                                request,
-                                key,
-                                priority,
-                                requestedWorld,
-                                requestedDimension,
-                                focusX,
-                                focusZ,
-                                failure)));
+                        };
+        scheduler.submitTerrain(
+                key, priority, request,
+                MapTileGenerator.intersectsCenter(key, focusX, focusZ)
+                        ? cancellation -> tileService.previewCenter(requestedWorld, requestedDimension, key, monitor.apply(cancellation))
+                        : null,
+                cancellation -> tileService.load(requestedWorld, requestedDimension, key, monitor.apply(cancellation)),
+                result -> displayQueue.offer(taskContext, key,
+                        MapDisplayQueue.Frame.prepare(result.image(), result.markers()), true,
+                        ready -> acceptTile(taskContext, request, key, ready)),
+                failure -> {
+                    if (failure instanceof com.mcworldexplorer.map.MapTileIncompleteException incomplete) {
+                        var partial = incomplete.partial();
+                        var frame = new MapDisplayQueue.Frame(partial.image().getRGB(0, 0, 256, 256, null, 0, 256),
+                                partial.markers(), incomplete.getMessage());
+                        displayQueue.offer(taskContext, key, frame, true,
+                                ready -> acceptIncompleteTile(taskContext, request, key, ready));
+                    } else {
+                        displayQueue.offer(taskContext, key, null, true, ignored ->
+                                acceptTileFailure(taskContext, request, key, priority, requestedWorld,
+                                        requestedDimension, focusX, focusZ, failure));
+                    }
+                });
+    }
+
+    private void refillVisibleTiles() {
+        if (world == null || dimension == null || cacheMaintenanceInProgress || currentRequestId < 0) return;
+        for (int index = 0; index < requestedKeys.size(); index++) {
+            var key = requestedKeys.get(index);
+            if (readyKeys.contains(key) || tileLoadTracker.isFailed(key) || scheduler.contains(key)) continue;
+            submitVisibleTile(contextId, currentRequestId, key, index, world, dimension,
+                    viewport.viewportState().centerX(), viewport.viewportState().centerZ());
+        }
     }
 
     private void acceptTile(
             long taskContext,
             long request,
             MapTileKey key,
-            MapTileCacheResult result) {
+            MapDisplayQueue.Frame result) {
         if (taskContext != contextId || !scheduler.isCurrent(request)
                 || !requestedKeys.contains(key)) {
             return;
         }
         tileLoadTracker.recordSuccess(key);
         readyKeys.add(key);
-        viewport.showTile(key, toFxImage(result.image()), result.markers());
+        viewport.showTile(key, toFxImage(result.pixels()), result.markers());
         syncTileLoadStates();
         updateStatus();
         if (readyKeys.size() == requestedKeys.size()
@@ -1704,17 +1783,27 @@ public final class MapViewerController {
         }
     }
 
+    private void acceptIncompleteTile(long taskContext, long request, MapTileKey key,
+                                      MapDisplayQueue.Frame result) {
+        if (taskContext != contextId || !scheduler.isCurrent(request) || !requestedKeys.contains(key)) return;
+        tileLoadTracker.recordIncomplete(key);
+        readyKeys.remove(key);
+        viewport.showIncompleteTile(key, toFxImage(result.pixels()), result.markers(), result.diagnostic());
+        syncTileLoadStates();
+        updateStatus();
+    }
+
     private void acceptPartialTile(
             long taskContext,
             MapTileKey key,
-            MapTilePartialResult partial) {
+            MapDisplayQueue.Frame partial) {
         if (taskContext != contextId
                 || !requestedKeys.contains(key) || readyKeys.contains(key)) {
             return;
         }
         viewport.showPartialTile(
                 key,
-                toFxImage(partial.image()),
+                toFxImage(partial.pixels()),
                 partial.markers());
         updateStatus();
     }
@@ -1783,7 +1872,7 @@ public final class MapViewerController {
     }
 
     private void schedulePrefetch(long taskContext, long request) {
-        if (prefetchRequestId == request || taskContext != contextId
+        if (scheduler.indexPending() || prefetchRequestId == request || taskContext != contextId
                 || !scheduler.isCurrent(request) || world == null || dimension == null) {
             return;
         }
@@ -1796,7 +1885,7 @@ public final class MapViewerController {
             MapTileKey key = prefetchKeys.get(index);
             scheduler.submit(
                     key,
-                    requestedKeys.size() + index,
+                    1_000_000L + index,
                     request,
                     cancellation -> tileService.load(
                             requestedWorld,
@@ -1832,10 +1921,12 @@ public final class MapViewerController {
         MapViewportState state = viewport.viewportState();
         Set<MapTileKey> requested = Set.copyOf(requestedKeys);
         int failedTiles = tileLoadTracker.failedCount(requested);
-        String loadingState = viewport.isShowingTemporaryScale()
+        String loadingState = viewport.isRevalidatingVisibleTiles()
+                ? "显示最近画面，正在核对存档"
+                : viewport.isShowingTemporaryScale()
                 ? "临时缩放画面"
                 : failedTiles > 0
-                        ? "部分图块失败"
+                        ? "部分区域未完整加载"
                 : readyKeys.size() == requestedKeys.size() && failedTiles == 0
                         ? "已清晰加载"
                         : "正在补全";
@@ -1847,13 +1938,16 @@ public final class MapViewerController {
                 state.visualBlocksPerPixel(),
                 readyKeys.size(),
                 requestedKeys.size(),
-                failedTiles == 0 ? "" : " · " + failedTiles + " 个失败"));
+                (failedTiles == 0 ? "" : " · " + failedTiles + " 个图块未完整加载（红色斜线，悬停查看）")
+                        + (clippedTiles == 0 ? "" : " · 视口超出显示预算，仅加载中心 64 图块，可缩小窗口")
+                        + (com.mcworldexplorer.map.MapCacheStorageNotice.message(world).isEmpty() ? "" : " · "
+                        + com.mcworldexplorer.map.MapCacheStorageNotice.message(world))));
         updateExportState();
     }
 
     private void updateExportState() {
         int failedTiles = tileLoadTracker.failedCount(Set.copyOf(requestedKeys));
-        exportButton.setDisable(world == null
+        exportButton.setDisable(world == null || clippedTiles > 0
                 || requestedKeys.isEmpty()
                 || readyKeys.size() != requestedKeys.size()
                 || failedTiles > 0);
@@ -2055,13 +2149,10 @@ public final class MapViewerController {
                 MapMarkerStyle.toggleStyleClass(type));
     }
 
-    private static WritableImage toFxImage(BufferedImage source) {
-        WritableImage image = new WritableImage(source.getWidth(), source.getHeight());
-        for (int y = 0; y < source.getHeight(); y++) {
-            for (int x = 0; x < source.getWidth(); x++) {
-                image.getPixelWriter().setArgb(x, y, source.getRGB(x, y));
-            }
-        }
+    private static WritableImage toFxImage(int[] pixels) {
+        WritableImage image = new WritableImage(256, 256);
+        image.getPixelWriter().setPixels(0, 0, 256, 256,
+                javafx.scene.image.PixelFormat.getIntArgbInstance(), pixels, 0, 256);
         return image;
     }
 

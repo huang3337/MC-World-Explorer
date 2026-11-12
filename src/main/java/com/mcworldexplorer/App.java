@@ -6,6 +6,7 @@ import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,17 @@ public class App extends Application {
         scene.getStylesheets().add(stylesheet.toExternalForm());
         stage.setScene(scene);
         stage.setTitle("MC World Explorer");
+        URL iconLocation = App.class.getResource("/images/mc-world-explorer.png");
+        if (iconLocation == null) {
+            LOGGER.warn("Application window icon is missing: /images/mc-world-explorer.png");
+        } else {
+            Image icon = new Image(iconLocation.toExternalForm(), 256, 256, true, true);
+            if (icon.isError()) {
+                LOGGER.warn("Cannot load application window icon", icon.getException());
+            } else {
+                stage.getIcons().add(icon);
+            }
+        }
         stage.setMinWidth(900);
         stage.setMinHeight(600);
         stage.show();
