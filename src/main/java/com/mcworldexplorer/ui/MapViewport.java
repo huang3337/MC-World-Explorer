@@ -182,6 +182,7 @@ public final class MapViewport extends Region {
             }
         });
         canvas.setOnMouseDragged(event -> {
+            trackPointer(event.getX(), event.getY());
             hideMarkerTooltip();
             if (state != null && secondaryPanning && event.isSecondaryButtonDown()) {
                 state.panPixels(event.getX() - dragX, event.getY() - dragY);
@@ -250,6 +251,7 @@ public final class MapViewport extends Region {
             draw();
         });
         canvas.setOnScroll(event -> {
+            trackPointer(event.getX(), event.getY());
             hideMarkerTooltip();
             if (state == null || event.getDeltaY() == 0 || (viewerFreeSelection && primaryPressed)) {
                 return;
@@ -270,10 +272,13 @@ public final class MapViewport extends Region {
             zoomSettle.playFromStart();
             event.consume();
         });
+        canvas.setOnMouseEntered(event -> {
+            trackPointer(event.getX(), event.getY());
+            visualChanged.run();
+        });
         canvas.setOnMouseMoved(event -> {
-            pointerInside = true;
-            lastPointerX = event.getX();
-            lastPointerY = event.getY();
+            trackPointer(event.getX(), event.getY());
+            visualChanged.run();
             if (viewerSelectionMode) {
                 updateViewerCandidate(event.getX(), event.getY());
                 Optional<String> cachedText = viewerSelection.candidate() != null
@@ -299,6 +304,7 @@ public final class MapViewport extends Region {
         });
         canvas.setOnMouseExited(event -> {
             pointerInside = false;
+            visualChanged.run();
             hideMarkerTooltip();
             if (viewerSelectionMode && viewerSelection.canSelect() && !primaryPressed) {
                 viewerSelection.clearCandidate();
@@ -321,6 +327,18 @@ public final class MapViewport extends Region {
         viewerSelection.clear();
         clearTiles();
         draw();
+    }
+
+    private void trackPointer(double x, double y) {
+        lastPointerX = x;
+        lastPointerY = y;
+        pointerInside = x >= 0 && y >= 0 && x < getWidth() && y < getHeight();
+    }
+
+    public String pointerCoordinates() {
+        if (state == null || !pointerInside) return "鼠标坐标 —";
+        return "鼠标 X " + (long) Math.floor(state.worldXAt(lastPointerX, getWidth()))
+                + " · Z " + (long) Math.floor(state.worldZAt(lastPointerY, getHeight()));
     }
 
     public MapViewportState viewportState() {

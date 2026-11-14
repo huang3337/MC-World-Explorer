@@ -1931,10 +1931,9 @@ public final class MapViewerController {
                         ? "已清晰加载"
                         : "正在补全";
         statusLabel.setText(String.format(
-                "%s · 中心 X %.0f · Z %.0f · %.2f 方块/像素 · %d/%d 图块%s",
+                "%s · %s · %.2f 方块/像素 · %d/%d 图块%s",
                 loadingState,
-                state.centerX(),
-                state.centerZ(),
+                viewport.pointerCoordinates(),
                 state.visualBlocksPerPixel(),
                 readyKeys.size(),
                 requestedKeys.size(),
