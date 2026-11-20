@@ -16,6 +16,19 @@ import static com.mcworldexplorer.voxel.resource.BlockModelResolver.Direction;
 /** Prepares only requested states; bounded model geometry and texture resources are prepared on demand. */
 public final class BlockTextureSet {
     public static final int MAX_STATES = 4096;
+    @FunctionalInterface
+    public interface PreparationProgress {
+        PreparationProgress NONE = (message, completed, total) -> {};
+
+        void update(String message, int completed, int total);
+
+        default void states(String message, int completed, int total) {
+            // Bound UI notifications even when the area contains thousands of cheap states.
+            if (completed == total || completed % Math.max(1, (total + 99) / 100) == 0) {
+                update(message, completed, total);
+            }
+        }
+    }
     // Existing built-in models encode an explicit RGB tint above this marker.
     // Ordinary JSON tintindex values are handler indices, not colours.
     private static final int EXPLICIT_TINT_MARKER = 0x1000000;
@@ -101,11 +114,16 @@ public final class BlockTextureSet {
             VoxelAreaLoadResult area, CancellationSignal cancel)
             throws IOException {return load(archive,area,cancel,ModelRuleRegistry.defaults());}
     public static BlockTextureSet load(BlockResourceSource archive,VoxelAreaLoadResult area,CancellationSignal cancel,ModelRuleRegistry rules)throws IOException {
+        return load(archive, area, cancel, rules, PreparationProgress.NONE);
+    }
+    public static BlockTextureSet load(BlockResourceSource archive, VoxelAreaLoadResult area, CancellationSignal cancel,
+                                       ModelRuleRegistry rules, PreparationProgress progress) throws IOException {
         try(var batch=archive instanceof InstanceResourceSource instance ? instance.modelBatch() : null) {
-            return loadArea(archive,area,cancel,rules);
+            return loadArea(archive,area,cancel,rules,progress);
         }
     }
-    private static BlockTextureSet loadArea(BlockResourceSource archive,VoxelAreaLoadResult area,CancellationSignal cancel,ModelRuleRegistry rules)throws IOException {
+    private static BlockTextureSet loadArea(BlockResourceSource archive,VoxelAreaLoadResult area,CancellationSignal cancel,ModelRuleRegistry rules,PreparationProgress progress)throws IOException {
+        progress.update("正在收集选区方块状态", 0, 0);
         Set<BlockState> states = new LinkedHashSet<>();
         Map<String,com.mcworldexplorer.voxel.data.BlockEntityData> entities=new HashMap<>();
         var neighborhood = area.target().expanded(1);
@@ -150,12 +168,16 @@ public final class BlockTextureSet {
         Map<BlockState,BlockModelResolver.Result> resolved=new LinkedHashMap<>();Set<String> contextual=new HashSet<>();Map<BlockState,BlockModelResolver.Dependencies> dependencies=new HashMap<>();
         int[] retainedFaces={32768};
         var weighted=new AreaModelVariants();
+        int modelCount = Math.min(states.size(), MAX_STATES);
+        progress.states("正在解析方块模型", 0, modelCount);
         for(var state:states){
             check(cancel);
             if(resolved.size()>=MAX_STATES)break;
             var result=resolver.prepareVariants(state,plan->weighted.register(state,plan));
             resolved.put(state,retain(result,retainedFaces));
+            progress.states("正在解析方块模型", resolved.size(), modelCount);
         }
+        progress.update("正在匹配模型变体与群系颜色", 0, 0);
         weighted.prepare(area,cancel,resolver,states,resolved,retainedFaces);
         for(var entry:resolved.entrySet())if(entry.getValue().reason()==BlockModelResolver.Reason.CONTEXT_REQUIRED){
             contextual.add(entry.getKey().name());dependencies.put(entry.getKey(),entry.getValue().dependencies());
@@ -200,7 +222,7 @@ public final class BlockTextureSet {
                 ((BuiltinBlockModels)archive).note(state,"流体阻挡标签不可用，按相邻静态模型估算："+problem);
         }
         var tints=BlockTintPreparation.prepare((BuiltinBlockModels)archive,area,cancel,states,resolved,dependencies,weighted,rules);
-        var prepared=loadPrepared(archive,states,cancel,rules,resolved,area,dependencies);
+        var prepared=loadPrepared(archive,states,cancel,rules,resolved,area,dependencies,progress);
         prepared.fluidBarriers=flowTag;
         prepared.weighted=weighted;prepared.tintPreparation=tints;return prepared;
     }
@@ -214,10 +236,11 @@ public final class BlockTextureSet {
     public static BlockTextureSet load(BlockResourceSource archive, Collection<BlockState> requested,
                                        CancellationSignal cancel) throws IOException {return load(archive,requested,cancel,ModelRuleRegistry.defaults());}
     public static BlockTextureSet load(BlockResourceSource archive,Collection<BlockState> requested,CancellationSignal cancel,ModelRuleRegistry rules)throws IOException {
-        return loadPrepared(archive,requested,cancel,rules,Map.of(),null,Map.of());
+        return loadPrepared(archive,requested,cancel,rules,Map.of(),null,Map.of(),PreparationProgress.NONE);
     }
     private static BlockTextureSet loadPrepared(BlockResourceSource archive,Collection<BlockState> requested,CancellationSignal cancel,ModelRuleRegistry rules,
-            Map<BlockState,BlockModelResolver.Result> resolved,VoxelAreaLoadResult area,Map<BlockState,BlockModelResolver.Dependencies> contextDependencies)throws IOException {
+            Map<BlockState,BlockModelResolver.Result> resolved,VoxelAreaLoadResult area,Map<BlockState,BlockModelResolver.Dependencies> contextDependencies,
+            PreparationProgress progress)throws IOException {
         Objects.requireNonNull(rules);
         Objects.requireNonNull(archive); Objects.requireNonNull(requested); Objects.requireNonNull(cancel);
         if(!(archive instanceof BuiltinBlockModels))archive=new BuiltinBlockModels(archive,Map.of());
@@ -240,8 +263,10 @@ public final class BlockTextureSet {
         Map<BlockState,List<String>> notes=new HashMap<>();
         Map<BlockState,List<BlockResourceDiagnostic>> diagnostics=new HashMap<>();
         int faceBudget = 32768;
+        int completedStates = 0;
         for (BlockState state : states) {
             check(cancel);
+            progress.states("正在对齐纹理（方块状态）", completedStates++, states.size());
             var result = resolved.get(state);if(result==null)result=resolver.resolve(state);
             if (!result.resolved()) {
                 failures.put(state, result.reason() + ": " + result.detail()+trace(archive,result));
@@ -344,6 +369,9 @@ public final class BlockTextureSet {
                     e instanceof PreparationFailure failure?failure.code:"TEXTURE_PREPARATION_FAILED",e.getMessage(),archive,result)));
             }
         }
+        check(cancel);
+        progress.states("正在对齐纹理（方块状态）", completedStates, states.size());
+        progress.update("正在生成纹理图集", 0, 0);
         TextureAtlas atlas=builder.build();
         Map<BlockState,List<Surface>> models=new HashMap<>();
         for(var entry:pending.entrySet()) {

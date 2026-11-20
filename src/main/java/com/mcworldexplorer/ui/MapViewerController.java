@@ -63,6 +63,7 @@ import javafx.scene.control.Menu;
 import com.mcworldexplorer.storage.SavedPlaces.Position;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
@@ -178,7 +179,6 @@ public final class MapViewerController {
     private long viewerCacheInspectionId;
     private Task<List<ViewerCachedArea>> viewerCacheInspection;
     private Set<ChunkRectangle> validViewerCachedAreas = Set.of();
-    private boolean activeViewerExpectedFromCache;
     private List<ViewerCachedArea> viewerCachedPreviews = List.of();
     private ViewerAreaList viewerAreaList;
     private Path viewerResourcePath;
@@ -258,6 +258,8 @@ public final class MapViewerController {
     private Label viewerSelectionLabel;
     @FXML
     private ProgressBar viewerProgressBar;
+    @FXML
+    private ProgressIndicator viewerBusyIndicator;
     @FXML
     private Button viewerConfirmButton;
     @FXML
@@ -1254,14 +1256,8 @@ public final class MapViewerController {
                         mapState.visualBlocksPerPixel(), layer));
         activeViewerTarget = target;
         cancelViewerCacheInspection();
-        activeViewerExpectedFromCache = isCachedArea(target);
         setViewerTaskUi(true);
-        viewerSelectionLabel.setText("正在准备三维预览");
-        if (activeViewerExpectedFromCache) {
-            viewerProgressBar.setManaged(false);
-            viewerProgressBar.setVisible(false);
-            viewerSelectionLabel.setText("正在打开缓存中的三维预览");
-        }
+        viewerSelectionLabel.setText(isCachedArea(target) ? "正在打开缓存中的三维预览" : "正在准备三维预览");
         try {
             activeViewerRequestId = ensureViewerCoordinator().start(
                     request,
@@ -1313,15 +1309,9 @@ public final class MapViewerController {
         if (requestId != activeViewerRequestId || !viewerTaskRunning) {
             return;
         }
-        if (activeViewerExpectedFromCache
-                && progress.stage() != com.mcworldexplorer.viewer.ViewerProgressStage.READING_CHUNKS
-                && progress.stage() != com.mcworldexplorer.viewer.ViewerProgressStage.BUILDING_MESH) {
-            return;
-        }
-        viewerProgressBar.setManaged(true);
-        viewerProgressBar.setVisible(true);
         viewerSelectionLabel.setText(progress.message());
         viewerProgressBar.setProgress(progress.fraction());
+        viewerProgressBar.setVisible(progress.determinate());
     }
 
     private void acceptViewerSuccess(long requestId, ViewerTaskResult result) {
@@ -1339,7 +1329,6 @@ public final class MapViewerController {
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
         activeViewerTarget = null;
-        activeViewerExpectedFromCache = false;
         setViewerTaskUi(false);
         updateViewerAreaList(result.verifiedPreviews());
         setViewerAreasVisible(true);
@@ -1376,7 +1365,6 @@ public final class MapViewerController {
         invalidateResourceDiagnostics("本次生成失败，未取得完整解析报告："+shortMessage(failure));
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
-        activeViewerExpectedFromCache = false;
         setViewerTaskUi(false);
         restoreActiveViewerTarget();
         viewerSelectionLabel.setText("生成失败：" + shortMessage(failure));
@@ -1390,7 +1378,6 @@ public final class MapViewerController {
         }
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
-        activeViewerExpectedFromCache = false;
         setViewerTaskUi(false);
         clearViewerSelection("已取消生成；" + viewerSelectionHint());
         invalidateResourceDiagnostics("本次生成已取消，未取得新的解析报告。");
@@ -1405,7 +1392,6 @@ public final class MapViewerController {
         long cancelledId = activeViewerRequestId;
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
-        activeViewerExpectedFromCache = false;
         if (viewerCoordinator != null) {
             viewerCoordinator.cancel();
         }
@@ -1441,8 +1427,8 @@ public final class MapViewerController {
         if (viewerProgressBar == null) {
             return;
         }
-        viewerProgressBar.setManaged(running);
-        viewerProgressBar.setVisible(running);
+        viewerBusyIndicator.setVisible(running);
+        viewerProgressBar.setVisible(false);
         viewerProgressBar.setProgress(-1);
     }
 

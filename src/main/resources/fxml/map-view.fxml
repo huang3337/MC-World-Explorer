@@ -87,9 +87,12 @@
                         mnemonicParsing="false" onAction="#handleViewerCancel" text="取消生成"/>
             </FlowPane>
             <HBox alignment="CENTER_LEFT" spacing="12.0">
+                <ProgressIndicator fx:id="viewerBusyIndicator" visible="false" managed="${viewerBusyIndicator.visible}"
+                                   prefWidth="20.0" prefHeight="20.0" minWidth="20.0" minHeight="20.0"
+                                   maxWidth="20.0" maxHeight="20.0" accessibleText="三维预览加载中"/>
                 <Label fx:id="viewerSelectionLabel" text="在地图上点击以锁定三维区域" wrapText="true"
                        minWidth="0.0" minHeight="0.0" maxHeight="40.0" maxWidth="Infinity" HBox.hgrow="ALWAYS" styleClass="muted-text"/>
-                <ProgressBar fx:id="viewerProgressBar" managed="false" visible="false" prefWidth="110.0" progress="-1.0"/>
+                <ProgressBar fx:id="viewerProgressBar" visible="false" managed="${viewerProgressBar.visible}" prefWidth="110.0" progress="-1.0"/>
             </HBox>
             <TitledPane fx:id="viewerAdvancedOptions" text="性能与资源" expanded="false" animated="false" styleClass="preview-options">
                 <content>

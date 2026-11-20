@@ -4,7 +4,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 正式发行 | **0.7.5**，Java 主线 `main`，标签 `v0.7.5`。维护者已复核插件启停。Windows x64 便携包使用同一份复测 ZIP。[GitHub Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.5) · [版本说明](../releases/V0.7.5.md) · [包指纹与验收](V0.7.5.md#windows-package) |
+| 正式发行 | **0.7.5**，Java 主线 `main`，标签 `v0.7.5`。Windows x64 便携包包含插件启停与三维选区加载反馈修复。[GitHub Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.5) · [版本说明](../releases/V0.7.5.md) · [包指纹与验收](V0.7.5.md#windows-package) |
 | 交接 | `MCWE-20261119-SETTINGS` 已接手，设置页与同批存档复测已完成。交接基线 JAR 的 SHA-256 为 `5cd067421a676c5ab0162f2c3a1ab0cbd2aeb4edda58ddbefde9f42cc175d066`。 |
 | 范围 | 只读浏览已保存区块。设置页可调整二维渲染、JVM 最大堆、扫描并发与三维缓存。三维基础档和增强档共用模型解析与着色协议。[设置说明](../FAQ.md#render-settings) · [资源解析范围](../MODEL_PROTOCOL_CAPABILITIES.md) |
 

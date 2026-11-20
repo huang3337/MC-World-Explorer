@@ -23,6 +23,24 @@ class DynamicBlockResourcesTest {
     private final BlockState red = new BlockState("example:unregistered", Map.of("shade", "red", "powered", "false"));
     private final BlockState blue = new BlockState("example:unregistered", Map.of("shade", "blue", "powered", "true"));
 
+    @Test void textureProgressCountsUsedStatesIncludingFallbacks() throws Exception {
+        var missing = new BlockState("example:missing_model", Map.of());
+        var area = area(List.of(BlockState.AIR, red, missing, blue));
+        List<Integer> completedStates = new ArrayList<>();
+        try (var archive = ClientResourceArchive.open(fixture(), "1.21.1")) {
+            var textures = BlockTextureSet.load(archive, area, CancellationSignal.NONE, ModelRuleRegistry.defaults(),
+                    (message, completed, total) -> {
+                        if (message.startsWith("正在对齐纹理")) {
+                            assertEquals(3, total);
+                            completedStates.add(completed);
+                        }
+                    });
+            assertEquals(List.of(0, 1, 2, 3), completedStates);
+            assertNotNull(textures.surfaces(red));
+            assertNull(textures.surfaces(missing));
+        }
+    }
+
     @Test void discoversOnlyUsedTargetStatesAndTexturesAnUnregisteredNamespace() throws Exception {
         BlockState unused = new BlockState("example:unused_palette_entry", Map.of());
         var area = area(List.of(BlockState.AIR, red, blue, unused));

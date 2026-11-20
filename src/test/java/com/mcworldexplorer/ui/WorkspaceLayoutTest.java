@@ -1329,6 +1329,10 @@ class WorkspaceLayoutTest {
                 target.set(controller, original);
                 requestId.setLong(controller, 123);
                 setUi.invoke(controller, true);
+                var spinner = (javafx.scene.control.ProgressIndicator) root.lookup("#viewerBusyIndicator");
+                var bar = (javafx.scene.control.ProgressBar) root.lookup("#viewerProgressBar");
+                assertTrue(spinner.isVisible() && spinner.isManaged() && spinner.isIndeterminate());
+                assertFalse(bar.isVisible());
                 label.setText("正在读取原区域");
                 assertTrue(ranges.isDisabled(), "加载中不能更换选区范围");
                 assertTrue(profiles.isDisabled(), "加载中不能更换性能档位");
@@ -1352,6 +1356,12 @@ class WorkspaceLayoutTest {
                 assertEquals(original, viewport.viewerLockedSelection().orElseThrow());
                 progress.invoke(controller, 123L, new com.mcworldexplorer.viewer.ViewerProgress(com.mcworldexplorer.viewer.ViewerProgressStage.READING_CHUNKS, 1, 2, "原区域仍在加载"));
                 assertEquals("原区域仍在加载", label.getText());
+                var aligning = new com.mcworldexplorer.viewer.ViewerProgress(
+                        com.mcworldexplorer.viewer.ViewerProgressStage.PREPARING_TEXTURES, 2, 5, "正在对齐纹理（方块状态） 2/5");
+                progress.invoke(controller, 123L, aligning);
+                assertEquals(aligning.message(), label.getText());
+                assertTrue(spinner.isVisible() && bar.isVisible() && bar.isManaged());
+                assertEquals(0.4, bar.getProgress());
                 if (completion.equals("cancel")) cancel.fire();
                 else if (completion.equals("escape")) Event.fireEvent(viewport, escapeKey());
                 else if (completion.equals("failure")) {
@@ -1360,6 +1370,7 @@ class WorkspaceLayoutTest {
                     success.invoke(controller, 123L, result);
                 }
                 assertFalse(running.getBoolean(controller));
+                assertFalse(spinner.isVisible() || spinner.isManaged() || bar.isVisible() || bar.isManaged());
                 assertEquals(-1, requestId.getLong(controller));
                 if (completion.equals("cancel") || completion.equals("escape")) {
                     assertTrue(viewport.isViewerSelectionMode(), "取消生成只解除锁定，不退出三维选区模式");

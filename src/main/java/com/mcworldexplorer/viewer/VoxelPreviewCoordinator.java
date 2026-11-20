@@ -257,10 +257,13 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
                 return;
             }
 
+            var textures = archive == null ? null : BlockTextureSet.load(archive, area, request, request.rules,
+                    (message, completed, total) -> report(request, new ViewerProgress(
+                            ViewerProgressStage.PREPARING_TEXTURES, completed, total,
+                            total > 0 ? message + " " + completed + "/" + total : message)));
             report(request, new ViewerProgress(
                     ViewerProgressStage.BUILDING_MESH, 0,
                     request.request().target().coordinates().size(), "正在生成网格"));
-            var textures = archive == null ? null : BlockTextureSet.load(archive, area, request,request.rules);
             SceneBuilder selectedBuilder = textures == null ? sceneBuilder : (input, cancellation, monitor) ->
                     new VoxelSceneBuilder(textures).build(input, cancellation, monitor);
             VoxelSceneResult scene = selectedBuilder.build(
