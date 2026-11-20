@@ -86,8 +86,6 @@ final class AboutDialog {
         scroll.setPrefViewportHeight(400);
         scroll.setMinViewportHeight(140);
         dialog.getDialogPane().setContent(scroll);
-        var stylesheet = AboutDialog.class.getResource("/css/styles.css");
-        if (stylesheet != null) dialog.getDialogPane().getStylesheets().add(stylesheet.toExternalForm());
 
         var copy = new ButtonType("复制工具信息", ButtonBar.ButtonData.LEFT);
         dialog.getDialogPane().getButtonTypes().setAll(copy, ButtonType.CLOSE);

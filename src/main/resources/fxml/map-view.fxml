@@ -1,19 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?import javafx.geometry.Insets?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import com.mcworldexplorer.ui.SavedPlacesPanel?>
+<?import com.mcworldexplorer.ui.MapToolbar?>
 <VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.mcworldexplorer.ui.MapViewerController" minWidth="0.0" minHeight="0.0">
     <children>
-        <FlowPane hgap="8.0" vgap="8.0" alignment="CENTER_LEFT" styleClass="map-toolbar">
+        <MapToolbar fx:id="mapToolbar" hgap="8.0" vgap="8.0" alignment="CENTER_LEFT" styleClass="map-toolbar">
             <children>
                 <HBox alignment="CENTER_LEFT" spacing="7.0">
                     <Label text="维度" styleClass="muted-text"/>
                     <ComboBox fx:id="dimensionComboBox" disable="true" prefWidth="160.0" minWidth="100.0"/>
                 </HBox>
                 <MenuButton fx:id="locateMenuButton" text="定位" mnemonicParsing="false">
+                    <graphic><FontIcon iconLiteral="fth-crosshair" iconSize="16"/></graphic>
                     <items>
                         <MenuItem text="查看已保存范围…" onAction="#handleSavedRange"/>
+                        <Menu fx:id="myPlacesMenu" text="我的地点"/>
                         <SeparatorMenuItem/>
                         <CustomMenuItem hideOnClick="false">
                             <content>
@@ -35,13 +40,21 @@
                               onAction="#handleViewerMode" text="三维选区" styleClass="mode-switch"/>
                 <Button fx:id="resourceSettingsButton" text="资源与插件…" mnemonicParsing="false" onAction="#handleResourceSettings"/>
                 <MenuButton fx:id="moreMenuButton" text="工具" mnemonicParsing="false">
+                    <fx:define><ToggleGroup fx:id="themeGroup"/></fx:define>
                     <items>
                         <CustomMenuItem hideOnClick="false">
                             <content>
                                 <VBox spacing="8.0" prefWidth="245.0" styleClass="popover-content">
-                                    <Label text="导出地图" styleClass="section-title"/>
-                                    <Button fx:id="exportButton" disable="true" mnemonicParsing="false"
-                                            onAction="#handleExport" text="导出当前视口 PNG" maxWidth="Infinity"/>
+                                    <Label text="地图导出" styleClass="section-title"/>
+                                    <MenuButton fx:id="exportButton" text="导出地图 PNG" maxWidth="Infinity"
+                                                mnemonicParsing="false" styleClass="png-export-menu">
+                                        <items>
+                                            <MenuItem fx:id="viewportExportItem" disable="true" onAction="#handleExport" text="导出当前视口"/>
+                                            <MenuItem fx:id="surfaceExportItem" disable="true" onAction="#handleSurfaceExport" text="导出指定范围地表…"/>
+                                            <SeparatorMenuItem/>
+                                            <MenuItem onAction="#handleOpenExportFolder" text="打开导出文件夹"/>
+                                        </items>
+                                    </MenuButton>
                                     <Separator/>
                                     <Label text="缓存维护" styleClass="section-title"/>
                                     <Button fx:id="clearCacheButton" disable="true" mnemonicParsing="false"
@@ -50,10 +63,18 @@
                                 </VBox>
                             </content>
                         </CustomMenuItem>
+                        <SeparatorMenuItem/>
+                        <MenuItem fx:id="resourceSettingsItem" text="资源与插件…" visible="false" onAction="#handleResourceSettings"/>
+                        <Menu text="外观" fx:id="appearanceMenu">
+                            <items>
+                                <RadioMenuItem fx:id="lightThemeItem" text="浅色" toggleGroup="$themeGroup"/>
+                                <RadioMenuItem fx:id="darkThemeItem" text="深色" toggleGroup="$themeGroup"/>
+                            </items>
+                        </Menu>
                     </items>
                 </MenuButton>
             </children>
-        </FlowPane>
+        </MapToolbar>
         <VBox fx:id="viewerSelectionBar" managed="false" visible="false" spacing="8.0" styleClass="viewer-selection-bar">
             <FlowPane alignment="CENTER_LEFT" hgap="8.0" vgap="6.0">
                 <HBox alignment="CENTER_LEFT" spacing="6.0">
@@ -102,7 +123,7 @@
                 </content>
             </TitledPane>
         </VBox>
-        <StackPane VBox.vgrow="ALWAYS" minHeight="160.0" styleClass="map-surface">
+        <StackPane fx:id="mapSurface" VBox.vgrow="ALWAYS" minHeight="160.0" styleClass="map-surface">
             <children>
                 <StackPane fx:id="viewportHost" minHeight="0.0" minWidth="0.0" styleClass="map-viewport"/>
                 <ToggleButton fx:id="viewerAreasButton" text="已加载区域 · 0" mnemonicParsing="false"
@@ -135,17 +156,37 @@
                                         <ToggleButton fx:id="portalMarkerButton" selected="true" text="传送门"/>
                                     </FlowPane>
                                     <Label text="传送门仅显示已加载区块内的结果。" wrapText="true" styleClass="muted-text"/>
+                                    <SavedPlacesPanel fx:id="savedPlacesPanel" maxWidth="280.0"/>
                                 </VBox>
                             </content>
                         </CustomMenuItem>
                     </items>
                 </MenuButton>
-                <VBox fx:id="mapZoomControls" alignment="BOTTOM_RIGHT" spacing="5.0" maxWidth="80.0" maxHeight="-Infinity" StackPane.alignment="BOTTOM_RIGHT">
+                <VBox fx:id="mapZoomControls" alignment="BOTTOM_RIGHT" spacing="5.0" maxWidth="36.0" maxHeight="-Infinity" StackPane.alignment="BOTTOM_RIGHT">
                     <StackPane.margin><Insets bottom="16.0" right="16.0"/></StackPane.margin>
-                    <Button text="＋" mnemonicParsing="false" onAction="#handleZoomIn" maxWidth="Infinity" accessibleText="放大地图" styleClass="map-overlay-control"/>
-                    <Button text="−" mnemonicParsing="false" onAction="#handleZoomOut" maxWidth="Infinity" accessibleText="缩小地图" styleClass="map-overlay-control"/>
-                    <Button text="重置" mnemonicParsing="false" onAction="#handleReset" maxWidth="Infinity" styleClass="map-overlay-control"/>
+                    <Button onAction="#handleZoomIn" maxWidth="Infinity" accessibleText="放大地图" styleClass="map-overlay-control">
+                        <graphic><FontIcon iconLiteral="fth-plus" iconSize="16"/></graphic>
+                        <tooltip><Tooltip text="放大地图"/></tooltip>
+                    </Button>
+                    <Button onAction="#handleZoomOut" maxWidth="Infinity" accessibleText="缩小地图" styleClass="map-overlay-control">
+                        <graphic><FontIcon iconLiteral="fth-minus" iconSize="16"/></graphic>
+                        <tooltip><Tooltip text="缩小地图"/></tooltip>
+                    </Button>
+                    <Button onAction="#handleReset" maxWidth="Infinity" accessibleText="重置地图视图" styleClass="map-overlay-control">
+                        <graphic><FontIcon iconLiteral="fth-rotate-ccw" iconSize="16"/></graphic>
+                        <tooltip><Tooltip text="重置地图视图"/></tooltip>
+                    </Button>
                 </VBox>
+                <HBox fx:id="exportNotice" spacing="8" alignment="CENTER_LEFT" visible="false" managed="false"
+                      minWidth="0" maxWidth="320" maxHeight="-Infinity" StackPane.alignment="BOTTOM_RIGHT"
+                      styleClass="export-notice">
+                    <StackPane.margin><Insets left="12" right="106" bottom="16"/></StackPane.margin>
+                    <VBox spacing="2" minWidth="0" HBox.hgrow="ALWAYS">
+                        <Label text="已导出当前视口" styleClass="section-title"/>
+                        <Label fx:id="exportNoticeFile" minWidth="0" maxWidth="Infinity"/>
+                    </VBox>
+                    <Button fx:id="exportNoticeFolder" text="打开文件夹" mnemonicParsing="false" minWidth="-Infinity"/>
+                </HBox>
             </children>
         </StackPane>
         <Label fx:id="statusLabel" text="选择存档后浏览地图" wrapText="true" minHeight="0.0"

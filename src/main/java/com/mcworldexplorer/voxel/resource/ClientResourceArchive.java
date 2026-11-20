@@ -111,6 +111,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
 
     @Override public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return Optional.of(fingerprint.path().toString());}
     public Metadata metadata() { return metadata; }
+    @Override public int baseResourceFormat(){return metadata.resourcePackVersion();}
     @Override public Optional<String> baseClientVersion(){return Optional.of(metadata.versionId());}
     synchronized long bytesRead(){return readBytes;}
     private final java.util.LinkedHashMap<String,Optional<RegistrationClass>> clientClasses=new java.util.LinkedHashMap<>(16,.75f,true);
@@ -135,6 +136,12 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
     }
 
     public Fingerprint fingerprint() { return fingerprint; }
+
+    @Override public synchronized boolean hasBaseTexture(ResourceLocation id) throws IOException {
+        validate();
+        ZipEntry entry = zip.getEntry(id.entryName(ResourceLocation.Kind.TEXTURE));
+        return entry != null && !entry.isDirectory();
+    }
 
     public synchronized Optional<byte[]> read(ResourceLocation.Kind kind, ResourceLocation id) throws IOException {
         if (closed) throw new ResourceAccessException(CLOSED, "客户端资源读取器已关闭");
@@ -177,13 +184,20 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
             if (nameChars > MAX_INDEX_NAME_CHARS) throw new ResourceAccessException(LIMIT_EXCEEDED, "资源索引名称总量超过上限");
             if (names.size() >= MAX_ENTRIES) throw new ResourceAccessException(LIMIT_EXCEEDED, "资源条目超过 100000 个上限");
             if (!names.add(name)) throw new ResourceAccessException(INVALID_ARCHIVE, "资源文件包含重复条目");
-            if (name.length() > 1024 || name.startsWith("/") || name.indexOf('\\') >= 0
-                    || name.indexOf(':') >= 0 || name.chars().anyMatch(c -> c < 32))
+            if (name.length() > 1024 || name.startsWith("/"))
                 throw new ResourceAccessException(INVALID_ARCHIVE, "资源文件包含非法条目路径");
-            String path = entry.isDirectory() ? name.substring(0, name.length() - 1) : name;
-            for (String segment : path.split("/", -1)) {
-                if (segment.isEmpty() || segment.equals(".") || segment.equals(".."))
+            int segmentStart=0;
+            for(int i=0;i<=name.length();i++) {
+                if(i<name.length()) {
+                    char c=name.charAt(i);
+                    if(c<' ' || c=='\\' || c==':')
+                        throw new ResourceAccessException(INVALID_ARCHIVE, "资源文件包含非法条目路径");
+                    if(c!='/')continue;
+                } else if(entry.isDirectory()) break;
+                int length=i-segmentStart;
+                if(length==0 || (length<=2 && name.charAt(segmentStart)=='.' && (length==1 || name.charAt(segmentStart+1)=='.')))
                     throw new ResourceAccessException(INVALID_ARCHIVE, "资源文件包含越界或别名路径");
+                segmentStart=i+1;
             }
         }
     }

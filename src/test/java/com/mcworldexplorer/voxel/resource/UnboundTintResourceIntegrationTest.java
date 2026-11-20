@@ -77,11 +77,10 @@ class UnboundTintResourceIntegrationTest {
         try (var instance = InstanceResourceSource.open(path(fixture, "dailyWorld"), path(fixture, "dailyClient"), "1.21.1", null, CancellationSignal.NONE, ignored -> {})) {
             witnesses.add(leafWitness(instance, state("biomesoplenty:willow_leaves", "distance", "1", "persistent", "false", "waterlogged", "false", "mossy", "false"), "BiomesOPlenty"));
             var stock = state("create:stock_link", "face", "floor", "facing", "west", "powered", "false", "waterlogged", "false");
-            var rejected = BlockTextureSet.load(instance, List.of(stock), CancellationSignal.NONE, core());
-            assertNull(rejected.surfaces(stock));
-            assertTrue(rejected.fallbackReason(stock).contains("neoforge:composite"), rejected.fallbackReason(stock));
-            // Composite is not admitted in the core; the former nested shade rejection is now unreachable here.
-            witnesses.add(Map.of("rawId", stock.name(), "geometryReady", false, "reason", rejected.fallbackReason(stock)));
+            var stockTextures = BlockTextureSet.load(instance, List.of(stock), CancellationSignal.NONE, core());
+            assertNotNull(stockTextures.surfaces(stock),stockTextures.fallbackReason(stock));
+            assertFalse(stockTextures.surfaces(stock).isEmpty());
+            witnesses.add(Map.of("rawId", stock.name(), "geometryReady", true));
             instance.validateAll();
         }
         report("real-resource-witnesses", witnesses);

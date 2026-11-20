@@ -6,7 +6,15 @@ import java.util.Optional;
 /** Read-only asset lookup boundary, independent of client, Mod or pack containers. */
 public interface BlockResourceSource {
     Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id) throws IOException;
+    /** Probe a renderer's texture layout before applying pack overrides. Standalone sources own their layout. */
+    default boolean hasBaseTexture(ResourceLocation id) throws IOException {
+        return read(ResourceLocation.Kind.TEXTURE,id).isPresent();
+    }
     Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id) throws IOException;
+    /** All effective copies of one data resource, ordered from lowest to highest pack priority. */
+    default java.util.List<String> dataLayers(ResourceLocation id)throws IOException {
+        return readJson(ResourceLocation.Kind.RAW_DATA,id).stream().toList();
+    }
     ClientResourceArchive.Fingerprint fingerprint();
     default Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return Optional.empty();}
     /** Bounded exact-folder JSON IDs, including their .json suffix. No arbitrary host paths. */
@@ -21,6 +29,8 @@ public interface BlockResourceSource {
     default Optional<Boolean> baseDataRegistry(String directory)throws IOException{return Optional.empty();}
     /** Explicit selected base-client capability (DECISION-020), kept separate from Mod registration lookup. */
     default Optional<String> baseClientVersion(){return Optional.empty();}
+    /** Resource format of the selected base client, independent of enabled pack overlays. */
+    default int baseResourceFormat(){return -1;}
     /** Actual saved world seed; absence never implies zero. Included in source identity. */
     default Optional<Long> worldSeed()throws IOException{return Optional.empty();}
     /** Selected instance's biomeBlendRadius (0..7), including the verified game default when absent. */

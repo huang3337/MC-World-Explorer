@@ -43,6 +43,10 @@ public final class PreviewRequestResolver {
                     floorToInt(world.getPlayerZ()),
                     PreviewCenterSource.PLAYER_POSITION);
         }
+        if (world.isSpawnPositionAvailable()
+                && dimension.id().equals(WorldDimension.normalizeId(world.getSpawnDimension()))) {
+            return new PreviewCenter(world.getSpawnX(), world.getSpawnZ(), PreviewCenterSource.WORLD_SPAWN);
+        }
         return new PreviewCenter(0, 0, PreviewCenterSource.DIMENSION_ORIGIN);
     }
 

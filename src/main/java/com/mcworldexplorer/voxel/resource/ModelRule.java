@@ -18,7 +18,7 @@ public interface ModelRule {
      * Combined-state UV-lock (composite / NeoForge elements) remains explicitly unsupported. */
     enum RootTransformMode { NONE, ELEMENTS, COMPOSITE }
     /** Shared game biome resolvers; selecting a block's handler belongs to registration protocols. */
-    enum BiomeColor { GRASS, FOLIAGE, WATER }
+    enum BiomeColor { GRASS, FOLIAGE, WATER, DRY_FOLIAGE }
     default RootTransformMode rootTransformMode(){return RootTransformMode.NONE;}
     /** Whether the host fills unset part material hints from this model's context. Composite children
      * bake in their own model context and must opt out instead of receiving the outer hint. */
@@ -65,7 +65,7 @@ public interface ModelRule {
         default JsonObject blockstate(ResourceLocation id)throws IOException,Failure{throw new Failure(Reason.UNSUPPORTED_MODEL,"宿主未提供生成资源读取服务");}
         /** Standard multipart condition against this context's exact state properties. */
         default boolean matches(JsonElement condition)throws Failure{throw new Failure(Reason.UNSUPPORTED_MODEL,"宿主未提供条件匹配服务");}
-        /** A standard apply/variant, using its own absolute rotations and fixed-first random policy. */
+        /** A standard apply/variant, using its own rotations and, for position-dependent rules, the client's weighted selection. */
         default List<Part> apply(JsonElement application)throws IOException,Failure{throw new Failure(Reason.UNSUPPORTED_MODEL,"宿主未提供variant解析服务");}
         /** Resolve an embedded ordinary blockstate using this state/context and shared bounds. */
         default List<Part> blockstateParts(JsonObject definition)throws IOException,Failure{throw new Failure(Reason.UNSUPPORTED_MODEL,"宿主未提供普通blockstate组合服务");}

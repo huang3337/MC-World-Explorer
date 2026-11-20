@@ -15,6 +15,56 @@ public final class PortableSettings {
     private static final String SETTINGS_FILE_NAME = "settings.properties";
     private static final String CUSTOM_SAVES_PATH = "custom_saves_path";
     private static final String VIEWER_PERFORMANCE_PROFILE = "viewer_performance_profile";
+    private static final String APPEARANCE = "appearance";
+
+    public RuntimePreferences loadRuntimePreferences() throws IOException {
+        return RuntimePreferences.read(loadProperties());
+    }
+
+    public boolean gpuResetPending(String executable) throws IOException {
+        return gpuResetPending(loadProperties(), executable);
+    }
+
+    private static boolean gpuResetPending(Properties values, String executable) {
+        String target = values.getProperty("map_gpu_reset");
+        return "true".equals(target) || executable.equalsIgnoreCase(target);
+    }
+
+    public boolean hasLegacyGpuPreference() throws IOException {
+        var values = loadProperties();
+        return RuntimePreferences.read(values).requestsGpu() && !"session".equals(values.getProperty("map_gpu_scope"));
+    }
+
+    public void markGpuSessionPreference(RuntimePreferences selected) throws IOException {
+        updateIf(values -> {
+            if (!selected.equals(RuntimePreferences.read(values)) || "session".equals(values.getProperty("map_gpu_scope"))) return false;
+            values.setProperty("map_gpu_scope", "session");
+            return true;
+        });
+    }
+
+    public void finishGpuReset(String executable) throws IOException {
+        updateIf(values -> gpuResetPending(values, executable) && values.remove("map_gpu_reset") != null);
+    }
+
+    public void savePreferences(RuntimePreferences runtime, boolean dark, String profile, Path changedRoot)
+            throws IOException {
+        update(values -> {
+            runtime.write(values);
+            values.setProperty(APPEARANCE, dark ? "dark" : "light");
+            values.setProperty(VIEWER_PERFORMANCE_PROFILE, profile);
+            if (changedRoot != null) values.setProperty(CUSTOM_SAVES_PATH, changedRoot.toAbsolutePath().normalize().toString());
+        });
+    }
+
+    public boolean usesDarkTheme() throws IOException {
+        return "dark".equals(loadProperties().getProperty(APPEARANCE));
+    }
+
+    public void saveDarkTheme(boolean dark) throws IOException {
+        update(properties -> properties.setProperty(APPEARANCE, dark ? "dark" : "light"));
+    }
+
     public Optional<Path> loadCustomSavesPath() throws IOException {
         Path settingsFile = settingsFile();
         if (!Files.isRegularFile(settingsFile)) {
@@ -38,11 +88,9 @@ public final class PortableSettings {
             throw new IllegalArgumentException("selectedPath must not be null");
         }
 
-        Properties properties = loadProperties();
-        properties.setProperty(
+        update(properties -> properties.setProperty(
                 CUSTOM_SAVES_PATH,
-                selectedPath.toAbsolutePath().normalize().toString());
-        saveProperties(properties);
+                selectedPath.toAbsolutePath().normalize().toString()));
     }
 
     public Optional<String> loadViewerPerformanceProfile() throws IOException {
@@ -56,9 +104,7 @@ public final class PortableSettings {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("viewer performance profile must not be blank");
         }
-        Properties properties = loadProperties();
-        properties.setProperty(VIEWER_PERFORMANCE_PROFILE, value.trim());
-        saveProperties(properties);
+        update(properties -> properties.setProperty(VIEWER_PERFORMANCE_PROFILE, value.trim()));
     }
 
     public Optional<Path> loadClientResourcePath(Path world, String version) throws IOException {
@@ -69,11 +115,11 @@ public final class PortableSettings {
     }
 
     public synchronized void saveClientResourcePath(Path world, String version, Path path) throws IOException {
-        Properties properties = loadProperties();
         String key = resourceKey(world, version);
-        if (path == null) properties.remove(key);
-        else properties.setProperty(key, path.toAbsolutePath().normalize().toString());
-        saveProperties(properties);
+        update(properties -> {
+            if (path == null) properties.remove(key);
+            else properties.setProperty(key, path.toAbsolutePath().normalize().toString());
+        });
     }
 
     public Optional<Path> loadResourceInstancePath(Path world,String version)throws IOException {
@@ -82,14 +128,16 @@ public final class PortableSettings {
         try{return Optional.of(Path.of(value).toAbsolutePath().normalize());}catch(InvalidPathException invalid){throw new IOException("资源实例绑定无效",invalid);}
     }
     public synchronized void saveResourceInstancePath(Path world,String version,Path path)throws IOException {
-        Properties properties=loadProperties();String key="instance."+resourceKey(world,version);
-        if(path==null)properties.remove(key);else properties.setProperty(key,path.toAbsolutePath().normalize().toString());saveProperties(properties);
+        String key="instance."+resourceKey(world,version);
+        update(properties -> {
+            if(path==null)properties.remove(key);else properties.setProperty(key,path.toAbsolutePath().normalize().toString());
+        });
     }
 
     /** Reset both choices together, preserving other worlds, versions and preferences. */
     public synchronized void clearResourceBindings(Path world,String version)throws IOException {
-        Properties properties=loadProperties();String key=resourceKey(world,version);
-        properties.remove(key);properties.remove("instance."+key);saveProperties(properties);
+        String key=resourceKey(world,version);
+        update(properties -> { properties.remove(key);properties.remove("instance."+key); });
     }
 
     private static String resourceKey(Path world, String version) {
@@ -113,12 +161,19 @@ public final class PortableSettings {
             return properties;
         }
         try (InputStream input = Files.newInputStream(settingsFile)) {
-            properties.load(input);
+            try { properties.load(input); }
+            catch (IllegalArgumentException invalid) { throw new IOException("本地配置格式无效", invalid); }
         }
         return properties;
     }
 
-    private static void saveProperties(Properties properties) throws IOException {
+    private static void update(java.util.function.Consumer<Properties> change) throws IOException {
+        updateIf(values -> { change.accept(values); return true; });
+    }
+
+    private static synchronized void updateIf(java.util.function.Predicate<Properties> change) throws IOException {
+        Properties properties = loadProperties();
+        if (!change.test(properties)) return;
         Path configDirectory = PortablePaths.configDirectory();
         Files.createDirectories(configDirectory);
         Path settingsFile = settingsFile();

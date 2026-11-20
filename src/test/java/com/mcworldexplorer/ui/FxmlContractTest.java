@@ -23,6 +23,11 @@ class FxmlContractTest {
             assertNotNull(input,resource);document=factory.newDocumentBuilder().parse(input);
         }
         String namespace="http://javafx.com/fxml/1";
+        List<String> imports = new ArrayList<>();
+        for (var node = document.getFirstChild(); node != null; node = node.getNextSibling()) {
+            if (node instanceof org.w3c.dom.ProcessingInstruction instruction && instruction.getTarget().equals("import"))
+                imports.add(instruction.getData().trim());
+        }
         var controller=Class.forName(document.getDocumentElement().getAttributeNS(namespace,"controller"),false,getClass().getClassLoader());
         Map<String,Element> ids=new HashMap<>();var nodes=document.getElementsByTagName("*");
         for(int i=0;i<nodes.getLength();i++){
@@ -46,13 +51,15 @@ class FxmlContractTest {
                 assertEquals("include",included.getLocalName());continue;
             }
             assertNotNull(element,"missing injected element: "+field.getName());
-            Class<?> type=type(element.getTagName());
+            Class<?> type=type(element.getTagName(), imports);
             assertTrue(field.getType().isAssignableFrom(type),field.getName()+" expects "+field.getType()+" but FXML constructs "+type);
         }
     }
-    private static Class<?> type(String tag)throws ClassNotFoundException {
-        for(String prefix:List.of("javafx.scene.control.","javafx.scene.layout.","javafx.scene.image.")){
-            try{return Class.forName(prefix+tag,false,FxmlContractTest.class.getClassLoader());}catch(ClassNotFoundException ignored){ }
+    private static Class<?> type(String tag, List<String> imports)throws ClassNotFoundException {
+        for (String name : imports) {
+            if (name.endsWith(".*")) name = name.substring(0, name.length() - 1) + tag;
+            else if (!name.endsWith("." + tag)) continue;
+            try{return Class.forName(name,false,FxmlContractTest.class.getClassLoader());}catch(ClassNotFoundException ignored){ }
         }
         throw new ClassNotFoundException(tag);
     }

@@ -28,7 +28,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class VoxelPreviewCoordinator implements AutoCloseable {
-    public static final String RENDER_VERSION = "v074-open-rules-r6-target-index";
+    public static final String RENDER_VERSION = "v075-model-protocol-4";
 
     private final ExecutorService executor;
     private final ViewerSceneCache cache;
@@ -163,23 +163,33 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
     }
 
     public List<ViewerAreaKey> validateCachedAreas() {
+        return validateCachedAreas(null, null, null, CancellationSignal.NONE);
+    }
+
+    private List<ViewerAreaKey> validateCachedAreas(Path world, String dimension, String verifiedIdentity,
+                                                    CancellationSignal cancel) {
         List<ViewerAreaKey> valid = new ArrayList<>();
         Path path;
         String version;
         long revision;Path instance;ModelRuleRegistry rules;
         synchronized (this) { path = resourcePath; version = resourceVersion; revision = resourceRevision;instance=resourceInstance;rules=modelRules; }
         java.util.Map<Path,String> identities=new java.util.HashMap<>();
+        if (verifiedIdentity != null) identities.put(world, verifiedIdentity);
         for (ViewerAreaKey key : cache.keys()) {
+            if (cancel.isCancelled()) throw new java.util.concurrent.CancellationException();
+            if (world != null && (!world.equals(key.world()) || !dimension.equals(key.dimensionId()))) continue;
             RegionSourceSignature signature = null;
             try {
                 String identity=identities.get(key.world());
-                if(identity==null)try(var archive=path==null?null:InstanceResourceSource.open(key.world(),path,version,instance,CancellationSignal.NONE,message->{})) {
+                if(identity==null)try(var archive=path==null?null:InstanceResourceSource.open(key.world(),path,version,instance,cancel,message->{})) {
                     identity=renderIdentity(archive,rules);identities.put(key.world(),identity);
                 }
                 if (key.renderVersion().equals(identity)) signature = signatureProvider.capture(key);
             }
+            catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
             catch (Exception ignored) { /* Remove invalid entries only if this resource selection is still current. */ }
             synchronized (this) {
+                if (cancel.isCancelled()) throw new java.util.concurrent.CancellationException();
                 if (closed || revision != resourceRevision) return List.of();
                 if (signature != null && cache.get(key, signature).isPresent()) valid.add(key);
                 else cache.remove(key);
@@ -189,7 +199,16 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
     }
 
     public List<ViewerCachedArea> validateCachedPreviews() {
-        var valid = java.util.Set.copyOf(validateCachedAreas());
+        return validateCachedPreviews(null, null, null, CancellationSignal.NONE);
+    }
+
+    public List<ViewerCachedArea> validateCachedPreviews(Path world, String dimension, CancellationSignal cancel) {
+        return validateCachedPreviews(Objects.requireNonNull(world), Objects.requireNonNull(dimension), null, cancel);
+    }
+
+    private List<ViewerCachedArea> validateCachedPreviews(Path world, String dimension, String verifiedIdentity,
+                                                           CancellationSignal cancel) {
+        var valid = java.util.Set.copyOf(validateCachedAreas(world, dimension, verifiedIdentity, cancel));
         return cache.previews().stream().filter(preview -> valid.contains(preview.key())).toList();
     }
 
@@ -295,8 +314,11 @@ public final class VoxelPreviewCoordinator implements AutoCloseable {
         }
         report(request, new ViewerProgress(
                 ViewerProgressStage.PREPARING_WINDOW, 0, 0, "正在准备三维窗口"));
+        // This request has just validated its effective resources. Other areas still need a region check.
+        var key = request.key;
+        var previews = validateCachedPreviews(key.world(), key.dimensionId(), key.renderVersion(), request);
         ViewerTaskResult result = new ViewerTaskResult(
-                request.request(), snapshot, fromCache, failedChunks);
+                request.request(), snapshot, fromCache, failedChunks, previews);
         window.show(new ViewerWindowContent(title(request.request()), snapshot),
                 new ViewerWindow.Completion() {
                     @Override

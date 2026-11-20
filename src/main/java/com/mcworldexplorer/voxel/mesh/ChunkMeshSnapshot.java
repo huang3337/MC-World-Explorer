@@ -34,7 +34,7 @@ public record ChunkMeshSnapshot(
         int actualBlocks = batches.stream().mapToInt(MeshBatch::blockCount).sum();
         int actualFaces = batches.stream().mapToInt(MeshBatch::faceCount).sum();
         int actualVertices = batches.stream().mapToInt(MeshBatch::vertexCount).sum();
-        int actualIndices = batches.stream().mapToInt(batch -> batch.indices().length).sum();
+        int actualIndices = batches.stream().mapToInt(MeshBatch::indexCount).sum();
         if (blockCount != actualBlocks || faceCount != actualFaces
                 || vertexCount != actualVertices || indexCount != actualIndices) {
             throw new IllegalArgumentException("snapshot statistics do not match mesh batches");

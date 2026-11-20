@@ -44,7 +44,7 @@ class ChunkNbtDecoderTest {
         var wrapped=CompoundBinaryTag.builder().putString("","minecraft:stone").build();
         var object=CompoundBinaryTag.builder().putString("id","minecraft:oak_log").put("properties",CompoundBinaryTag.builder().putString("axis","z").build()).build();
         long[] data=new long[256];data[0]=0x10;
-        root=CompoundBinaryTag.builder().put("sections",sections(section(0,palette(wrapped,object),data))).build();
+        root=CompoundBinaryTag.builder().putInt("DataVersion",5023).put("sections",sections(section(0,palette(wrapped,object),data))).build();
         var chunk=ChunkNbtDecoder.read(stream(root),0,0).chunk();assertEquals(new BlockState("minecraft:oak_log",Map.of("axis","z")),chunk.blockState(1,0,0));
         assertEquals(4095,chunk.sections().getFirst().usedStateCounts().get(new BlockState("minecraft:stone",Map.of())));
     }
@@ -52,6 +52,52 @@ class ChunkNbtDecoderTest {
         var conflict=CompoundBinaryTag.builder().putString("Name","minecraft:stone").putString("id","minecraft:dirt").build();
         var root=CompoundBinaryTag.builder().put("sections",sections(section(0,palette(conflict),new long[0]))).build();
         assertEquals(ChunkDecodeException.Reason.INVALID_PALETTE,assertThrows(ChunkDecodeException.class,()->ChunkNbtDecoder.read(stream(root),0,0)).reason());
+    }
+
+    @Test void restoresOnlyOmittedVanillaPropertiesAtSceneDecodeTime() throws Exception {
+        var upper = CompoundBinaryTag.builder().putString("id", "tall_seagrass")
+                .put("properties", CompoundBinaryTag.builder().putString("half", "upper").build()).build();
+        var stairs = CompoundBinaryTag.builder().putString("id", "minecraft:oak_stairs")
+                .put("properties", CompoundBinaryTag.builder().putString("facing", "west").build()).build();
+        var palette = palette(CompoundBinaryTag.builder().putString("", "minecraft:deepslate").build(),
+                CompoundBinaryTag.builder().putString("id", "tall_seagrass").build(), upper, stairs,
+                CompoundBinaryTag.builder().putString("id","minecraft:grass_block").build(),
+                CompoundBinaryTag.builder().putString("id","author:grass_block").build());
+        long[] indices = new long[256];
+        indices[0] = 0x543210;
+        for (int version : List.of(3465, 3955, 5023)) {
+            var root = CompoundBinaryTag.builder().putInt("DataVersion", version)
+                    .put("sections", sections(section(0, palette, indices))).build();
+            var scene = ChunkNbtDecoder.read(stream(root)).chunk();
+            var surface = ChunkNbtDecoder.readSurface(stream(root)).chunk();
+            var deepslate = scene.blockState(0,0,0);
+            var explicit = new BlockState("minecraft:deepslate", Map.of("axis","y"));
+            assertEquals(explicit, deepslate);
+            assertEquals(explicit.hashCode(), deepslate.hashCode());
+            assertEquals(version, deepslate.savedForm().dataVersion());
+            assertTrue(deepslate.savedProperties().isEmpty());
+            assertEquals("lower", scene.blockState(1,0,0).properties().get("half"));
+            assertEquals("upper", scene.blockState(2,0,0).properties().get("half"));
+            assertEquals(Map.of("facing","west","half","bottom","shape","straight","waterlogged","false"),
+                    scene.blockState(3,0,0).properties());
+            assertEquals(Map.of("facing","west"), scene.blockState(3,0,0).savedProperties());
+            var olderShape = CompoundBinaryTag.builder().putString("Name", "minecraft:oak_stairs")
+                    .put("Properties", stairs.getCompound("properties")).build();
+            assertEquals(scene.blockState(3,0,0), new BlockPaletteDecoder(version,true).read(olderShape,0,0));
+            assertEquals(Map.of("snowy","false"), scene.blockState(4,0,0).properties());
+            assertTrue(scene.blockState(5,0,0).properties().isEmpty());
+            assertEquals(new BlockState("minecraft:tall_seagrass", Map.of()), surface.blockState(1,0,0));
+        }
+        var missing = new BlockPaletteDecoder(999999, true).read(stairs, 0, 0);
+        assertEquals(Map.of("facing","west"), missing.properties());
+        assertEquals(false, missing.savedForm().defaultsKnown());
+    }
+    @Test void savedRedstoneUsesTheRegisteredPowerOnlyWhenThePaletteOmitsIt()throws Exception {
+        var decoder=new BlockPaletteDecoder(3465,true);
+        var wire=CompoundBinaryTag.builder().putString("Name","minecraft:redstone_wire");
+        assertEquals("0",decoder.read(wire.build(),0,0).properties().get("power"));
+        wire.put("Properties",CompoundBinaryTag.builder().putString("power","11").build());
+        assertEquals("11",decoder.read(wire.build(),0,0).properties().get("power"));
     }
     @Test void readsModernAndLegacyVisualEntitiesAndRejectsSilentTruncation() throws Exception {
         var entity=CompoundBinaryTag.builder().putInt("x",1).putInt("y",0).putInt("z",2).putString("id","minecraft:sign").putString("Text1","Hello").put("Items",ListBinaryTag.empty()).build();

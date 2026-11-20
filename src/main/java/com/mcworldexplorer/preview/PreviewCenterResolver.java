@@ -22,7 +22,7 @@ public final class PreviewCenterResolver {
                     PreviewCenterSource.PLAYER_RESPAWN);
         }
 
-        if (worldInfo.isSpawnPositionAvailable()) {
+        if (worldInfo.isSpawnPositionAvailable() && isOverworld(worldInfo.getSpawnDimension())) {
             return new PreviewCenter(
                     worldInfo.getSpawnX(),
                     worldInfo.getSpawnZ(),

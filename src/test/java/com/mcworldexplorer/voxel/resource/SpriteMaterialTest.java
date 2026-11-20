@@ -15,14 +15,57 @@ class SpriteMaterialTest {
     private static final String ELEMENT="{\"from\":[0,0,0],\"to\":[16,16,0],\"faces\":{\"north\":{\"texture\":\"#alias\"}}}";
     private static String model(String binding,String element){return "{\"textures\":{\"alias\":\"#p\",\"p\":"+binding+"},\"elements\":["+element+"]}";}
     private static BlockResourceSource source(String model,Map<String,String> extra)throws Exception {
+        return source(model,extra,35);
+    }
+    private static BlockResourceSource source(String model,Map<String,String> extra,int format)throws Exception {
         var image=new BufferedImage(1,1,BufferedImage.TYPE_INT_ARGB);image.setRGB(0,0,0xFFFFFFFF);var png=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(image,"png",png);
         Map<String,String> entries=new HashMap<>(extra);entries.put(MODEL,model);entries.putIfAbsent("assets/unregistered/blockstates/fixture.json","{\"variants\":{\"\":{\"model\":\"unregistered:block/fixture\"}}}");
         return new BlockResourceSource(){
+            public int baseResourceFormat(){return format;}
             public ClientResourceArchive.Fingerprint fingerprint(){return new ClientResourceArchive.Fingerprint(Path.of("sprite-fixture"),1,1,"fixture");}
             public Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id){return kind==ResourceLocation.Kind.TEXTURE&&id.toString().equals("unregistered:paint")?Optional.of(png.toByteArray()):Optional.empty();}
             public Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id){return Optional.ofNullable(entries.get(id.entryName(kind)));}
         };
     }
+    @Test void readsBothInstalledLampModelsWithTheBaseClientsEmissionSemantics() throws Exception {
+        String location=System.getenv("MCWE_WEIGHTED_MOD_WORLD");
+        org.junit.jupiter.api.Assumptions.assumeTrue(location!=null);
+        Path world=Path.of(location), instance=world.getParent().getParent();
+        var fixtures=Map.of(
+                new BlockState("bits_n_bobs:lightbulb",Map.of("cage","true","facing","up","forced_on","true","power","15")),
+                "bits_n_bobs:block/lightbulb/lightbulb_on",
+                new BlockState("cluttered:pastel_light",Map.of("facing","east","place_state","floor","waterlogged","false")),
+                "cluttered:block/pastel_light");
+        try(var source=InstanceResourceSource.open(world,instance.resolve(instance.getFileName()+".jar"),
+                "1.21.1",instance,CancellationSignal.NONE,s->{})){
+            assertEquals(34,source.baseResourceFormat());
+            var resolver=new BlockModelResolver(source);
+            for(var entry:fixtures.entrySet()){
+                var id=ResourceLocation.parse(entry.getValue());
+                var raw=source.readJson(ResourceLocation.Kind.MODEL,id).orElseThrow();
+                var elements=com.google.gson.JsonParser.parseString(raw).getAsJsonObject().getAsJsonArray("elements");
+                assertTrue(elements.asList().stream().map(e->e.getAsJsonObject())
+                        .anyMatch(e->e.has("light_emission")&&e.get("light_emission").getAsInt()==15));
+                var result=resolver.resolve(entry.getKey());
+                assertTrue(result.resolved(),result.detail());
+                var part=result.model().orElseThrow().parts().getFirst();
+                assertEquals(id,part.id());
+                assertFalse(part.faces().isEmpty());
+                assertTrue(part.faces().stream().allMatch(face->face.material().minimumLight()==0));
+            }
+        }
+    }
+
+    @Test void elementEmissionSuppliesAMinimumForEveryFace() throws Exception {
+        String element=ELEMENT.replace("\"from\":","\"light_emission\":9,\"from\":")
+                .replace("\"texture\":","\"neoforge_data\":{\"block_light\":12,\"sky_light\":1},\"texture\":");
+        var source=source(model("\"unregistered:paint\"",element),Map.of());
+        var material=new BlockModelResolver(source).resolve(STATE).model().orElseThrow().faces().getFirst().material();
+        assertEquals(12,material.blockLight());assertEquals(9,material.skyLight());
+        var older=source(model("\"unregistered:paint\"",element),Map.of(),34);
+        assertEquals(1,new BlockModelResolver(older).resolve(STATE).model().orElseThrow().faces().getFirst().material().skyLight());
+    }
+
     private static int pixel(BlockTextureSet textures){var surface=textures.surfaces(STATE).getFirst();double u=0,v=0;for(int i=0;i<4;i++){u+=surface.uv().get(i*2)/4;v+=surface.uv().get(i*2+1)/4;}return textures.atlas().pixels()[(int)(v*textures.atlas().height())*textures.atlas().width()+(int)(u*textures.atlas().width())];}
     @Test void objectSpriteBindingKeepsItsForcedPassThroughAliasesAndPlainChildrenOverrideIt()throws Exception {
         String parent=model("{\"sprite\":\"unregistered:paint\",\"force_translucent\":true}",ELEMENT);

@@ -18,6 +18,10 @@ public final class ChunkSectionView {
         return section.contains(blockName);
     }
 
+    java.util.Optional<String> uniformBlockName() {
+        return section.uniformState().map(com.mcworldexplorer.voxel.data.BlockState::name);
+    }
+
     public String blockName(int localX, int localY, int localZ)
             throws SurfaceSamplingException {
         try {

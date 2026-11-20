@@ -55,6 +55,8 @@ class PreviewRendererTest {
     @Test
     void blockColorsAreStableAndMarkUnknownBlocks() {
         BlockColorPalette.BlockColor water = BlockColorPalette.resolve("minecraft:water");
+        assertEquals(0xB84A3E, BlockColorPalette.resolve("minecraft:redstone_block").rgb());
+        assertEquals(0x777A7C, BlockColorPalette.resolve("minecraft:stone").rgb());
         BlockColorPalette.BlockColor unknownFirst = BlockColorPalette.resolve("example:moon_dust");
         BlockColorPalette.BlockColor unknownSecond = BlockColorPalette.resolve("example:moon_dust");
 

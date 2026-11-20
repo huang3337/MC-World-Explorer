@@ -24,8 +24,8 @@ public final class VoxelSceneResult {
             throw new IllegalArgumentException("mesh time must not be negative");
         }
         this.snapshot = snapshot;
-        this.targetStatuses = Collections.unmodifiableNavigableMap(
-                new TreeMap<>(targetStatuses));
+        var ordered = new TreeMap<>(targetStatuses);
+        this.targetStatuses = Collections.unmodifiableNavigableMap(ordered);
         this.meshNanos = meshNanos;
         this.cancelled = cancelled;
     }

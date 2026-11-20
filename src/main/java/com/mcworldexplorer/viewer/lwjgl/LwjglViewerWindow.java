@@ -6,6 +6,7 @@ import com.mcworldexplorer.voxel.render.lwjgl.LwjglSceneRenderer;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.windows.WindowsLibrary;
 
 import java.nio.IntBuffer;
 import java.util.Objects;
@@ -52,6 +53,9 @@ import static org.lwjgl.opengl.GL11.glEnable;
 import static org.lwjgl.opengl.GL11.glViewport;
 
 public final class LwjglViewerWindow implements ViewerWindow {
+    private static volatile String lastDevice = "尚未打开三维窗口";
+
+    public static String lastDevice() { return lastDevice; }
     private static final int DEFAULT_WIDTH = 1280;
     private static final int DEFAULT_HEIGHT = 800;
 
@@ -73,6 +77,8 @@ public final class LwjglViewerWindow implements ViewerWindow {
     private java.util.List<String> targetLines = java.util.List.of();
     private ViewerLoadedArea loadedArea;
     private long lastFrameNanos;
+    private DrawState lastDraw;
+    private ViewerOrbitCameraState.CameraPose lastTargetPose;
     private long window;
     private boolean glfwInitialized;
     private boolean capabilitiesCreated;
@@ -200,10 +206,13 @@ public final class LwjglViewerWindow implements ViewerWindow {
         if (window == 0) {
             throw new IllegalStateException("无法创建 OpenGL 3.3 Core 三维窗口");
         }
+        disablePreviewIme(window);
         glfwMakeContextCurrent(window);
         glfwSwapInterval(1);
         GL.createCapabilities();
         capabilitiesCreated = true;
+        lastDevice = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER)
+                + " · OpenGL " + org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_VERSION);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
@@ -213,6 +222,7 @@ public final class LwjglViewerWindow implements ViewerWindow {
             return false;
         }
         controller = new GlfwViewerOrbitController(window, content.snapshot().bounds());
+        org.lwjgl.glfw.GLFW.glfwSetWindowRefreshCallback(window, handle -> lastDraw = null);
         loadedArea = new ViewerLoadedArea(content.snapshot());
         overlay = new ViewerNavigationOverlay();
         targetOverlay = new ViewerNavigationOverlay();
@@ -222,6 +232,20 @@ public final class LwjglViewerWindow implements ViewerWindow {
         glfwShowWindow(window);
         glfwFocusWindow(window);
         return true;
+    }
+
+    private static void disablePreviewIme(long window) {
+        if (org.lwjgl.glfw.GLFW.glfwGetPlatform() != org.lwjgl.glfw.GLFW.GLFW_PLATFORM_WIN32) return;
+        // The preview takes navigation keys. Detach only its HWND from the Windows input context.
+        try (var imm = new WindowsLibrary(java.nio.file.Path.of(System.getenv("SystemRoot"), "System32", "imm32.dll").toString())) {
+            long associate = imm.getFunctionAddress("ImmAssociateContext");
+            if (associate != 0) {
+                long hwnd = org.lwjgl.glfw.GLFWNativeWin32.glfwGetWin32Window(window);
+                org.lwjgl.system.JNI.callPPP(hwnd, 0L, associate);
+            }
+        } catch (RuntimeException | LinkageError unavailable) {
+            org.slf4j.LoggerFactory.getLogger(LwjglViewerWindow.class).warn("无法关闭三维窗口的输入法", unavailable);
+        }
     }
 
     private void initializeGlfw() {
@@ -248,18 +272,29 @@ public final class LwjglViewerWindow implements ViewerWindow {
             int framebufferWidth = width.get(0);
             int framebufferHeight = height.get(0);
             if (framebufferWidth <= 0 || framebufferHeight <= 0) {
+                lastDraw = null;
                 org.lwjgl.glfw.GLFW.glfwWaitEventsTimeout(.05); return;
+            }
+            var navigation = controller.navigation();
+            var pose = navigation.pose();
+            var scaleX = stack.mallocFloat(1); var scaleY = stack.mallocFloat(1);
+            org.lwjgl.glfw.GLFW.glfwGetWindowContentScale(window, scaleX, scaleY);
+            var draw = new DrawState(pose, controller.state().distance(), navigation.controls(),
+                    navigation.speed(), framebufferWidth, framebufferHeight, scaleY.get(0));
+            boolean queryTarget = !pose.equals(lastTargetPose) && (lastTargetPose == null
+                    || now - lastTargetNanos >= 33_000_000L);
+            if (draw.equals(lastDraw) && !queryTarget) {
+                // Input/expose wakes the owner immediately. Bound the wait for queued scene commands.
+                org.lwjgl.glfw.GLFW.glfwWaitEventsTimeout(.05);
+                lastFrameNanos = System.nanoTime();
+                return;
             }
             glViewport(0, 0, framebufferWidth, framebufferHeight);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            var navigation = controller.navigation();
-            var viewProjection = ViewerCameraMatrices.viewProjection(navigation.pose(), controller.state().distance(), framebufferWidth, framebufferHeight);
+            var viewProjection = ViewerCameraMatrices.viewProjection(pose, draw.distance(), framebufferWidth, framebufferHeight);
             renderer.draw(viewProjection);
-            var scaleX = stack.mallocFloat(1); var scaleY = stack.mallocFloat(1);
-            org.lwjgl.glfw.GLFW.glfwGetWindowContentScale(window, scaleX, scaleY);
-            String status = loadedArea.notice(navigation.pose()) + (navigation.orbitMode() ? "" : " · 速度 " + Math.round(navigation.speed()) + " 格/秒");
-            if (now-lastTargetNanos >= 33_000_000L || targetLines.isEmpty()) {
-                var pose = navigation.pose();
+            String status = loadedArea.notice(pose) + (navigation.orbitMode() ? "" : " · 速度 " + Math.round(draw.speed()) + " 格/秒");
+            if (queryTarget) {
                 var query = targets.query(pose.eyeX(),pose.eyeY(),pose.eyeZ(),
                         pose.focusX()-pose.eyeX(),pose.focusY()-pose.eyeY(),pose.focusZ()-pose.eyeZ());
                 if (!query.sameTarget(previousTarget)) {
@@ -268,15 +303,19 @@ public final class LwjglViewerWindow implements ViewerWindow {
                 }
                 previousTarget = query;
                 lastTargetNanos = now;
+                lastTargetPose = pose;
             }
             targetOutline.draw(viewProjection, targetBounds, framebufferWidth, framebufferHeight);
-            overlay.draw(framebufferWidth, framebufferHeight, scaleY.get(0), navigation.controls(), status, true);
+            overlay.draw(framebufferWidth, framebufferHeight, draw.scale(), draw.controls(), status, true);
             targetOverlay.drawTarget(framebufferWidth,framebufferHeight,scaleY.get(0),targetLines);
             glfwSwapBuffers(window);
+            lastDraw = draw;
         }
     }
 
     private void resetTargets(com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot snapshot) {
+        lastDraw = null;
+        lastTargetPose = null;
         targets = new com.mcworldexplorer.voxel.mesh.VoxelTargetIndex(snapshot);
         targetAnchorX = snapshot.anchorWorldX(); targetAnchorZ = snapshot.anchorWorldZ(); targetBounds = null;
         targetLines = java.util.List.of(); previousTarget = null; lastTargetNanos = 0;
@@ -331,6 +370,9 @@ public final class LwjglViewerWindow implements ViewerWindow {
             }
         }
     }
+
+    private record DrawState(ViewerOrbitCameraState.CameraPose pose, double distance, String controls,
+                             double speed, int width, int height, float scale) {}
 
     private sealed interface Command permits ShowCommand, CloseCommand, ClearCommand {
     }

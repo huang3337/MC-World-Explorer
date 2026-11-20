@@ -127,7 +127,7 @@ public final class ModelPluginStore implements AutoCloseable {
     }
     private ModelPluginCatalog catalog(State data,Map<ResourceLocation,ExternalModelPlugin> running){
         var plugins=new ArrayList<ModelPlugin>();
-        for(var entry:builtin.entries())plugins.add(new ModelPlugin(){public Descriptor descriptor(){return entry.descriptor();}public String contentFingerprint(){return entry.contentFingerprint();}public Collection<? extends ModelRule> rules(){return entry.rules();}});
+        for(var entry:builtin.entries())plugins.add(new ModelPlugin(){public Descriptor descriptor(){return entry.descriptor();}public String contentFingerprint(){return entry.contentFingerprint();}public Collection<? extends ModelRule> rules(){return entry.rules();}public Collection<TintLayer> tintLayers(){return entry.tintLayers();}});
         for(var entry:data.packages.entrySet()){
             var worker=running.get(entry.getKey());if(worker!=null){plugins.add(worker);continue;}
             var installed=entry.getValue();plugins.add(new ModelPlugin(){public Descriptor descriptor(){return installed.manifest.plugin();}public String contentFingerprint(){return installed.hash;}public Collection<? extends ModelRule> rules(){return List.of();}});

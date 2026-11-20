@@ -24,7 +24,7 @@ final class ChunkSurfaceSummary {
 
     ChunkSurfaceSummary(ChunkSurface surface, List<MapMarker> markers, String markerDiagnostic) {
         Arrays.fill(identities, (short) -1);
-        Map<String, Short> ids = new HashMap<>();
+        Map<String, Integer> firstColumns = new HashMap<>();
         List<String> names = new ArrayList<>();
         int populated = 0;
         long bytes = 8192; // 数组、BitSet、对象、缓存键与容器的保守基础估算。
@@ -32,19 +32,22 @@ final class ChunkSurfaceSummary {
             var column = surface.getColumn(x, z);
             if (column.isEmpty()) continue;
             var value = column.orElseThrow();
-            Short id = ids.get(value.blockName());
-            if (id == null) {
-                id = (short) names.size();
-                ids.put(value.blockName(), id);
+            int index = x + z * 16;
+            Integer first = firstColumns.get(value.blockName());
+            if (first == null) {
+                identities[index] = (short) names.size();
+                firstColumns.put(value.blockName(), index);
                 names.add(value.blockName());
                 bytes += 64L + 2L * value.blockName().length();
+                var color = BlockColorPalette.resolve(value.blockName());
+                colors[index] = color.rgb();
+                unknown.set(index, !color.known());
+            } else {
+                identities[index] = identities[first];
+                colors[index] = colors[first];
+                unknown.set(index, unknown.get(first));
             }
-            int index = x + z * 16;
-            identities[index] = id;
             heights[index] = value.y();
-            var color = BlockColorPalette.resolve(value.blockName());
-            colors[index] = color.rgb();
-            if (!color.known()) unknown.set(index);
             populated++;
         }
         this.palette = List.copyOf(names);

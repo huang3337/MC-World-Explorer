@@ -35,12 +35,13 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     private final Path world,explicit;
     private final List<InstanceResourceLocator.Layer> selection;
     private final List<String> selectionWarnings;
-    private final List<Stamp> selectedStamps=new ArrayList<>();
+    private final Set<Stamp> selectedStamps=new LinkedHashSet<>();
     private final Map<Path,Stamp> selectedByPath=new HashMap<>();
     private final List<Descriptor> descriptors=new ArrayList<>();
     private final List<Descriptor> registrationSources=new ArrayList<>();
     private final List<Path> launchInputs;
     private final Optional<String> loaderGameVersion;
+    private final Optional<String> loaderPlatform;
     private final String selectedLoaderProblem;
     private final Map<Path,Stamp> launchStamps=new LinkedHashMap<>();
     private final Set<Path> missingLaunchInputs=new LinkedHashSet<>();
@@ -95,21 +96,22 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
             Consumer<String> progress)throws IOException {
         this.client=client;this.nestedAccess=nestedAccess;this.world=world;this.explicit=explicit;this.cancel=Objects.requireNonNull(cancel);Objects.requireNonNull(progress);
         var located=new InstanceResourceLocator().locate(world,explicit,cancel);instance=located.instance();selection=located.layers();selectionWarnings=located.warnings();warnings.addAll(located.warnings());
-        launchInputs=located.launchInputs();loaderGameVersion=located.loaderGameVersion();selectedLoaderProblem=located.loaderProblem();
+        launchInputs=located.launchInputs();loaderGameVersion=located.loaderGameVersion();loaderPlatform=located.loaderPlatform();selectedLoaderProblem=located.loaderProblem();
         MessageDigest identity=digest();update(identity,"instance-resource-source:core-resources-v5");update(identity,client.fingerprint().toString());update(identity,instance.map(Path::toString).orElse("detached"));for(String warning:located.warnings())update(identity,warning);
 
-        update(identity,"loader-game:"+loaderGameVersion);update(identity,"launch-problem:"+selectedLoaderProblem);
+        update(identity,"loader-game:"+loaderGameVersion);update(identity,"loader-platform:"+loaderPlatform);update(identity,"launch-problem:"+selectedLoaderProblem);
+        byte[] hashBuffer=new byte[64*1024];
         for(var input:launchInputs){
             update(identity,input.toString());
             if(Files.exists(input,LinkOption.NOFOLLOW_LINKS)){
                 try{var stamp=Stamp.capture(input);launchStamps.put(input,stamp);
                     if(stamp.directory()||stamp.size()>(input.toString().endsWith(".jar")?MAX_CONTAINER:2*1024*1024))throw new IOException("启动协议输入不是预算内的文件");
-                    hashFile(input,identity);stamp.validate();
+                    hashFile(input,identity,hashBuffer);stamp.validate();
                 }catch(IOException invalid){throw new IOException("启动配置输入不可读："+invalid.getMessage(),invalid);}
             }
             else{missingLaunchInputs.add(input);update(identity,"absent");}
         }
-        var biomeInputs=new ArrayList<Path>();biomeInputs.add(world.resolve("level.dat"));instance.ifPresent(path->biomeInputs.add(path.resolve("options.txt")));
+        var biomeInputs=new ArrayList<Path>();biomeInputs.add(world.resolve("level.dat"));biomeInputs.add(world.resolve(WorldDataPacks.SEPARATE_SETTINGS));instance.ifPresent(path->biomeInputs.add(path.resolve("options.txt")));
         for(var path:biomeInputs){if(Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS))biomeInputStamps.put(path,Stamp.capture(path));else if(!Files.exists(path,LinkOption.NOFOLLOW_LINKS))missingBiomeInputs.add(path);}
         biomeSettings=BiomeColorSettings.read(instance);update(identity,"biome-settings:"+biomeSettings);if(!biomeSettings.problem().isEmpty())warn(biomeSettings.problem());
         int index=0;
@@ -119,7 +121,7 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
             update(identity,path.toString());update(identity,layer.prefix());update(identity,layer.packId());update(identity,Integer.toString(layer.nested().size()));for(String item:layer.nested())update(identity,item);
             try {
                 var selected=Stamp.capture(path);selectedStamps.add(selected);selectedByPath.putIfAbsent(path,selected);
-                var descriptor=index(path,layer.prefix(),layer.nested());descriptors.add(descriptor);update(identity,descriptor.hash());
+                var descriptor=index(selected,layer.prefix(),layer.nested(),hashBuffer);descriptors.add(descriptor);update(identity,descriptor.hash());
                 if(layer.prefix().isEmpty()&&(layer.packId().equals("mod")||layer.packId().startsWith("nested:")))registrationSources.add(descriptor);
                 for(String namespace:descriptor.namespaces())namespaces.computeIfAbsent(namespace,ignored->new ArrayList<>()).add(descriptor);
             }catch(ResourceAccessException failure){if(failure.reason()==LIMIT_EXCEEDED)throw failure;warn("资源来源不可用："+path.getFileName()+"（"+failure.getMessage()+"）");update(identity,"unavailable:"+path);}
@@ -134,7 +136,7 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
             dataSelection.dimensions().types().entrySet().stream().sorted(Comparator.comparing(e->e.getKey().toString())).forEach(e->{update(identity,e.getKey().toString());update(identity,e.getValue().toString());});
             for(var layer:dataSelection.layers()){
                 var stamp=Stamp.capture(layer.path());selectedStamps.add(stamp);selectedByPath.putIfAbsent(layer.path(),stamp);
-                var descriptor=index(layer.path(),layer.prefix(),layer.nested());dataSources.add(descriptor);update(identity,layer.toString());update(identity,descriptor.hash());
+                var descriptor=index(stamp,layer.prefix(),layer.nested(),hashBuffer);dataSources.add(descriptor);update(identity,layer.toString());update(identity,descriptor.hash());
             }
         }catch(IOException invalid){dataProblem=invalid.getMessage();warn("数据注册来源不可用："+dataProblem);update(identity,"data-unavailable:"+dataProblem);}
         for(var source:registrationSources){
@@ -168,12 +170,12 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return Optional.ofNullable(provenance.get(kind+":"+id));}
     @Override public ClientResourceArchive.Fingerprint fingerprint(){return fingerprint;}
 
-    private Descriptor index(Path path,String prefix,List<String> nested)throws IOException {
-        check();var stamp=Stamp.capture(path);String contentHash=null;IndexKey cacheKey=null;
+    private Descriptor index(Stamp stamp,String prefix,List<String> nested,byte[] hashBuffer)throws IOException {
+        check();Path path=stamp.path();String contentHash=null;IndexKey cacheKey=null;
         if(!stamp.directory()) {
             if(stamp.size()>MAX_CONTAINER)throw limit("资源归档超过 1 GiB");
             // 每个新来源仍完整计算SHA；属性相同也不能绕过内容身份校验。
-            contentHash=physicalHash(stamp);cacheKey=new IndexKey(contentHash,prefix,nested);
+            contentHash=physicalHash(stamp,hashBuffer);cacheKey=new IndexKey(contentHash,prefix,nested);
             CachedIndex cached;synchronized(INDEX_CACHE){cached=INDEX_CACHE.get(cacheKey);}
             if(cached!=null){
                 applyIndexBudget(cached.budgetEntries(),cached.budgetChars());stamp.validate();check();
@@ -192,7 +194,7 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
 
                     if(!name.startsWith("assets/")&&!name.startsWith("data/"))continue;budgetName(name);
                     if(name.indexOf('\\')>=0||name.contains("/../")||name.contains("/./")||name.chars().anyMatch(c->c<32))throw new IOException("嵌套素材路径无效");
-                    if(Files.isRegularFile(item)){indexedEntries.add(name);namespace(name).ifPresent(names::add);}
+                    if(Files.isRegularFile(item)){indexedEntries.add(name);collectNamespace(name,names);}
                 }
             }
             update(hash,contentHash);for(String entry:nested)update(hash,entry);
@@ -207,25 +209,25 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
                         else if(Files.isRegularFile(entry,LinkOption.NOFOLLOW_LINKS)) {
                             Stamp file=Stamp.capture(entry);if(!entry.toRealPath().startsWith(path))throw new IOException("资源包文件越界");
                             addSize(file.size());if(file.size()>MAX_CONTAINER)throw limit("单资源文件超过 1 GiB");
-                            files.put(relative,file);indexedEntries.add(relative);namespace(relative).ifPresent(names::add);
+                            files.put(relative,file);indexedEntries.add(relative);collectNamespace(relative,names);
                         }
                     }
                 }
             }
             Path metadata=path.resolve(prefix+"pack.mcmeta");if(Files.exists(metadata,LinkOption.NOFOLLOW_LINKS)){if(!Files.isRegularFile(metadata,LinkOption.NOFOLLOW_LINKS))throw new IOException("资源包元信息不是普通文件");var meta=Stamp.capture(metadata);if(meta.size()>1024*1024)throw limit("资源包元信息超过1MiB");files.put("pack.mcmeta",meta);}
-            for(var entry:files.entrySet()){update(hash,entry.getKey());if(!entry.getValue().directory())hashFile(entry.getValue().path(),hash);entry.getValue().validate();}
+            for(var entry:files.entrySet()){update(hash,entry.getKey());if(!entry.getValue().directory())hashFile(entry.getValue().path(),hash,hashBuffer);entry.getValue().validate();}
         }else {
             if(stamp.size()>MAX_CONTAINER)throw limit("资源归档超过 1 GiB");
             try(var zip=new ZipFile(path.toFile())) {
-                Set<String> unique=new HashSet<>();var entries=zip.entries();int count=0;
+                var entries=zip.entries();int count=0;
                 while(entries.hasMoreElements()) {
                     if((count++&127)==0)check();
                     if(count>100_000)throw limit("单归档条目超过 100000");
                     var entry=entries.nextElement();String raw=entry.getName();if(!raw.startsWith(prefix))continue;String name=raw.substring(prefix.length());budgetName(name);
                     if(name.startsWith("assets/")||name.startsWith("data/")) {
-                        if(!entry.isDirectory()&&!unique.add(name))throw new IOException("资源归档包含重复素材条目");
+                        if(!entry.isDirectory()&&!indexedEntries.add(name))throw new IOException("资源归档包含重复素材条目");
                         if(name.indexOf('\\')>=0||name.contains("/../")||name.contains("/./")||name.chars().anyMatch(c->c<32))throw new IOException("非法素材路径");
-                        if(!entry.isDirectory()){indexedEntries.add(name);namespace(name).ifPresent(names::add);}
+                        if(!entry.isDirectory())collectNamespace(name,names);
                     }
                 }
             }
@@ -255,18 +257,21 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     }
 
 
-    private String physicalHash(Stamp stamp)throws IOException {
+    private String physicalHash(Stamp stamp,byte[] buffer)throws IOException {
         var known=physicalHashes.get(stamp.path());if(known!=null){stamp.validate();return known;}
-        addSize(stamp.size());var digest=digest();hashFile(stamp.path(),digest);stamp.validate();String value=HexFormat.of().formatHex(digest.digest());physicalHashes.put(stamp.path(),value);return value;
+        addSize(stamp.size());var digest=digest();hashFile(stamp.path(),digest,buffer);stamp.validate();String value=HexFormat.of().formatHex(digest.digest());physicalHashes.put(stamp.path(),value);return value;
     }
     private void addSize(long size)throws IOException {totalSize=Math.addExact(totalSize,size);if(totalSize>MAX_TOTAL)throw limit("实例资源总大小超过 8 GiB");}
     private void budgetName(String name)throws IOException {entryCount++;nameChars=Math.addExact(nameChars,name.length());if(entryCount>MAX_ENTRIES||nameChars>MAX_NAME_CHARS||name.length()>2048)throw limit("实例资源索引超过预算");}
-    private static Optional<String> namespace(String entry) {
-        String[] parts=entry.split("/",4);if(parts.length<4)return Optional.empty();
-        try{return Optional.of(new ResourceLocation(parts[1],"probe").namespace());}catch(IllegalArgumentException invalid){return Optional.empty();}
+    private static void collectNamespace(String entry,Set<String> names) {
+        int start=entry.indexOf('/')+1;
+        int end=entry.indexOf('/',start);
+        if(end<=start||entry.indexOf('/',end+1)<0)return;
+        String name=entry.substring(start,end);
+        if(!names.contains(name)&&ResourceLocation.validNamespace(name))names.add(name);
     }
-    private void hashFile(Path file,MessageDigest hash)throws IOException {
-        try(var input=Files.newInputStream(file)){byte[] buffer=new byte[256*1024];int count;long total=0;while((count=input.read(buffer))!=-1){check();total+=count;if(total>MAX_CONTAINER)throw limit("资源在计算指纹期间增长并超过预算");hash.update(buffer,0,count);}}
+    private void hashFile(Path file,MessageDigest hash,byte[] buffer)throws IOException {
+        try(var input=Files.newInputStream(file)){int count;long total=0;while((count=input.read(buffer))!=-1){check();total+=count;if(total>MAX_CONTAINER)throw limit("资源在计算指纹期间增长并超过预算");hash.update(buffer,0,count);}}
     }
     private ZipFile handle(Descriptor descriptor)throws IOException {
         Path path=descriptor.stamp().path();var zip=handles.get(path);if(zip!=null)return zip;
@@ -279,22 +284,45 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
         check();validate();String entry=id.entryName(kind);
         if(kind==ResourceLocation.Kind.RAW_DATA&&dataProblem!=null)throw new ResourceAccessException(INVALID_METADATA,dataProblem,ResourceAccessException.Scope.RESOURCE);
         for(var source:kind==ResourceLocation.Kind.RAW_DATA?dataSources:namespaces.getOrDefault(id.namespace(),List.of())) {
-            if(!source.entries().contains(entry))continue;
-            source.stamp().validate();Optional<byte[]> value;
-            if(!source.nested().isEmpty()) {
-                Path item=nestedAccess.root(source.stamp().path(),source.nested()).resolve(source.prefix()+entry);
-                try(var input=Files.newInputStream(item)){value=Optional.of(bytes(input,Files.size(item),kind.maxBytes()));}
-            }else if(source.stamp().directory()) {
-                var file=source.files().get(entry);if(file==null||file.directory())continue;
-                if(!file.path().toRealPath().startsWith(source.stamp().path()))throw new ResourceAccessException(SOURCE_CHANGED,"目录资源越界");
-                file.validate();try(var input=Files.newInputStream(file.path())){value=Optional.of(bytes(input,file.size(),kind.maxBytes()));}file.validate();
-            }else {
-                var zip=handle(source);var item=zip.getEntry(source.prefix()+entry);if(item==null||item.isDirectory())continue;
-                try(var input=zip.getInputStream(item)){value=Optional.of(bytes(input,item.getSize(),kind.maxBytes()));}
-            }
-            source.stamp().validate();recordOrigin(kind,id,source.stamp().path()+source.nested().stream().map(item->"!/"+item).collect(java.util.stream.Collectors.joining())+(source.prefix().isEmpty()?"":"!/"+source.prefix()));return value;
+            var value=readLayer(source,kind,id,entry);
+            if(value.isPresent())return value;
         }
         var value=client.read(kind,id);if(value.isPresent()){readBytes+=value.orElseThrow().length;if(readBytes>ClientResourceArchive.MAX_SESSION_READ_BYTES)throw limit("组合来源读取超过 64 MiB 会话预算");recordOrigin(kind,id,client.fingerprint().path().toString());}return value;
+    }
+    private Optional<byte[]> readLayer(Descriptor source,ResourceLocation.Kind kind,ResourceLocation id,String entry)throws IOException {
+        if(!source.entries().contains(entry))return Optional.empty();
+        source.stamp().validate();Optional<byte[]> value;
+        if(!source.nested().isEmpty()) {
+            Path item=nestedAccess.root(source.stamp().path(),source.nested()).resolve(source.prefix()+entry);
+            try(var input=Files.newInputStream(item)){value=Optional.of(bytes(input,Files.size(item),kind.maxBytes()));}
+        }else if(source.stamp().directory()) {
+            var file=source.files().get(entry);if(file==null||file.directory())return Optional.empty();
+            if(!file.path().toRealPath().startsWith(source.stamp().path()))throw new ResourceAccessException(SOURCE_CHANGED,"目录资源越界");
+            var batch=modelBatchFiles.get();if(batch!=null)batch.add(file);
+            file.validate();try(var input=Files.newInputStream(file.path())){value=Optional.of(bytes(input,file.size(),kind.maxBytes()));}file.validate();
+        }else {
+            var zip=handle(source);var item=zip.getEntry(source.prefix()+entry);if(item==null||item.isDirectory())return Optional.empty();
+            try(var input=zip.getInputStream(item)){value=Optional.of(bytes(input,item.getSize(),kind.maxBytes()));}
+        }
+        source.stamp().validate();recordOrigin(kind,id,source.stamp().path()+source.nested().stream().map(item->"!/"+item).collect(java.util.stream.Collectors.joining())+(source.prefix().isEmpty()?"":"!/"+source.prefix()));return value;
+    }
+    @Override public List<String> dataLayers(ResourceLocation id)throws IOException {
+        validate();
+        if(dataProblem!=null)throw new ResourceAccessException(INVALID_METADATA,dataProblem,ResourceAccessException.Scope.RESOURCE);
+        var result=new ArrayList<String>();
+        var kind=ResourceLocation.Kind.RAW_DATA;
+        var base=client.read(kind,id);
+        if(base.isPresent()){
+            readBytes+=base.get().length;
+            if(readBytes>ClientResourceArchive.MAX_SESSION_READ_BYTES)throw limit("组合来源读取超过 64 MiB 会话预算");
+            result.add(decodeJson(base.get()));
+        }
+        String entry=id.entryName(kind);
+        for(var source:dataSources.reversed()){
+            var bytes=readLayer(source,kind,id,entry);
+            if(bytes.isPresent())result.add(decodeJson(bytes.get()));
+        }
+        return List.copyOf(result);
     }
     @Override public Set<ResourceLocation> jsonFiles(ResourceLocation.Kind kind,String folder)throws IOException {
         validate();if(kind!=ResourceLocation.Kind.RAW_ASSET&&kind!=ResourceLocation.Kind.RAW_DATA)throw new IllegalArgumentException("JSON枚举仅支持资产或数据");
@@ -315,6 +343,8 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
         new ResourceLocation(id,"check");loadModMetadata();if(id.equals("minecraft"))return Optional.of(true);if(Set.of("forge","neoforge","fabricloader").contains(id))return Optional.empty();return Optional.of(modIds.contains(id));
     }
     @Override public Optional<Boolean> baseDataRegistry(String directory)throws IOException{validate();return client.baseDataRegistry(directory);}
+    @Override public boolean hasBaseTexture(ResourceLocation id)throws IOException{return client.hasBaseTexture(id);}
+    @Override public int baseResourceFormat(){return client.baseResourceFormat();}
     @Override public Optional<String> baseClientVersion(){return client.baseClientVersion();}
     @Override public Optional<Long> worldSeed()throws IOException{
         validate();if(dataSelection==null)throw new ResourceAccessException(INVALID_METADATA,"保存世界元数据不可用："+dataProblem);
@@ -347,7 +377,10 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
         if(readBytes>ClientResourceArchive.MAX_SESSION_READ_BYTES)throw limit("组合来源读取超过 64 MiB 会话预算");
         return result;
     }
-    @Override public Optional<String> platform()throws IOException {loadModMetadata();return Optional.ofNullable(loader);}
+    @Override public Optional<String> platform()throws IOException {
+        if (loaderPlatform.isPresent()) {validate();return loaderPlatform;}
+        loadModMetadata();return Optional.ofNullable(loader);
+    }
     @Override public Optional<String> platform(String modId)throws IOException {
         new ResourceLocation(modId,"check");loadModMetadata();var candidates=modPlatforms.getOrDefault(modId,Set.of());
         if(candidates.size()>1)throw new ResourceAccessException(INVALID_METADATA,"Mod拥有者存在多平台元数据，无法确定生效格式："+modId+" "+candidates.stream().sorted().toList(),ResourceAccessException.Scope.RESOURCE);
@@ -403,11 +436,32 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     @Override public Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id)throws IOException {
         if(kind==ResourceLocation.Kind.TEXTURE)throw new IllegalArgumentException("PNG 不能按 JSON 读取");
         var data=read(kind,id);if(data.isEmpty())return Optional.empty();
-        try{return Optional.of(StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(data.orElseThrow())).toString());}
+        return Optional.of(decodeJson(data.get()));
+    }
+    private static String decodeJson(byte[] bytes)throws IOException {
+        try{return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();}
         catch(CharacterCodingException invalid){throw new ResourceAccessException(INVALID_METADATA,"实例资源 JSON 不是有效 UTF-8",invalid);}
     }
+    // Scene preparation owns this source on its worker thread. Individual reads still verify the
+    // actual file/ZIP before and after access. Check shared launcher inputs once at each boundary.
+    interface ModelBatch extends AutoCloseable { @Override void close() throws IOException; }
+    private final ThreadLocal<Set<Stamp>> modelBatchFiles=new ThreadLocal<>();
+    ModelBatch modelBatch() throws IOException {
+        validate();
+        if(modelBatchFiles.get()!=null)return ()->{};
+        Set<Stamp> files=new HashSet<>();
+        modelBatchFiles.set(files);
+        return ()->{
+            modelBatchFiles.remove();
+            validate();
+            for(var stamp:selectedStamps){check();stamp.validate();}
+            for(var file:files){check();file.validate();}
+        };
+    }
     @Override public void validate()throws IOException {
-        check();if(closed)throw new ResourceAccessException(CLOSED,"实例资源读取器已关闭");client.validate();
+        check();if(closed)throw new ResourceAccessException(CLOSED,"实例资源读取器已关闭");
+        if(modelBatchFiles.get()!=null)return;
+        client.validate();
         for(var stamp:launchStamps.values())stamp.validate();for(var path:missingLaunchInputs)if(Files.exists(path,LinkOption.NOFOLLOW_LINKS))throw new ResourceAccessException(SOURCE_CHANGED,"启动协议输入已出现："+path.getFileName());
         for(var stamp:biomeInputStamps.values())stamp.validate();for(var path:missingBiomeInputs)if(Files.exists(path,LinkOption.NOFOLLOW_LINKS))throw new ResourceAccessException(SOURCE_CHANGED,"保存群系输入已出现："+path.getFileName());
         for(var path:handles.keySet())selectedByPath.get(path).validate();
@@ -416,11 +470,11 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     /** Full manifest checks at request/cache boundaries, avoiding an all-Mod stat scan per model face. */
     public void validateAll()throws IOException {
         validate();for(var stamp:selectedStamps){check();stamp.validate();}
-        for(var source:descriptors){check();source.stamp().validate();for(var file:source.files().values())file.validate();}
-        for(var source:dataSources){check();source.stamp().validate();for(var file:source.files().values())file.validate();}
+        for(var source:descriptors){check();for(var file:source.files().values())file.validate();}
+        for(var source:dataSources){check();for(var file:source.files().values())file.validate();}
         var now=new InstanceResourceLocator().locate(world,explicit,cancel);
         if(!selection.equals(now.layers())||!selectionWarnings.equals(now.warnings()))throw new ResourceAccessException(SOURCE_CHANGED,"实例资源列表或启用顺序发生变化，请重新生成");
-        if(!launchInputs.equals(now.launchInputs())||!loaderGameVersion.equals(now.loaderGameVersion())||!selectedLoaderProblem.equals(now.loaderProblem()))throw new ResourceAccessException(SOURCE_CHANGED,"加载器协议来源或启动配置发生变化");
+        if(!launchInputs.equals(now.launchInputs())||!loaderGameVersion.equals(now.loaderGameVersion())||!loaderPlatform.equals(now.loaderPlatform())||!selectedLoaderProblem.equals(now.loaderProblem()))throw new ResourceAccessException(SOURCE_CHANGED,"加载器协议来源或启动配置发生变化");
         if(!biomeSettings.equals(BiomeColorSettings.read(instance)))throw new ResourceAccessException(SOURCE_CHANGED,"群系混合设置发生变化");
         try{
             var current=WorldDataPacks.locate(world,instance,now.layers().stream().filter(layer->layer.packId().equals("mod")).map(InstanceResourceLocator.Layer::path).distinct().toList(),cancel);

@@ -12,12 +12,24 @@ final class BuiltinBlockModels implements BlockResourceSource {
     private final BlockResourceSource source;
     private final Map<String,BlockEntityData> entities;
     private final Map<ResourceLocation,byte[]> generated=new HashMap<>();
+    private final Map<String,String> rendererTexturePaths=new HashMap<>();
     private final Map<BlockState,Set<String>> notes=new HashMap<>();
     List<String> notes(BlockState state){return List.copyOf(notes.getOrDefault(state,Set.of()));}
-    void note(BlockState state,String detail){notes.computeIfAbsent(state,ignored->new LinkedHashSet<>()).add(detail);}
+    private BlockState noteSource,noteTarget;
+    interface ModelRead {Result get()throws IOException;}
+    Result recordNotes(BlockState physical,BlockState selected,ModelRead action)throws IOException {
+        if(physical.equals(selected))return action.get();
+        var previousSource=noteSource;
+        var previousTarget=noteTarget;
+        noteSource=physical;
+        noteTarget=selected;
+        try{return action.get();}finally{noteSource=previousSource;noteTarget=previousTarget;}
+    }
+    void note(BlockState state,String detail){notes.computeIfAbsent(state.equals(noteSource)?noteTarget:state,ignored->new LinkedHashSet<>()).add(detail);}
 
     BuiltinBlockModels(BlockResourceSource source,Map<String,BlockEntityData> entities){this.source=source;this.entities=Map.copyOf(entities);}
     @Override public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return source.origin(kind,id);}
+    @Override public boolean hasBaseTexture(ResourceLocation id)throws IOException{return source.hasBaseTexture(id);}
     @Override public Set<ResourceLocation> jsonFiles(ResourceLocation.Kind kind,String folder)throws IOException{return source.jsonFiles(kind,folder);}
 
     @Override public Optional<Boolean> hasMod(String id)throws IOException{return source.hasMod(id);}
@@ -26,6 +38,7 @@ final class BuiltinBlockModels implements BlockResourceSource {
     @Override public Optional<String> platform(String modId)throws IOException{return source.platform(modId);}
 
 
+    @Override public int baseResourceFormat(){return source.baseResourceFormat();}
     @Override public Optional<String> baseClientVersion(){return source.baseClientVersion();}
     @Override public Optional<Long> worldSeed()throws IOException{return source.worldSeed();}
     @Override public Optional<Integer> biomeBlendRadius()throws IOException{return source.biomeBlendRadius();}
@@ -34,18 +47,24 @@ final class BuiltinBlockModels implements BlockResourceSource {
     @Override public void validate()throws IOException{source.validate();}
     @Override public ClientResourceArchive.Fingerprint fingerprint(){return source.fingerprint();}
     @Override public Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id)throws IOException{return kind==ResourceLocation.Kind.TEXTURE&&generated.containsKey(id)?Optional.of(generated.get(id)):source.read(kind,id);}
+    @Override public List<String> dataLayers(ResourceLocation id)throws IOException{return source.dataLayers(id);}
     @Override public Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id)throws IOException{return source.readJson(kind,id);}
-    Optional<List<Part>> resolve(BlockState state,Map<String,String> inherited) throws IOException {
+    Optional<List<Part>> resolve(BlockState state) throws IOException {
         var id=ResourceLocation.parse(state.name());if(!id.namespace().equals("minecraft"))return Optional.empty();
         String name=id.path();
         var metadata=entities.get(state.properties().getOrDefault("__mcwe_entity",""));
         if(metadata!=null&&!metadata.visual().getString("__visual_warning").isBlank())note(state,metadata.visual().getString("__visual_warning"));
         List<Face> faces=new ArrayList<>();int x=0,y=facing(state.properties().get("facing"));String renderType=null;
         if(Set.of("air","cave_air","void_air","barrier","light","structure_void").contains(name))return Optional.of(List.of(part(id,faces,0,0,null)));
-        if(name.equals("chest")||name.equals("trapped_chest")||name.equals("ender_chest")) {
+        String copper=CopperBlockModels.finish(name,"copper_chest");
+        String statue=CopperBlockModels.finish(name,"copper_golem_statue");
+        if(statue!=null){
+            return Optional.of(List.of(CopperBlockModels.statue(id,state,statue,y)));
+        }
+        if(copper!=null||name.equals("chest")||name.equals("trapped_chest")||name.equals("ender_chest")) {
             String kind=name.equals("trapped_chest")?"trapped":name.equals("ender_chest")?"ender":"normal";
             String type=state.properties().getOrDefault("type","single"),suffix=type.equals("single")?"":"_"+type;
-            String texture="entity/chest/"+kind+suffix;
+            String texture="entity/chest/"+(copper==null?kind:"copper"+copper)+suffix;
             double left=type.equals("left")?0:1,right=type.equals("right")?16:15,width=right-left;
             box(faces,texture,64,64,left,0,1,right,10,15,0,19,width,10,14);
             box(faces,texture,64,64,left,9,1,right,14,15,0,0,width,5,14);
@@ -96,8 +115,9 @@ final class BuiltinBlockModels implements BlockResourceSource {
             String cloth=entity==null?"entity/banner/base":bannerTexture(state,entity,color).toString();
             int start=faces.size();box(faces,cloth,64,64,1.333,wall?-13:2.667,wall?13.667:8.667,14.667,wall?13.667:29.333,wall?14.333:9.333,0,0,20,40,1);
             if(entity==null)tint(faces,start,dye(color));
-            box(faces,"entity/banner_base",64,64,1.333,wall?12.333:28,wall?14.333:7.333,14.667,wall?13.667:29.333,wall?15.667:8.667,0,42,20,2,2);
-            if(!wall)box(faces,"entity/banner_base",64,64,7.333,0,7.333,8.667,28,8.667,44,0,2,42,2);
+            String support=rendererTexture("banner","banner_base");
+            box(faces,support,64,64,1.333,wall?12.333:28,wall?14.333:7.333,14.667,wall?13.667:29.333,wall?15.667:8.667,0,42,20,2,2);
+            if(!wall)box(faces,support,64,64,7.333,0,7.333,8.667,28,8.667,44,0,2,42,2);
             if(!wall)rotateAll(faces,number(state,"rotation",0)*22.5);
         } else if(name.endsWith("_head")||name.endsWith("_skull")) {
             boolean wall=name.contains("_wall_");String type=name.replace("_wall_head","").replace("_wall_skull","").replace("_head","").replace("_skull","");
@@ -129,18 +149,22 @@ final class BuiltinBlockModels implements BlockResourceSource {
             box(faces,"entity/decorated_pot/decorated_pot_base",32,32,4.8,15.8,4.8,11.2,17.2,11.2,0,5,6,1,6);
         } else if(name.equals("end_portal")||name.equals("end_gateway")) {
             note(state,"传送门使用本地纹理静态预览，未运行客户端动态着色器");
-            box(faces,"entity/end_portal",256,256,0,0,0,16,name.equals("end_portal")?12:16,16,0,0,16,1,16);
+            box(faces,rendererTexture("end_portal","end_portal"),256,256,0,0,0,16,name.equals("end_portal")?12:16,16,0,0,16,1,16);
             renderType="minecraft:translucent";
         } else if(name.equals("water")||name.equals("lava")||name.equals("bubble_column")) {
-            note(state,"流体使用静态首帧和方块液位，流向与相邻液面坡度暂用平面近似");
-            String particle=inherited.getOrDefault("particle","block/water_still");Set<String> visited=new HashSet<>();while(particle.startsWith("#")){if(!visited.add(particle)||visited.size()>128)throw new IOException("流体纹理引用循环或超限");particle=inherited.getOrDefault(particle.substring(1),"block/water_still");}
-            int level=number(state,"level",0);
-            double height=name.equals("bubble_column")||level>=8?16:Math.max(1,16*(8-Math.min(7,level))/9.0);
-            box(faces,particle,16,16,0,0,0,16,height,16,0,0,4,4,4);
-            // A fluid face samples the whole sprite; box-unwrapping is not the fluid material convention.
-            for(int i=0;i<faces.size();i++){var f=faces.get(i);faces.set(i,new Face(f.direction(),f.texture(),new Uv(0,0,16,16),0,-1,f.direction(),f.layer(),f.from(),f.to(),null,false));}
-            if(!name.equals("lava"))tint(faces,0,0x3F76E4);
-            renderType=name.equals("lava")?"minecraft:solid":"mcwe:fluid";
+            boolean lava=name.equals("lava");
+            String fluid=lava?"lava":"water";
+            var still=ResourceLocation.parse("minecraft:block/"+fluid+"_still");
+            var flow=ResourceLocation.parse("minecraft:block/"+fluid+"_flow");
+            double height=16*SavedFluid.ownHeight(state);
+            box(faces,still.toString(),16,16,0,0,0,16,height,16,0,0,4,4,4);
+            for(int i=0;i<faces.size();i++) {
+                var face=faces.get(i);
+                boolean horizontal=face.direction()==Direction.UP||face.direction()==Direction.DOWN;
+                faces.set(i,new Face(face.direction(),horizontal?still:flow,new Uv(0,0,16,16),0,
+                        lava?-1:BlockTintResolver.FLUID_WATER,face.direction(),face.layer(),face.from(),face.to(),null,false));
+            }
+            renderType=lava?"mcwe:lava":"mcwe:fluid";
         } else if(name.equals("moving_piston")) {
             // The stored carried block state, when present, is handled by the entity context below.
             var entity=entities.get(state.properties().getOrDefault("__mcwe_entity",""));
@@ -158,7 +182,7 @@ final class BuiltinBlockModels implements BlockResourceSource {
                         if(direction<0||direction>=directions.length)throw new IOException("移动活塞方向无效");
                         double[] normal=ModelGeometry.normal(directions[direction]);
                         Vec3 offset=new Vec3(normal[0]*distance,normal[1]*distance,normal[2]*distance);
-                        return Optional.of(resolved.model().orElseThrow().parts().stream().map(part->new Part(part.id(),part.xRotation(),part.yRotation(),part.uvLock(),part.faces(),part.renderType(),offset)).toList());
+                        return Optional.of(resolved.model().orElseThrow().parts().stream().map(part->new Part(part.id(),part.xRotation(),part.yRotation(),part.zRotation(),part.uvLock(),part.faces(),part.renderType(),offset)).toList());
                     }
                 }catch(IllegalArgumentException invalid){throw new IOException("移动活塞承载状态无效",invalid);}
             }
@@ -187,6 +211,16 @@ final class BuiltinBlockModels implements BlockResourceSource {
         ResourceLocation texture=store("sign/"+entity.fingerprint()+"/"+back,image);
         faces.add(new Face(back?Direction.SOUTH:Direction.NORTH,texture,new Uv(0,0,16,16),0,-1,null,1000+faces.size(),new Vec3(1,y0,z),new Vec3(15,y1,z),null,false));
     }
+    private String rendererTexture(String family,String texture)throws IOException {
+        String grouped="entity/"+family+"/"+texture;
+        String path=rendererTexturePaths.get(grouped);
+        if(path==null){
+            path=source.hasBaseTexture(ResourceLocation.parse(grouped))?grouped:"entity/"+texture;
+            rendererTexturePaths.put(grouped,path);
+        }
+        return path;
+    }
+
     private ResourceLocation bannerTexture(BlockState state,BlockEntityData entity,String color)throws IOException {
         var bytes=source.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("entity/banner/base"));
         if(bytes.isEmpty())return ResourceLocation.parse("entity/banner/base");

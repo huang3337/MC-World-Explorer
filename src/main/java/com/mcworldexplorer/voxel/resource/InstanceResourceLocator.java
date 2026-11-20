@@ -6,6 +6,7 @@ import com.mcworldexplorer.voxel.io.CancellationSignal;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 
 /** Discovers only the current world's instance. Never searches sibling modpacks. */
@@ -21,10 +22,13 @@ public final class InstanceResourceLocator {
         }
     }
     public record Result(Optional<Path> instance,List<Path> sources,List<String> warnings,List<Layer> layers,
-                         List<Path> launchInputs,Optional<String> loaderGameVersion,String loaderProblem) {
+                         List<Path> launchInputs,Optional<String> loaderGameVersion,Optional<String> loaderPlatform,String loaderProblem) {
+        public Result(Optional<Path> instance,List<Path> sources,List<String> warnings,List<Layer> layers,List<Path> launchInputs,Optional<String> loaderGameVersion,String loaderProblem) {
+            this(instance,sources,warnings,layers,launchInputs,loaderGameVersion,Optional.empty(),loaderProblem);
+        }
         public Result(Optional<Path> instance,List<Path> sources,List<String> warnings){this(instance,sources,warnings,sources.stream().map(path->new Layer(path,"",path.toString())).toList());}
         public Result(Optional<Path> instance,List<Path> sources,List<String> warnings,List<Layer> layers){this(instance,sources,warnings,layers,List.of(),Optional.empty(),"");}
-        public Result {sources=List.copyOf(sources);warnings=List.copyOf(warnings);layers=List.copyOf(layers);launchInputs=List.copyOf(launchInputs);Objects.requireNonNull(loaderGameVersion);Objects.requireNonNull(loaderProblem);}
+        public Result {sources=List.copyOf(sources);warnings=List.copyOf(warnings);layers=List.copyOf(layers);launchInputs=List.copyOf(launchInputs);Objects.requireNonNull(loaderGameVersion);Objects.requireNonNull(loaderPlatform);Objects.requireNonNull(loaderProblem);}
     }
     public Result locate(Path world,Path explicit,CancellationSignal cancel)throws IOException {
         check(cancel);Path realWorld=world.toRealPath();Path instance=null;
@@ -40,7 +44,19 @@ public final class InstanceResourceLocator {
         Path worldPack=realWorld.resolve("resources.zip");if(Files.isRegularFile(worldPack)){sources.add(worldPack);layers.add(new Layer(worldPack,"","world"));}
         if(instance==null)return new Result(Optional.empty(),sources,List.of("未定位存档所属游戏实例，可手动选择实例目录；当前仅使用存档资源与原版"));
         Path mods=instance.resolve("mods");List<Path> jars=List.of();
-        if(Files.isDirectory(mods))try(var files=Files.list(mods)){jars=files.filter(path->Files.isRegularFile(path)&&path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")).sorted(Comparator.comparing(path->path.getFileName().toString())).limit(MAX_MODS+1L).toList();}
+        Set<Path> linkedJars=new HashSet<>();
+        if(Files.isDirectory(mods))try(var files=Files.list(mods.toRealPath())){
+            jars=files.filter(path->{
+                if(!path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))return false;
+                try {
+                    var attributes=Files.readAttributes(path,BasicFileAttributes.class,LinkOption.NOFOLLOW_LINKS);
+                    if(attributes.isRegularFile())return true;
+                    if(attributes.isDirectory()||!Files.isRegularFile(path))return false;
+                    linkedJars.add(path);
+                    return true;
+                }catch(IOException unreadable){return false;}
+            }).sorted(Comparator.comparing(path->path.getFileName().toString())).limit(MAX_MODS+1L).toList();
+        }
         if(jars.size()>MAX_MODS)warnings.add("Mod 归档超过 1024 项，仅索引前 1024 项");jars=jars.subList(0,Math.min(jars.size(),MAX_MODS));
         Path packs=instance.resolve("resourcepacks");Path options=instance.resolve("options.txt");
         if(Files.isRegularFile(options)) {
@@ -82,14 +98,14 @@ public final class InstanceResourceLocator {
             }
         }
         if(jars.size()>1)warnings.add("Mod 重名资源按文件名稳定排序，可能与游戏加载器的覆盖顺序不同");
-        for(int i=jars.size()-1;i>=0;i--){check(cancel);var path=jars.get(i).toRealPath();layers.add(new Layer(path,"","mod"));}
+        for(int i=jars.size()-1;i>=0;i--){check(cancel);var path=jars.get(i);layers.add(new Layer(linkedJars.contains(path)?path.toRealPath():path,"","mod"));}
         layers.addAll(NestedResourcePacks.locate(instance,jars,cancel,warnings));
-        var launch=new LauncherResourceLibraries.Selection(List.of(),List.of(instance.resolve(instance.getFileName()+".json")),Optional.empty(),"");
+        var launch=new LauncherResourceLibraries.Selection(List.of(),List.of(instance.resolve(instance.getFileName()+".json")),Optional.empty(),Optional.empty(),"");
         try{launch=LauncherResourceLibraries.select(instance,cancel,warnings);layers.addAll(launch.resources());}
-        catch(IOException|RuntimeException invalid){if(invalid instanceof java.util.concurrent.CancellationException)throw invalid;String problem="启动依赖资源未完整定位："+invalid.getMessage();warnings.add(problem);launch=new LauncherResourceLibraries.Selection(List.of(),launch.inputs(),Optional.empty(),problem);}
+        catch(IOException|RuntimeException invalid){if(invalid instanceof java.util.concurrent.CancellationException)throw invalid;String problem="启动依赖资源未完整定位："+invalid.getMessage();warnings.add(problem);launch=new LauncherResourceLibraries.Selection(List.of(),launch.inputs(),Optional.empty(),Optional.empty(),problem);}
         layers=new ArrayList<>(new LinkedHashSet<>(layers));
         sources=layers.stream().map(Layer::path).distinct().toList();
-        return new Result(Optional.of(instance.toRealPath()),new ArrayList<>(new LinkedHashSet<>(sources)),warnings,layers,launch.inputs(),launch.gameVersion(),launch.problem());
+        return new Result(Optional.of(instance.toRealPath()),new ArrayList<>(new LinkedHashSet<>(sources)),warnings,layers,launch.inputs(),launch.gameVersion(),launch.platform(),launch.problem());
     }
     private static void check(CancellationSignal cancel){if(cancel.isCancelled()||Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("取消实例资源查找");}
 }

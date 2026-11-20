@@ -1,6 +1,10 @@
 package com.mcworldexplorer.voxel.resource;
 
+import com.mcworldexplorer.voxel.data.SavedFluid;
 import com.mcworldexplorer.voxel.data.BlockState;
+import com.mcworldexplorer.voxel.mesh.RenderLayer;
+import com.mcworldexplorer.voxel.data.ChunkCoordinate;
+import com.mcworldexplorer.voxel.data.ChunkRectangle;
 import com.mcworldexplorer.voxel.io.CancellationSignal;
 import com.mcworldexplorer.voxel.io.ChunkDecodeException;
 import com.mcworldexplorer.voxel.io.VoxelAreaLoadResult;
@@ -18,12 +22,25 @@ public final class BlockTextureSet {
     private static final int MAX_DIAGNOSTIC_TINT_INDICES = 8;
     public record Surface(Direction direction, List<Float> positions, List<Float> uv,
                           List<Float> normal, Direction cullFace, boolean shade,
-                          com.mcworldexplorer.voxel.mesh.RenderLayer layer, int element) {
+                          RenderLayer layer, int element, boolean fluid) {
+        public Surface(Direction direction,List<Float> positions,List<Float> uv,List<Float> normal,Direction cullFace,
+                       boolean shade,RenderLayer layer,int element) {
+            this(direction,positions,uv,normal,cullFace,shade,layer,element,false);
+        }
         public Surface { positions=List.copyOf(positions);uv=List.copyOf(uv);normal=List.copyOf(normal); }
     }
     private record Pending(ModelGeometry.Quad quad, TextureAtlas.Tile tile, boolean shade,
-                           com.mcworldexplorer.voxel.mesh.RenderLayer layer, int element) { }
-    private record Painted(ModelGeometry.Quad quad, BufferedImage image, boolean shade, int element, String renderType) { }
+                           RenderLayer layer, int element, boolean fluid) { }
+    // Mesh preparation needs the target blocks and one adjacent block on each side for occlusion.
+    record LocalBounds(int minX, int minZ, int maxX, int maxZ) {
+        static LocalBounds forNeighbor(ChunkRectangle target, ChunkCoordinate chunk) {
+            return new LocalBounds(chunk.x()<target.minX()?15:0, chunk.z()<target.minZ()?15:0,
+                    chunk.x()>target.maxX()?0:15, chunk.z()>target.maxZ()?0:15);
+        }
+    }
+    private record PaintKey(ResourceLocation texture, int tint, float opacity, int argb, double brightness) { }
+    private record SurfaceKey(List<Float> positions, List<Float> normal, List<Float> uv, boolean shaded, String renderType) { }
+    private record Painted(ModelGeometry.Quad quad, BufferedImage image, boolean shade, int element, String renderType, boolean fluid) { }
     private final Map<BlockState, List<Surface>> models;
     private final VoxelAreaLoadResult contextArea;
     private final ModelRuleRegistry rules;
@@ -35,6 +52,9 @@ public final class BlockTextureSet {
     private final TextureAtlas atlas;
     private final boolean stateLimitReached;
     private final ClientResourceArchive.Fingerprint fingerprint;
+    private Optional<Set<String>> fluidBarriers=Optional.empty();
+    public Optional<Set<String>> fluidBarriers(){return fluidBarriers;}
+    private AreaModelVariants weighted=new AreaModelVariants();
     private BlockTintPreparation tintPreparation=new BlockTintPreparation();
 
     private BlockTextureSet(Map<BlockState, List<Surface>> models, Map<BlockState, String> failures,
@@ -56,20 +76,21 @@ public final class BlockTextureSet {
     public static BlockState visualState(BlockState state,com.mcworldexplorer.voxel.data.BlockEntityData entity) {
         if(entity==null||entity.visual().keySet().stream().allMatch(key->key.equals("id")))return state;
         Map<String,String> properties=new TreeMap<>(state.properties());properties.put("__mcwe_entity",entity.fingerprint());
-        return new BlockState(state.name(),properties);
+        return state.withProperties(properties);
     }
 
     public List<Surface> surfaces(BlockState state) { return models.get(state); }
     /** Returns the actual prepared identity, including declared context dependencies. */
     public BlockState renderState(BlockState state,long x,int y,long z) {
-        if(contextArea==null||!contextualNames.contains(state.name()))return tintPreparation.state(state,x,y,z);
+        if(contextArea==null||!contextualNames.contains(state.name()))return tintPreparation.state(weighted.state(state,x,y,z),x,y,z);
         var context=new ModelBlockContext(contextArea,new ModelBlockContext.Position(x,y,z),CancellationSignal.NONE);
         state=visualState(state,context.at(0,0,0).entity().orElse(null));
+        state=weighted.state(state,x,y,z);
         var dependencies=contextDependencies.get(state);return tintPreparation.state(dependencies==null?state:contextKey(state,context,dependencies),x,y,z);
     }
     static BlockState contextKey(BlockState state,ModelBlockContext context,BlockModelResolver.Dependencies dependencies) {
         Map<String,String> properties=new TreeMap<>(state.properties());properties.put("__mcwe_context",context.signature(dependencies.neighbors(),dependencies.positionDependent(),dependencies.biomeColorDependent()));
-        return new BlockState(state.name(),properties);
+        return state.withProperties(properties);
     }
     public String fallbackReason(BlockState state) {
         return failures.getOrDefault(state, stateLimitReached
@@ -80,21 +101,35 @@ public final class BlockTextureSet {
             VoxelAreaLoadResult area, CancellationSignal cancel)
             throws IOException {return load(archive,area,cancel,ModelRuleRegistry.defaults());}
     public static BlockTextureSet load(BlockResourceSource archive,VoxelAreaLoadResult area,CancellationSignal cancel,ModelRuleRegistry rules)throws IOException {
+        try(var batch=archive instanceof InstanceResourceSource instance ? instance.modelBatch() : null) {
+            return loadArea(archive,area,cancel,rules);
+        }
+    }
+    private static BlockTextureSet loadArea(BlockResourceSource archive,VoxelAreaLoadResult area,CancellationSignal cancel,ModelRuleRegistry rules)throws IOException {
         Set<BlockState> states = new LinkedHashSet<>();
         Map<String,com.mcworldexplorer.voxel.data.BlockEntityData> entities=new HashMap<>();
+        var neighborhood = area.target().expanded(1);
         collect:
         for (var coordinate : area.results().keySet()) {
+            if (!neighborhood.contains(coordinate)) continue;
             check(cancel);
             var result = area.result(coordinate);
             if (result.chunk() == null) continue;
             try {
+                var bounds=LocalBounds.forNeighbor(area.target(),coordinate);
+                boolean hasEntities=!result.chunk().blockEntities().isEmpty();
                 for (var section : result.chunk().sections()) {
+                    var uniform=section.uniformState();
+                    if(!hasEntities && uniform.isPresent()){
+                        check(cancel);
+                        states.add(uniform.get());
+                        if(states.size()>MAX_STATES)break collect;
+                        continue;
+                    }
                     for (int y = 0; y < 16; y++) {
                         check(cancel);
-                        for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+                        for (int z=bounds.minZ(); z<=bounds.maxZ(); z++) for (int x=bounds.minX(); x<=bounds.maxX(); x++) {
                             long wx=(long)coordinate.x()*16+x,wz=(long)coordinate.z()*16+z;
-                            if(wx<(long)area.target().minX()*16-1||wx>(long)area.target().maxX()*16+16
-                                    ||wz<(long)area.target().minZ()*16-1||wz>(long)area.target().maxZ()*16+16)continue;
                             int worldY=section.sectionY()*16+y;
                             var entity=result.chunk().blockEntity(wx,worldY,wz).orElse(null);
                             BlockState state=visualState(section.blockState(x,y,z),entity);
@@ -109,40 +144,67 @@ public final class BlockTextureSet {
                 // Meshing reports this chunk as CORRUPT; keep other target chunks usable.
             }
         }
-        archive=new BuiltinBlockModels(archive,entities);
+        var builtin=new BuiltinBlockModels(archive,entities);
+        archive=builtin;
         var resolver=new BlockModelResolver(archive,rules);
         Map<BlockState,BlockModelResolver.Result> resolved=new LinkedHashMap<>();Set<String> contextual=new HashSet<>();Map<BlockState,BlockModelResolver.Dependencies> dependencies=new HashMap<>();
         int[] retainedFaces={32768};
-        for(var state:states){check(cancel);if(resolved.size()>=MAX_STATES)break;var result=retain(resolver.resolve(state),retainedFaces);resolved.put(state,result);if(result.reason()==BlockModelResolver.Reason.CONTEXT_REQUIRED){contextual.add(state.name());dependencies.put(state,result.dependencies());}}
+        var weighted=new AreaModelVariants();
+        for(var state:states){
+            check(cancel);
+            if(resolved.size()>=MAX_STATES)break;
+            var result=resolver.prepareVariants(state,plan->weighted.register(state,plan));
+            resolved.put(state,retain(result,retainedFaces));
+        }
+        weighted.prepare(area,cancel,resolver,states,resolved,retainedFaces);
+        for(var entry:resolved.entrySet())if(entry.getValue().reason()==BlockModelResolver.Reason.CONTEXT_REQUIRED){
+            contextual.add(entry.getKey().name());dependencies.put(entry.getKey(),entry.getValue().dependencies());
+        }
         if(!contextual.isEmpty()) {
             contexts:
             for(var coordinate:area.results().keySet()) {
+                if (!neighborhood.contains(coordinate)) continue;
+                var bounds=LocalBounds.forNeighbor(area.target(),coordinate);
                 var loaded=area.result(coordinate);if(loaded.chunk()==null)continue;
                 try {
-                    for(var section:loaded.chunk().sections())for(int y=0;y<16;y++) {
-                        check(cancel);
-                        for(int z=0;z<16;z++)for(int x=0;x<16;x++) {
-                            var physical=section.blockState(x,y,z);if(!contextual.contains(physical.name()))continue;
-                            long wx=(long)coordinate.x()*16+x,wz=(long)coordinate.z()*16+z;
-                            if(wx<(long)area.target().minX()*16-1||wx>(long)area.target().maxX()*16+16||wz<(long)area.target().minZ()*16-1||wz>(long)area.target().maxZ()*16+16)continue;
-                            int wy=section.sectionY()*16+y;var entity=loaded.chunk().blockEntity(wx,wy,wz).orElse(null);
-                            var visual=visualState(physical,entity);var context=new ModelBlockContext(area,new ModelBlockContext.Position(wx,wy,wz),cancel);var dependency=dependencies.get(visual);if(dependency==null)continue;var key=contextKey(visual,context,dependency);
-                            if(states.contains(key))continue;
-                            states.add(key);if(states.size()>MAX_STATES)break contexts;
-                            var actual=resolver.resolve(visual,context);
-                            if(!dependency.neighbors().containsAll(actual.dependencies().neighbors())||actual.dependencies().positionDependent()&&!dependency.positionDependent()||actual.dependencies().biomeColorDependent()&&!dependency.biomeColorDependent())
-                                actual=new BlockModelResolver.Result(BlockModelResolver.Reason.INVALID_MODEL,"父规则未声明所选子规则的上下文依赖",Optional.empty(),actual.sources(),actual.fingerprint(),actual.dependencies(),actual.loaders());
-                            resolved.put(key,retain(actual,retainedFaces));
+                    for(var section:loaded.chunk().sections()) {
+                        if(!section.containsAny(contextual))continue;
+                        for(int y=0;y<16;y++) {
+                            check(cancel);
+                            for(int z=bounds.minZ();z<=bounds.maxZ();z++)for(int x=bounds.minX();x<=bounds.maxX();x++) {
+                                var physical=section.blockState(x,y,z);if(!contextual.contains(physical.name()))continue;
+                                long wx=(long)coordinate.x()*16+x,wz=(long)coordinate.z()*16+z;
+                                int wy=section.sectionY()*16+y;var entity=loaded.chunk().blockEntity(wx,wy,wz).orElse(null);
+                                var visual=visualState(physical,entity);var context=new ModelBlockContext(area,new ModelBlockContext.Position(wx,wy,wz),cancel);var selected=weighted.state(visual,wx,wy,wz);var dependency=dependencies.get(selected);if(dependency==null)continue;var key=contextKey(selected,context,dependency);
+                                if(states.contains(key))continue;
+                                states.add(key);if(states.size()>MAX_STATES)break contexts;
+                                var actual=builtin.recordNotes(visual,selected,()->resolver.resolve(visual,context));
+                                if(!dependency.neighbors().containsAll(actual.dependencies().neighbors())||actual.dependencies().positionDependent()&&!dependency.positionDependent()||actual.dependencies().biomeColorDependent()&&!dependency.biomeColorDependent())
+                                    actual=new BlockModelResolver.Result(BlockModelResolver.Reason.INVALID_MODEL,"父规则未声明所选子规则的上下文依赖",Optional.empty(),actual.sources(),actual.fingerprint(),actual.dependencies(),actual.loaders());
+                                resolved.put(key,retain(actual,retainedFaces));
+                            }
                         }
                     }
                 }catch(ChunkDecodeException corrupt){/* Mesher diagnoses the unavailable chunk. */}
             }
         }
-        var tints=BlockTintPreparation.prepare((BuiltinBlockModels)archive,area,cancel,states,resolved,dependencies);
+        Optional<Set<String>> flowTag=Optional.empty();
+        if(states.stream().anyMatch(state->SavedFluid.of(state)!=SavedFluid.NONE)){
+            String problem=null;
+            try {flowTag=new FluidFlowTag(archive).read(ResourceLocation.parse("minecraft:blocks_fluid_flow"));}
+            catch(ResourceAccessException failure){
+                if(failure.scope()!=ResourceAccessException.Scope.RESOURCE)throw failure;
+                problem=failure.getMessage();
+            }catch(IOException | IllegalArgumentException | IllegalStateException invalid){archive.validate();problem=invalid.getMessage();}
+            if(problem!=null)for(var state:states)if(SavedFluid.of(state)!=SavedFluid.NONE)
+                ((BuiltinBlockModels)archive).note(state,"流体阻挡标签不可用，按相邻静态模型估算："+problem);
+        }
+        var tints=BlockTintPreparation.prepare((BuiltinBlockModels)archive,area,cancel,states,resolved,dependencies,weighted,rules);
         var prepared=loadPrepared(archive,states,cancel,rules,resolved,area,dependencies);
-        prepared.tintPreparation=tints;return prepared;
+        prepared.fluidBarriers=flowTag;
+        prepared.weighted=weighted;prepared.tintPreparation=tints;return prepared;
     }
-    private static BlockModelResolver.Result retain(BlockModelResolver.Result result,int[] budget) {
+    static BlockModelResolver.Result retain(BlockModelResolver.Result result,int[] budget) {
         if(!result.resolved())return result;
         int count=result.model().orElseThrow().faces().size();
         if(count>budget[0])return new BlockModelResolver.Result(BlockModelResolver.Reason.LIMIT_EXCEEDED,"区域模型暂存超过32768面预算",Optional.empty(),result.sources(),result.fingerprint(),result.dependencies(),result.loaders());
@@ -169,8 +231,9 @@ public final class BlockTextureSet {
             states.add(state);
         }
         var resolver = new BlockModelResolver(archive,rules);
-        var tintResolver=new BlockTintResolver(archive);
+        var tintResolver=new BlockTintResolver(archive,rules);
         var builder = new TextureAtlas.Builder();
+        Map<TextureAtlas.Tile,RenderLayer> alphaLayers=new HashMap<>();
         Map<ResourceLocation, BufferedImage> images = new HashMap<>();
         Map<BlockState, List<Pending>> pending = new LinkedHashMap<>();
         Map<BlockState, String> failures = new HashMap<>();
@@ -187,7 +250,7 @@ public final class BlockTextureSet {
             if(area==null){var tint=tintResolver.colors(state,result.model().orElseThrow(),null);result=BlockTintResolver.apply(result,tint);BlockTintPreparation.note((BuiltinBlockModels)archive,state,tint.detail());}
             var model = result.model().orElseThrow();
             var logicalProperties=new TreeMap<>(state.properties());logicalProperties.remove("__mcwe_context");
-            var stateNotes=new ArrayList<>(((BuiltinBlockModels)archive).notes(new BlockState(state.name(),logicalProperties)));
+            var stateNotes=new ArrayList<>(((BuiltinBlockModels)archive).notes(state.withProperties(logicalProperties)));
             if(model.fixedFirstAlternative())stateNotes.add("随机候选模型固定选择第一项");
             boolean bakeLighting=model.faces().stream().anyMatch(face->face.material().minimumLight()>0||face.material().shadeDirectionOverride()!=null);
             if(bakeLighting)stateNotes.add("面亮度与方向覆盖应用于静态光照；未模拟世界光照、昼夜变化与环境遮蔽");
@@ -195,12 +258,16 @@ public final class BlockTextureSet {
             String unboundNote=null;
             try {
                 if(model.faces().size()>faceBudget) throw new PreparationFailure("LIMIT_EXCEEDED","本次模型面准备超过 32768 项预算");
-                Map<String,Painted> painted = new LinkedHashMap<>();
-                Map<String,BufferedImage> tintedImages=new HashMap<>();
+                Map<SurfaceKey,Painted> painted = new LinkedHashMap<>();
+                Map<PaintKey,BufferedImage> tintedImages=new HashMap<>();
                 Set<Integer> unboundTintIndices = new TreeSet<>();
                 long workingBytes=0;
                 int elementBase=0;
                 for(var part:model.parts()) {
+                    boolean fluid=("mcwe:fluid".equals(part.renderType())||"mcwe:lava".equals(part.renderType()))
+                            && part.id().namespace().equals("minecraft")
+                            && Set.of("water","bubble_column","lava").contains(part.id().path())
+                            && SavedFluid.of(state)!=SavedFluid.NONE;
                     for(var face:part.faces()) {
                         check(cancel);
                         var quad=ModelGeometry.bake(face,part);
@@ -215,24 +282,29 @@ public final class BlockTextureSet {
                         double brightness=bakeLighting?Math.max(face.material().minimumLight(),face.material().shadeDirectionOverride()!=null?overrideBrightness(face.material().shadeDirectionOverride()):face.shade()?directionalBrightness(quad.normal()):1):1;
                         String renderType=face.material().forceTranslucent()?"minecraft:translucent":part.renderType();
                         boolean shaded=bakeLighting?false:face.shade();
-                        String paintKey=face.texture()+"|"+preparedTint+"|"+face.opacity()+"|"+face.material().argb()+"|"+brightness;
+                        var paintKey=new PaintKey(face.texture(),preparedTint,face.opacity(),face.material().argb(),brightness);
                         BufferedImage tinted=tintedImages.get(paintKey);
                         if(tinted==null){
                             if(workingBytes+bytes>32L*1024*1024)throw new PreparationFailure("LIMIT_EXCEEDED","单状态面纹理工作内存超过 32 MiB 预算");
-                            tinted=composite(sourceImage,preparedTint,null,-1);
-                            applyMaterial(tinted,face.material().argb(),face.opacity(),brightness);
+                            boolean originalColor=preparedTint<0 || (preparedTint & 0xffffff)==0xffffff;
+                            if(originalColor && face.material().argb()==-1 && face.opacity()==1 && brightness==1) {
+                                tinted=sourceImage;
+                            } else {
+                                tinted=composite(sourceImage,preparedTint,null,-1);
+                                applyMaterial(tinted,face.material().argb(),face.opacity(),brightness);
+                            }
                             tintedImages.put(paintKey,tinted);workingBytes+=bytes;
                         }
                         for(var tiled:UvTiling.split(quad)) {
                         BufferedImage base=tinted;quad=tiled;
-                        String key=quad.positions()+"|"+quad.normal()+"|"+quad.uv()+"|"+shaded+"|"+renderType;
+                        var key=new SurfaceKey(quad.positions(),quad.normal(),quad.uv(),shaded,renderType);
                         var previous=painted.get(key);
                         if(previous!=null){
                             long combinedBytes=(long)Math.max(previous.image().getWidth(),base.getWidth())*Math.max(previous.image().getHeight(),base.getHeight())*4;
                             if(workingBytes+combinedBytes>32L*1024*1024)throw new PreparationFailure("LIMIT_EXCEEDED","单状态面纹理工作内存超过 32 MiB 预算");
                             base=composite(previous.image(),-1,base,-1);workingBytes+=combinedBytes;
                         }
-                        painted.put(key,new Painted(quad,base,shaded,previous==null?elementBase+face.layer():previous.element(),renderType));
+                        painted.put(key,new Painted(quad,base,shaded,previous==null?elementBase+face.layer():previous.element(),renderType,fluid));
                         if(painted.size()>faceBudget)throw new PreparationFailure("LIMIT_EXCEEDED","UV 展开后的模型面超过本次 32768 面预算");
                         }
                     }
@@ -243,7 +315,7 @@ public final class BlockTextureSet {
                 for(var paint:painted.values()) {
                     var tile=stateTiles.get(paint.image());
                     if(tile==null){tile=builder.add(imageKey(paint.image()),paint.image());stateTiles.put(paint.image(),tile);}
-                    surfaces.add(new Pending(paint.quad(),tile,paint.shade(),material(paint.image(),paint.renderType()),paint.element()));
+                    surfaces.add(new Pending(paint.quad(),tile,paint.shade(),material(paint.image(),paint.renderType(),tile,alphaLayers),paint.element(),paint.fluid()));
                 }
                 faceBudget-=surfaces.size();
                 pending.put(state,surfaces);
@@ -283,7 +355,7 @@ public final class BlockTextureSet {
                     uv.add((p.tile().y()+p.quad().uv().get(i*2+1)*p.tile().height())/atlas.height());
                 }
                 faces.add(new Surface(p.quad().direction(),p.quad().positions(),uv,p.quad().normal(),
-                        p.quad().cull(),p.shade(),p.layer(),p.element()));
+                        p.quad().cull(),p.shade(),p.layer(),p.element(),p.fluid()));
             }
             models.put(entry.getKey(),List.copyOf(faces));
         }
@@ -323,17 +395,24 @@ public final class BlockTextureSet {
         int w=overlay==null?base.getWidth():Math.max(base.getWidth(),overlay.getWidth());
         int h=overlay==null?base.getHeight():Math.max(base.getHeight(),overlay.getHeight());
         BufferedImage output = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
-            int bottom = tinted(base.getRGB(x*base.getWidth()/w, y*base.getHeight()/h), tint);
-            if (overlay == null) { output.setRGB(x, y, bottom); continue; }
-            int top=tinted(overlay.getRGB(x*overlay.getWidth()/w,y*overlay.getHeight()/h),overlayTint),a=top>>>24,bottomAlpha=bottom>>>24;
-            int alpha=a+(bottomAlpha*(255-a)+127)/255;
-            int rgb=alpha<<24;
-            for(int shift:new int[]{0,8,16}) {
-                int premultiplied=((top>>>shift)&255)*a+(((bottom>>>shift)&255)*bottomAlpha*(255-a)+127)/255;
-                rgb|=(alpha==0?0:(premultiplied+alpha/2)/alpha)<<shift;
+        int[] pixels=((java.awt.image.DataBufferInt)output.getRaster().getDataBuffer()).getData();
+        int[] baseRow=new int[base.getWidth()];
+        int[] overlayRow=overlay==null?null:new int[overlay.getWidth()];
+        for(int y=0;y<h;y++){
+            base.getRGB(0,y*base.getHeight()/h,baseRow.length,1,baseRow,0,baseRow.length);
+            if(overlay!=null)overlay.getRGB(0,y*overlay.getHeight()/h,overlayRow.length,1,overlayRow,0,overlayRow.length);
+            for(int x=0;x<w;x++){
+                int bottom=tinted(baseRow[x*baseRow.length/w],tint);
+                if(overlay==null){pixels[y*w+x]=bottom;continue;}
+                int top=tinted(overlayRow[x*overlayRow.length/w],overlayTint),a=top>>>24,bottomAlpha=bottom>>>24;
+                int alpha=a+(bottomAlpha*(255-a)+127)/255;
+                int rgb=alpha<<24;
+                for(int shift=0;shift<=16;shift+=8) {
+                    int premultiplied=((top>>>shift)&255)*a+(((bottom>>>shift)&255)*bottomAlpha*(255-a)+127)/255;
+                    rgb|=(alpha==0?0:(premultiplied+alpha/2)/alpha)<<shift;
+                }
+                pixels[y*w+x]=rgb;
             }
-            output.setRGB(x, y, rgb);
         }
         return output;
     }
@@ -361,22 +440,33 @@ public final class BlockTextureSet {
         if (tint < 0) return color;
         int colorTint=tint&0xFFFFFF;
         int result = color & 0xFF000000;
-        for (int shift : new int[]{0, 8, 16}) result |= (((color >>> shift) & 255) * ((colorTint >>> shift) & 255) / 255) << shift;
+        for (int shift=0;shift<=16;shift+=8) result |= (((color >>> shift) & 255) * ((colorTint >>> shift) & 255) / 255) << shift;
         return result;
     }
 
     private static String imageKey(BufferedImage image) {
         try {
             var digest=java.security.MessageDigest.getInstance("SHA-256");
-            for(int pixel:image.getRGB(0,0,image.getWidth(),image.getHeight(),null,0,image.getWidth()))
-                for(int shift:new int[]{0,8,16,24})digest.update((byte)(pixel>>>shift));
+            int width=image.getWidth();
+            int[] row=new int[width];
+            byte[] bytes=new byte[width*4];
+            for(int y=0;y<image.getHeight();y++) {
+                image.getRGB(0,y,width,1,row,0,width);
+                for(int x=0;x<width;x++)
+                    for(int channel=0;channel<4;channel++) bytes[x*4+channel]=(byte)(row[x]>>>(channel*8));
+                digest.update(bytes);
+            }
             return image.getWidth()+"x"+image.getHeight()+":"+java.util.HexFormat.of().formatHex(digest.digest());
         }catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
     }
-    private static com.mcworldexplorer.voxel.mesh.RenderLayer material(BufferedImage image,String renderType) {
+    private static RenderLayer material(BufferedImage image,String renderType,TextureAtlas.Tile tile,Map<TextureAtlas.Tile,RenderLayer> alphaLayers) {
+        if("mcwe:lava".equals(renderType))return RenderLayer.OPAQUE;
         if("mcwe:fluid".equals(renderType))return com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID;
         if("minecraft:translucent".equals(renderType))return com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT;
         if(renderType!=null&&!renderType.equals("minecraft:solid"))return com.mcworldexplorer.voxel.mesh.RenderLayer.CUTOUT;
+        return alphaLayers.computeIfAbsent(tile,ignored->alphaLayer(image));
+    }
+    private static RenderLayer alphaLayer(BufferedImage image){
         boolean cutout=false;
         for(int pixel:image.getRGB(0,0,image.getWidth(),image.getHeight(),null,0,image.getWidth())) {
             int a=pixel>>>24;

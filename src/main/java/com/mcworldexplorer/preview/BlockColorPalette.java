@@ -9,6 +9,9 @@ public final class BlockColorPalette {
 
     public static BlockColor resolve(String blockName) {
         String name = blockName.toLowerCase(Locale.ROOT);
+        if (name.equals("minecraft:redstone_block")) {
+            return known(0xB84A3E);
+        }
         if (containsAny(name, "water", "bubble_column")) {
             return known(0x3F76E4);
         }
@@ -94,6 +97,13 @@ public final class BlockColorPalette {
 
     private static BlockColor known(int rgb) {
         return new BlockColor(rgb, true);
+    }
+
+    public static int shade(int rgb, double factor) {
+        int red = Math.clamp((int) Math.round((rgb >>> 16 & 255) * factor), 0, 255);
+        int green = Math.clamp((int) Math.round((rgb >>> 8 & 255) * factor), 0, 255);
+        int blue = Math.clamp((int) Math.round((rgb & 255) * factor), 0, 255);
+        return red << 16 | green << 8 | blue;
     }
 
     private static boolean containsAny(String name, String... fragments) {

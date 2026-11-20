@@ -57,6 +57,9 @@ config/
 # ==================== 临时文件 ====================
 .superpowers/
 docs/superpowers/
+# 本地 JavaFX 评审稿、候选截图与试验样式
+/docs/JAVAFX_VISUAL_PLAN.md
+/docs/assets/javafx-visual/
 *.tmp
 *.bak
 *.swp

@@ -1,7 +1,6 @@
 package com.mcworldexplorer.map;
 
 import com.mcworldexplorer.preview.PreviewExporter;
-import com.mcworldexplorer.preview.PreviewExporter.ExportException;
 import com.mcworldexplorer.storage.PortablePaths;
 
 import javax.imageio.ImageIO;
@@ -17,7 +16,7 @@ public final class ViewportExporter {
             BufferedImage image,
             String worldName,
             Path worldDirectory) throws IOException {
-        Path temporary = writeTemporary(image);
+        Path temporary = writeTemporary(image, worldDirectory);
         try {
             return previewExporter.exportToDefault(temporary, worldName, worldDirectory);
         } finally {
@@ -29,7 +28,7 @@ public final class ViewportExporter {
             BufferedImage image,
             Path target,
             Path worldDirectory) throws IOException {
-        Path temporary = writeTemporary(image);
+        Path temporary = writeTemporary(image, worldDirectory);
         try {
             return previewExporter.exportToFile(temporary, target, worldDirectory);
         } finally {
@@ -41,11 +40,12 @@ public final class ViewportExporter {
         return previewExporter.suggestedFileName(worldName);
     }
 
-    private static Path writeTemporary(BufferedImage image) throws IOException {
+    private static Path writeTemporary(BufferedImage image, Path worldDirectory) throws IOException {
         if (image == null || image.getWidth() < 1 || image.getHeight() < 1) {
             throw new IllegalArgumentException("viewport image must not be empty");
         }
         Path directory = PortablePaths.cacheDirectory().resolve("export-temp");
+        PreviewExporter.requireOutsideWorld(directory, worldDirectory);
         Files.createDirectories(directory);
         Path temporary = Files.createTempFile(directory, ".viewport-", ".png");
         boolean written = false;

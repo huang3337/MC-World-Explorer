@@ -1,5 +1,6 @@
 package com.mcworldexplorer.voxel.resource;
 
+import com.mcworldexplorer.voxel.data.SavedFluid;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
@@ -20,7 +21,7 @@ public final class BlockModelResolver {
     static final Set<String> MULTIPART_FIELDS=ModelDefinitionProtocol.Scope.MULTIPART.fields;
 
     public enum Reason { RESOLVED, MISSING_RESOURCE, INVALID_JSON,
-        INVALID_MODEL, UNSUPPORTED_MODEL, CONTEXT_REQUIRED, NO_VARIANT, AMBIGUOUS_VARIANT, REFERENCE_CYCLE, LIMIT_EXCEEDED }
+        INVALID_MODEL, UNSUPPORTED_MODEL, CONTEXT_REQUIRED, NO_VARIANT, UNKNOWN_DEFAULT_STATE, AMBIGUOUS_VARIANT, REFERENCE_CYCLE, LIMIT_EXCEEDED }
     public enum Direction { DOWN, UP, NORTH, SOUTH, WEST, EAST }
     public record Uv(double u0, double v0, double u1, double v1) { }
     public record Vec3(double x, double y, double z) { }
@@ -37,14 +38,27 @@ public final class BlockModelResolver {
         }
         public Face {vertices=List.copyOf(vertices);vertexUv=List.copyOf(vertexUv);material=Objects.requireNonNull(material);}
     }
-    public record Part(ResourceLocation id, int xRotation, int yRotation, boolean uvLock, List<Face> faces, String renderType, Vec3 offset) {
+    public record Part(ResourceLocation id, int xRotation, int yRotation, int zRotation, boolean uvLock, List<Face> faces, String renderType, Vec3 offset) {
+        public Part(ResourceLocation id,int x,int y,boolean uvLock,List<Face> faces,String renderType,Vec3 offset) {
+            this(id,x,y,0,uvLock,faces,renderType,offset);
+        }
         public Part(ResourceLocation id,int x,int y,boolean uvLock,List<Face> faces,String renderType) {
             this(id,x,y,uvLock,faces,renderType,new Vec3(0,0,0));
         }
         public Part { faces = List.copyOf(faces); }
+        private Part rotateZ(int degrees) {
+            Vec3 rotatedOffset = offset;
+            if (offset.x()!=0 || offset.y()!=0) {
+                double[] xyz={offset.x(),offset.y(),offset.z()};
+                ModelGeometry.blockRotate(xyz,0,0,degrees);
+                rotatedOffset=new Vec3(xyz[0],xyz[1],xyz[2]);
+            }
+            return new Part(id,xRotation,yRotation,(zRotation+degrees)%360,uvLock,faces,renderType,rotatedOffset);
+        }
     }
     public record Model(ResourceLocation id, int xRotation, int yRotation, boolean uvLock,
                         List<Face> faces, boolean fixedFirstAlternative, List<Part> parts) {
+        public int zRotation() { return parts.isEmpty() ? 0 : parts.getFirst().zRotation(); }
         public Model { faces = List.copyOf(faces); parts = List.copyOf(parts); }
     }
     public record Source(ResourceLocation.Kind kind, ResourceLocation id) { }
@@ -96,6 +110,20 @@ public final class BlockModelResolver {
         return resolve(state,blockContext,baseDepth,stateChain,null);
     }
     private Result resolve(BlockState state,ModelBlockContext blockContext,int baseDepth,Set<StateReference> stateChain,ResourceLocation rootModel)throws IOException {
+        return resolve(state,blockContext,baseDepth,stateChain,rootModel,blockContext==null?null:blockContext.modelPosition(),null,null);
+    }
+
+    Result prepareVariants(BlockState state,java.util.function.Predicate<WeightedVariants> capture) throws IOException {
+        return resolve(state,null,0,new LinkedHashSet<>(),null,null,capture,null);
+    }
+    Result resolveAt(BlockState state,ModelBlockContext.Position position) throws IOException {
+        return resolve(state,null,0,new LinkedHashSet<>(),null,position,null,null);
+    }
+    Result resolveVariant(BlockState state,BlockState selected,ModelBlockContext.Position position,WeightedVariants plan)throws IOException {
+        return ((BuiltinBlockModels)archive).recordNotes(state,selected,()->resolve(state,null,0,new LinkedHashSet<>(),null,position,null,plan));
+    }
+    private Result resolve(BlockState state,ModelBlockContext blockContext,int baseDepth,Set<StateReference> stateChain,
+            ResourceLocation rootModel,ModelBlockContext.Position position,java.util.function.Predicate<WeightedVariants> capture,WeightedVariants compiled)throws IOException {
         var context=new ResolutionContext(blockContext,baseDepth,stateChain);
         Objects.requireNonNull(state);var reference=new StateReference(state,rootModel);boolean entered=false;
         archive.validate();
@@ -122,7 +150,7 @@ public final class BlockModelResolver {
             if (ruleDefinition==null&&root.has("variants")) {
                 JsonObject variants = object(root.get("variants"));
                 if (variants.size() > MAX_STATE_BRANCHES) throw fail(Reason.LIMIT_EXCEEDED, "blockstate 分支过多");
-                for (var entry : variants.entrySet()) if (matches(entry.getKey(), state.properties())) {
+                for (var entry : variants.entrySet()) if (matches(entry.getKey(), state)) {
                     if (!applications.isEmpty()) throw fail(Reason.AMBIGUOUS_VARIANT, "多个 blockstate 分支匹配");
                     applications.add(entry.getValue());
                 }
@@ -133,7 +161,7 @@ public final class BlockModelResolver {
                 for (var value : multipart) {
                     var item = object(value);
                     fields(item,ModelDefinitionProtocol.Scope.MULTIPART);
-                    if (!item.has("when") || condition(item.get("when"), state.properties(), 0))
+                    if (!item.has("when") || condition(item.get("when"), state, 0))
                         applications.add(item.get("apply"));
                 }
             }
@@ -142,19 +170,17 @@ public final class BlockModelResolver {
             }
             List<Part> parts = new ArrayList<>();
             if(ruleDefinition!=null)parts.addAll(resolveParts(block,ruleDefinition,state,0,0,false,0,new LinkedHashSet<>(),sources,Map.of(),context));
-            boolean fixed = false;
-            for (JsonElement application : applications) {
-                var selected=application(application,state,0,new LinkedHashSet<>(),sources,Map.of(),context);
-                parts.addAll(selected.parts());fixed|=selected.fixed();
+            boolean fixed=chooseApplications(applications,root.has("multipart"),state,position,capture,compiled);
+            for (JsonElement selected : applications) {
+                parts.addAll(application(selected,state,0,new LinkedHashSet<>(),sources,Map.of(),context));
                 if(parts.stream().mapToInt(part->part.faces().size()).sum()>8192)throw fail(Reason.LIMIT_EXCEEDED,"组合模型面数超过 8192");
             }
             if(parts.isEmpty())parts.add(new Part(block,0,0,false,List.of(),null));
-            if(baseDepth==0&&"true".equals(state.properties().get("waterlogged"))) {
+            if(baseDepth==0&&SavedFluid.embeddedWater(state)) {
                 var water=resolve(new BlockState("minecraft:water",Map.of("level","0")),blockContext,baseDepth+1,stateChain);
                 context.loaders.addAll(water.loaders());context.neighbors.addAll(water.dependencies().neighbors());context.positionDependent|=water.dependencies().positionDependent();context.biomeColorDependent|=water.dependencies().biomeColorDependent();context.required|=water.reason()==Reason.CONTEXT_REQUIRED;
                 if(water.resolved()) {
                     parts.addAll(water.model().orElseThrow().parts());sources.addAll(water.sources());
-                    ((BuiltinBlockModels)archive).note(state,"含水模型叠加静态水面，水色与流向使用固定近似");
                 }else ((BuiltinBlockModels)archive).note(state,"含水模型的水资源不可用："+water.detail());
             }
             Part first = parts.getFirst();
@@ -169,17 +195,73 @@ public final class BlockModelResolver {
         } finally { if(entered)stateChain.remove(reference);archive.validate(); }
     }
 
-    private record Application(List<Part> parts,boolean fixed) { }
-    private Application application(JsonElement application,BlockState state,int depth,Set<ResourceLocation> chain,List<Source> sources,Map<String,TextureBinding> textures,ResolutionContext context)throws IOException,Failure {
-        if(application==null)throw fail(Reason.INVALID_MODEL,"部件缺少apply");boolean fixed=false;
-        if(application.isJsonArray()) {
-            var choices=application.getAsJsonArray();if(choices.isEmpty()||choices.size()>MAX_VARIANTS)throw fail(Reason.LIMIT_EXCEEDED,"候选模型数量无效或超限");
-            application=choices.get(0);fixed=true;
+    private WeightedVariants weightedPlan(List<JsonElement> applications,boolean multipart,BlockState state)throws Failure {
+        List<int[]> groups=null;
+        for(var application:applications) {
+            if(application==null || !application.isJsonArray())continue;
+            var choices=application.getAsJsonArray();
+            if(choices.isEmpty()||choices.size()>MAX_VARIANTS)throw fail(Reason.LIMIT_EXCEEDED,"候选模型数量无效或超限");
+            if(choices.size()==1)continue;
+            int[] ends=new int[choices.size()];
+            long total=0;
+            for(int i=0;i<ends.length;i++) {
+                var option=object(choices.get(i));
+                fields(option,ModelDefinitionProtocol.Scope.VARIANT);
+                id(string(option.get("model")));variantRotation(option,"x");variantRotation(option,"y");dispatchZ(option);compatibleBoolean(option,"uvlock",false);
+                int weight=option.has("weight")?integer(option.get("weight")):1;
+                if(weight<=0)throw fail(Reason.INVALID_MODEL,"候选权重必须为正整数");
+                total+=weight;
+                if(total>Integer.MAX_VALUE)throw fail(Reason.LIMIT_EXCEEDED,"候选权重总和超过整数范围");
+                ends[i]=(int)total;
+            }
+            if(groups==null)groups=new ArrayList<>();
+            groups.add(ends);
         }
+        if(groups==null)return null;
+        var draw=WeightedVariants.protocol(archive.baseResourceFormat());
+        return draw==null?null:new WeightedVariants(draw,multipart,groups,state);
+    }
+
+    /** Selects within the matched applications only; the JSON in the resource cache remains immutable. */
+    private boolean chooseApplications(List<JsonElement> applications,boolean multipart,BlockState state,
+            ModelBlockContext.Position position,java.util.function.Predicate<WeightedVariants> capture,WeightedVariants compiled)throws Failure {
+        var plan=compiled!=null?compiled:weightedPlan(applications,multipart,state);
+        if(plan!=null && capture!=null && !capture.test(plan))throw fail(Reason.LIMIT_EXCEEDED,"区域候选权重表超过预算");
+        long bits=plan!=null && position!=null ? plan.bits(position.x(),position.y(),position.z()) : 0;
+        int group=0;
+        boolean representative=false;
+        for(int i=0;i<applications.size();i++) {
+            var value=applications.get(i);
+            if(value==null || !value.isJsonArray())continue;
+            var choices=value.getAsJsonArray();
+            int index=0;
+            if(choices.size()>1) {
+                if(plan!=null && position!=null)index=plan.index(group,bits);
+                else if(plan==null || capture==null)representative=true;
+                group++;
+            }
+            applications.set(i,choices.get(index));
+        }
+        return representative;
+    }
+
+    private int dispatchZ(JsonObject application) throws Failure {
+        if (!application.has("z")) return 0;
+        if (archive.baseResourceFormat() < ModelDefinitionProtocol.THREE_AXIS_ROTATION_FORMAT)
+            throw fail(Reason.UNSUPPORTED_MODEL, "基础客户端未支持 blockstate 的 Z 轴旋转");
+        return variantRotation(application, "z");
+    }
+
+    private List<Part> application(JsonElement application,BlockState state,int depth,Set<ResourceLocation> chain,List<Source> sources,Map<String,TextureBinding> textures,ResolutionContext context)throws IOException,Failure {
+        if(application==null)throw fail(Reason.INVALID_MODEL,"部件缺少apply");
         var variant=object(application);fields(variant,ModelDefinitionProtocol.Scope.VARIANT);
         var model=id(string(variant.get("model")));int x=variantRotation(variant,"x"),y=variantRotation(variant,"y");
         if(variant.has("weight")&&integer(variant.get("weight"))<=0)throw fail(Reason.INVALID_MODEL,"weight必须为正整数");
-        return new Application(resolveParts(model,null,state,x,y,compatibleBoolean(variant,"uvlock",false),depth,chain,sources,textures,context),fixed);
+        int z = dispatchZ(variant);
+        var parts = resolveParts(model,null,state,x,y,compatibleBoolean(variant,"uvlock",false),depth,chain,sources,textures,context);
+        if (z == 0) return parts;
+        // Dispatch Z is the final quarter turn, including for composed child parts.
+        return parts.stream().map(part -> part.rotateZ(z)).toList();
     }
 
     private static final Set<String> MODEL_FIELDS=ModelDefinitionProtocol.Scope.MODEL.fields;
@@ -192,19 +274,16 @@ public final class BlockModelResolver {
         chain.remove(model);return merge(parent,json);
     }
     private static void recordDeclaredLoaders(JsonObject definition,ResolutionContext resolution){
-        for(String key:List.of("loader","porting_lib:loader"))if(definition.has(key))try{resolution.loaders.add(id(string(definition.get(key))));}
+        for(String key:ModelLoaderProtocol.KEYS)if(definition.has(key))try{resolution.loaders.add(id(string(definition.get(key))));}
         catch(Failure invalid){/* Keep normal parsing responsible for malformed declarations. */}
     }
     private JsonObject normalizeLoaderObjects(JsonObject definition,ResourceLocation model)throws IOException,Failure {
-        if(!ModelDefinitionProtocol.hasLoaderObject(definition))return definition;
-        var ownerPlatform=archive.platform(model.namespace());
-        String platform=ownerPlatform.isPresent()?ownerPlatform.orElseThrow():archive.platform().orElse("");
-        try{return ModelDefinitionProtocol.normalizeLoaderObjects(definition,platform,archive.baseClientVersion().orElse(""));}
+        try{return ModelLoaderProtocol.normalize(definition,archive,model);}
         catch(ModelRule.Failure invalid){throw fail(invalid.reason(),invalid.getMessage());}
     }
     private JsonObject merge(JsonObject parent,JsonObject child)throws Failure {
         Set<String> geometryFields=Set.of();
-        for(String key:List.of("loader","porting_lib:loader"))if(parent.has(key)){
+        for(String key:ModelLoaderProtocol.KEYS)if(parent.has(key)){
             var loader=id(string(parent.get(key)));var rule=rules.find(loader).orElse(null);
             if(rule==null)throw fail(Reason.UNSUPPORTED_MODEL,"尚未支持的模型 loader："+loader+"（父链）");
             if(parent.has("loader")&&parent.has("porting_lib:loader")&&!rules.equivalent(id(string(parent.get("loader"))),id(string(parent.get("porting_lib:loader")))))throw fail(Reason.INVALID_MODEL,"父模型 loader 声明冲突");
@@ -242,16 +321,11 @@ public final class BlockModelResolver {
             org.joml.Matrix4d rootTransform=null;
             if(definition.has("transform")&&rootMode!=ModelRule.RootTransformMode.NONE)try{rootTransform=RootModelTransform.read(definition.get("transform"));}catch(ModelRule.Failure invalid){throw fail(invalid.reason(),invalid.getMessage());}
             if(rootTransform!=null&&!rootTransform.equals(new org.joml.Matrix4d(),1e-12)) {
-                String platform=archive.platform(model.namespace()).orElse(archive.platform().orElse(""));
-                String version=archive.baseClientVersion().orElse("");
-                boolean neo=platform.equals("neoforge")||loader!=null&&id(loader).namespace().equals("neoforge");
-                boolean forge=platform.equals("forge")||loader!=null&&id(loader).namespace().equals("forge");
-                if(neo){
-                    if(!version.isEmpty()&&!version.equals("1.21.1"))throw fail(Reason.UNSUPPORTED_MODEL,"当前NeoForge根变换仅核对1.21.1烘焙语义");
-                    // NeoForge 1.21.1 ElementsModel composes the root into ModelState, like composite.
-                    rootMode=ModelRule.RootTransformMode.COMPOSITE;
-                }else if(!platform.isEmpty()&&!platform.equals("forge")||loader!=null&&id(loader).namespace().equals("porting_lib")||!version.isEmpty()&&(!forge||!version.startsWith("1.20.")))
-                    throw fail(Reason.UNSUPPORTED_MODEL,"当前Forge根变换仅核对1.20.x烘焙语义，其他平台/版本需独立验证");
+                try {
+                    rootMode = ModelLoaderProtocol.rootMode(archive, model, loader == null ? null : id(loader), rootMode);
+                } catch (ModelRule.Failure invalid) {
+                    throw fail(invalid.reason(),invalid.getMessage());
+                }
             }
             Map<String,TextureBinding> textures=new HashMap<>(inheritedTextures);
             if(definition.has("textures"))for(var entry:object(definition.get("textures")).entrySet()){variable(entry.getKey());textures.put(entry.getKey(),binding(entry.getValue()));if(textures.size()>MAX_TEXTURES)throw fail(Reason.LIMIT_EXCEEDED,"纹理变量过多");}
@@ -279,6 +353,11 @@ public final class BlockModelResolver {
 
 
                     public Optional<String> baseClientVersion(){return archive.baseClientVersion();}
+                    public int baseResourceFormat(){return archive.baseResourceFormat();}
+                    public List<String> dataLayers(ResourceLocation id)throws IOException{
+                        sources.add(new Source(ResourceLocation.Kind.RAW_DATA,id));
+                        return archive.dataLayers(id);
+                    }
                     public Optional<Long> worldSeed()throws IOException{return archive.worldSeed();}
                     public Optional<Integer> biomeBlendRadius()throws IOException{return archive.biomeBlendRadius();}
                     public Optional<DimensionHeight> dimensionHeight(ResourceLocation dimension)throws IOException{return archive.dimensionHeight(dimension);}
@@ -325,11 +404,24 @@ public final class BlockModelResolver {
 
 
                     public boolean matches(JsonElement value)throws ModelRule.Failure {
-                        try{return condition(value,state.properties(),0);}catch(Failure invalid){throw new ModelRule.Failure(invalid.reason,invalid.getMessage());}
+                        try{return condition(value,state,0);}catch(Failure invalid){throw new ModelRule.Failure(invalid.reason,invalid.getMessage());}
                     }
                     public List<Part> apply(JsonElement value)throws IOException,ModelRule.Failure {
-                        try{var selected=application(value,state,depth+1,chain,sources,textures,resolution);if(selected.fixed())note("随机候选模型固定选择第一项");return selected.parts();}
+                        try{return applySelected(new ArrayList<>(Collections.singletonList(value)),false);}
                         catch(Failure invalid){throw new ModelRule.Failure(invalid.reason,invalid.getMessage());}
+                    }
+                    private List<Part> applySelected(List<JsonElement> values,boolean multipart)throws IOException,Failure {
+                        var position=selectedRule.positionDependent() && resolution.blockContext!=null ? resolution.blockContext.modelPosition() : null;
+                        if(chooseApplications(values,multipart,state,position,null,null))note("随机候选模型固定选择第一项");
+                        List<Part> parts=new ArrayList<>();
+                        int faces=0;
+                        for(var value:values){
+                            var added=application(value,state,depth+1,chain,sources,textures,resolution);
+                            for(var part:added)faces+=part.faces().size();
+                            if(faces>8192||parts.size()+added.size()>4096)throw fail(Reason.LIMIT_EXCEEDED,"嵌入blockstate几何超限");
+                            parts.addAll(added);
+                        }
+                        return List.copyOf(parts);
                     }
                     public List<Part> blockstateParts(JsonObject raw)throws IOException,ModelRule.Failure {
                         try{
@@ -338,16 +430,14 @@ public final class BlockModelResolver {
                             List<JsonElement> selected=new ArrayList<>();
                             if(value.has("variants")){
                                 var variants=object(value.get("variants"));if(variants.size()>MAX_STATE_BRANCHES)throw fail(Reason.LIMIT_EXCEEDED,"blockstate分支过多");
-                                for(var entry:variants.entrySet())if(BlockModelResolver.this.matches(entry.getKey(),state.properties()))selected.add(entry.getValue());
+                                for(var entry:variants.entrySet())if(BlockModelResolver.this.matches(entry.getKey(),state))selected.add(entry.getValue());
                                 if(selected.size()>1)throw fail(Reason.AMBIGUOUS_VARIANT,"多个blockstate分支匹配");if(selected.isEmpty())throw fail(Reason.NO_VARIANT,"没有匹配属性的模型分支");
                             }else{
                                 var multipart=value.get("multipart");if(!multipart.isJsonArray())throw fail(Reason.INVALID_MODEL,"multipart必须为数组");
                                 if(multipart.getAsJsonArray().size()>MAX_VARIANTS)throw fail(Reason.LIMIT_EXCEEDED,"multipart部件过多");
-                                for(var element:multipart.getAsJsonArray()){var item=object(element);fields(item,ModelDefinitionProtocol.Scope.MULTIPART);if(!item.has("when")||condition(item.get("when"),state.properties(),0))selected.add(item.get("apply"));}
+                                for(var element:multipart.getAsJsonArray()){var item=object(element);fields(item,ModelDefinitionProtocol.Scope.MULTIPART);if(!item.has("when")||condition(item.get("when"),state,0))selected.add(item.get("apply"));}
                             }
-                            List<Part> parts=new ArrayList<>();int faces=0;
-                            for(var application:selected){var added=apply(application);faces+=added.stream().mapToInt(p->p.faces().size()).sum();if(faces>8192||parts.size()+added.size()>4096)throw fail(Reason.LIMIT_EXCEEDED,"嵌入blockstate几何超限");parts.addAll(added);}
-                            return List.copyOf(parts);
+                            return applySelected(selected,value.has("multipart"));
                         }catch(Failure failure){throw new ModelRule.Failure(failure.reason,failure.getMessage());}
                     }
                     public List<Part> staticPrototype(BlockState prototype)throws IOException,ModelRule.Failure {return prototype(prototype,null);}
@@ -421,14 +511,14 @@ public final class BlockModelResolver {
             if(depth==0&&loader==null) {
                 Optional<List<Part>> builtin;
                 if(textures.values().stream().anyMatch(TextureBinding::forceTranslucent))throw fail(Reason.UNSUPPORTED_MODEL,"内置特殊几何的强制透明绑定尚需材质适配");
-                try{builtin=((BuiltinBlockModels)archive).resolve(state,references(textures));}
+                try{builtin=((BuiltinBlockModels)archive).resolve(state);}
                 catch(ResourceAccessException sourceFailure){if(sourceFailure.scope()==ResourceAccessException.Scope.RESOURCE)throw fail(Reason.LIMIT_EXCEEDED,sourceFailure.getMessage());throw sourceFailure;}
                 catch(IOException invalid){throw fail(Reason.INVALID_MODEL,"特殊外观准备失败："+invalid.getMessage());}
                 if(builtin.isPresent()) {
                     for(var part:builtin.orElseThrow())for(var face:part.faces()){var reference=new Source(ResourceLocation.Kind.TEXTURE,face.texture());if(!sources.contains(reference))sources.add(reference);}
                     return builtin.orElseThrow();
                 }
-                if(!id(state.name()).namespace().equals("minecraft"))((BuiltinBlockModels)archive).note(state,"资源未提供静态元素几何；若依赖运行时渲染器需额外适配："+model);
+                ((BuiltinBlockModels)archive).note(state,"资源未提供静态元素几何；若依赖运行时渲染器需额外适配："+model);
             }
             return List.of(new Part(model,x,y,uvLock,List.of(),renderType));
         }catch(IllegalStateException|UnsupportedOperationException|NumberFormatException invalid){if(invalid instanceof java.util.concurrent.CancellationException)throw invalid;throw fail(Reason.INVALID_MODEL,"模型字段数据无效："+invalid.getMessage());}
@@ -439,9 +529,9 @@ public final class BlockModelResolver {
         List<Part> parts=List.copyOf(input);if(parts.size()>4096)throw fail(Reason.LIMIT_EXCEEDED,"模型规则部件超过4096项");
         int count=0;
         for(var part:parts) {
-            Objects.requireNonNull(part.id());if(part.xRotation()<0||part.xRotation()>270||part.xRotation()%90!=0||part.yRotation()<0||part.yRotation()>270||part.yRotation()%90!=0)throw fail(Reason.INVALID_MODEL,"规则部件旋转必须为直角");
+            Objects.requireNonNull(part.id());if(part.xRotation()<0||part.xRotation()>270||part.xRotation()%90!=0||part.yRotation()<0||part.yRotation()>270||part.yRotation()%90!=0||part.zRotation()<0||part.zRotation()>270||part.zRotation()%90!=0)throw fail(Reason.INVALID_MODEL,"规则部件旋转必须为直角");
             bounded(part.offset(),32);
-            if(part.renderType()!=null&&!Set.of("minecraft:solid","minecraft:cutout","minecraft:cutout_mipped","minecraft:translucent","minecraft:tripwire","mcwe:fluid").contains(part.renderType()))throw fail(Reason.UNSUPPORTED_MODEL,"规则输出未知材质类型："+part.renderType());
+            if(part.renderType()!=null&&!Set.of("minecraft:solid","minecraft:cutout","minecraft:cutout_mipped","minecraft:translucent","minecraft:tripwire","mcwe:fluid","mcwe:lava").contains(part.renderType()))throw fail(Reason.UNSUPPORTED_MODEL,"规则输出未知材质类型："+part.renderType());
             for(var face:part.faces()) {
                 if(++count>8192)throw fail(Reason.LIMIT_EXCEEDED,"模型规则面超过8192项");
                 if(face.layer()<0||face.layer()>=8192)throw fail(Reason.LIMIT_EXCEEDED,"规则元素层编号超限");
@@ -466,7 +556,7 @@ public final class BlockModelResolver {
 
     private static List<Part> defaultRenderType(List<Part> parts,String type) {
         if(type==null)return parts;
-        return parts.stream().map(part->part.renderType()!=null?part:new Part(part.id(),part.xRotation(),part.yRotation(),part.uvLock(),part.faces(),type,part.offset())).toList();
+        return parts.stream().map(part->part.renderType()!=null?part:new Part(part.id(),part.xRotation(),part.yRotation(),part.zRotation(),part.uvLock(),part.faces(),type,part.offset())).toList();
     }
 
     private List<Face> faces(JsonArray elements, Map<String, TextureBinding> textures, List<Source> sources) throws Failure {
@@ -481,29 +571,16 @@ public final class BlockModelResolver {
             Vec3 from = vector(element.get("from")), to = vector(element.get("to"));
             boolean shade = bool(element, "shade", true);
             Direction shadeDirection=element.has("shade_direction_override")?direction(string(element.get("shade_direction_override"))):null;
-            ElementRotation transform = null;
-            if (element.has("rotation")) {
-                var rotation = object(element.get("rotation"));
-                fields(rotation,ModelDefinitionProtocol.Scope.ROTATION);
-                String axis = string(rotation.get("axis"));
-                if (!Set.of("x", "y", "z").contains(axis)) throw fail(Reason.INVALID_MODEL, "元素旋转轴无效");
-                double angle = number(rotation.get("angle"));
-                if (Math.abs(angle) > 180) throw fail(Reason.LIMIT_EXCEEDED, "元素旋转角度超限");
-                boolean rescale = compatibleBoolean(rotation, "rescale", false);
-                if (rescale && Math.abs(Math.cos(Math.toRadians(angle))) < .1)
-                    throw fail(Reason.UNSUPPORTED_MODEL, "rescale 旋转接近奇点");
-                transform = new ElementRotation(rotation.has("origin") ? vector(rotation.get("origin"), -512, 512) : new Vec3(0,0,0), axis, angle, rescale);
-            }
-            if (element.has("light_emission")) {
-                int light = integer(element.get("light_emission"));
-                if (light < 0 || light > 15) throw fail(Reason.INVALID_MODEL, "light_emission 超出范围");
-                // Dynamic lighting remains outside the static preview renderer.
-            }
+            ElementPose pose = element.has("rotation") ? elementPose(object(element.get("rotation"))) : ElementPose.IDENTITY;
+            int emission = element.has("light_emission") && archive.baseResourceFormat() >= ModelDefinitionProtocol.ELEMENT_EMISSION_FORMAT
+                    ? integer(element.get("light_emission")) : 0;
+            if (emission < 0 || emission > 15) throw fail(Reason.INVALID_MODEL, "light_emission 超出范围");
             JsonObject faceMap = object(element.get("faces"));
             if (faceMap.size() > 6) throw fail(Reason.INVALID_MODEL, "元素面数超过六面");
             for (var entry : faceMap.entrySet()) {
                 Direction direction = direction(entry.getKey());
                 JsonObject face = object(entry.getValue());
+                // Vanilla and NeoForge read diffuse shading from the element. Exporters can repeat shade on a face.
                 fields(face,ModelDefinitionProtocol.Scope.FACE);
                 FaceMaterial material=faceMaterial(face,elementMaterial);
                 // Exactly collapsed in-plane dimensions have no rasterized area, including after rotation.
@@ -516,7 +593,8 @@ public final class BlockModelResolver {
                 if(collapsed)continue;
                 TextureBinding binding = texture(string(face.get("texture")), textures);
                 ResourceLocation texture = id(binding.reference());
-                material=new FaceMaterial(material.argb(),material.blockLight(),material.skyLight(),material.ambientOcclusion(),binding.forceTranslucent(),shadeDirection);
+                material=new FaceMaterial(material.argb(),Math.max(emission,material.blockLight()),Math.max(emission,material.skyLight()),
+                        material.ambientOcclusion(),binding.forceTranslucent(),shadeDirection);
                 Uv uv = defaultUv(direction, from, to);
                 if (face.has("uv")) {
                     JsonArray a = array(face.get("uv"), 4);
@@ -533,12 +611,45 @@ public final class BlockModelResolver {
                     for(Direction candidate:Direction.values())if(candidate.name().equalsIgnoreCase(hint))cull=candidate;
                 }
                 result.add(new Face(direction, texture, uv, rotation(face, "rotation"), tint, cull, layer,
-                        from, to, transform, shade,List.of(),List.of(),1,material));
+                        from, to, pose.singleAxis(), shade,pose.corners(direction,from,to),List.of(),1,material));
                 Source source = new Source(ResourceLocation.Kind.TEXTURE, texture);
                 if (!sources.contains(source)) sources.add(source);
             }
         }
         return result;
+    }
+
+    private record ElementPose(ElementRotation singleAxis, org.joml.Matrix4fc matrix) {
+        static final ElementPose IDENTITY = new ElementPose(null,null);
+        List<Vec3> corners(Direction side,Vec3 from,Vec3 to) {
+            return matrix == null ? List.of() : ModelGeometry.corners(side,from,to,matrix);
+        }
+    }
+
+    private ElementPose elementPose(JsonObject rotation) throws Failure {
+        fields(rotation,ModelDefinitionProtocol.Scope.ROTATION);
+        boolean rescale = compatibleBoolean(rotation,"rescale",false);
+        boolean xyz = archive.baseResourceFormat() >= ModelDefinitionProtocol.THREE_AXIS_ROTATION_FORMAT;
+        if (rotation.has("axis") || rotation.has("angle")) {
+            String axis = string(rotation.get("axis"));
+            if (!Set.of("x","y","z").contains(axis)) throw fail(Reason.INVALID_MODEL,"元素旋转轴无效");
+            double angle = number(rotation.get("angle"));
+            Vec3 origin = rotation.has("origin") || xyz ? vector(rotation.get("origin"),-512,512) : new Vec3(0,0,0);
+            if (xyz && (rescale || Math.abs(angle)>180)) {
+                return new ElementPose(null,ModelGeometry.cuboidTransform(origin,
+                        axis.equals("x")?angle:0,axis.equals("y")?angle:0,axis.equals("z")?angle:0,rescale));
+            }
+            if (Math.abs(angle)>180) throw fail(Reason.LIMIT_EXCEEDED,"元素旋转角度超限");
+            if (rescale && Math.abs(Math.cos(Math.toRadians(angle)))<.1)
+                throw fail(Reason.UNSUPPORTED_MODEL,"rescale 旋转接近奇点");
+            return new ElementPose(new ElementRotation(origin,axis,angle,rescale),null);
+        }
+        if (!rotation.has("x") && !rotation.has("y") && !rotation.has("z"))
+            throw fail(Reason.INVALID_MODEL,"元素旋转缺少旋转轴");
+        if (!xyz) throw fail(Reason.UNSUPPORTED_MODEL,"基础客户端未支持三轴元素旋转");
+        Vec3 origin = vector(rotation.get("origin"),-512,512);
+        return new ElementPose(null,ModelGeometry.cuboidTransform(origin,angle(rotation,"x"),
+                angle(rotation,"y"),angle(rotation,"z"),rescale));
     }
 
     private static FaceMaterial faceMaterial(JsonObject owner,FaceMaterial fallback)throws Failure {
@@ -591,7 +702,16 @@ public final class BlockModelResolver {
         id(value);return new TextureBinding(value,false);
     }
 
-    private boolean matches(String selector, Map<String, String> properties) throws Failure {
+    private static String modelProperty(BlockState state, String key) throws Failure {
+        String value = state.properties().get(key);
+        if (value == null && state.savedForm() != null && !state.savedForm().defaultsKnown()) {
+            throw fail(Reason.UNKNOWN_DEFAULT_STATE, "缺少原版方块 " + state.name() + " 属性 " + key
+                    + " 对应区块 DataVersion " + state.savedForm().dataVersion() + " 的默认状态定义");
+        }
+        return value;
+    }
+
+    private boolean matches(String selector, BlockState state) throws Failure {
         if (selector.isEmpty()) return true;
         Set<String> keys = new HashSet<>();
         boolean matches = true;
@@ -599,7 +719,7 @@ public final class BlockModelResolver {
             String[] pair = condition.split("=", -1);
             if (pair.length != 2 || pair[0].isBlank() || pair[1].isBlank() || !keys.add(pair[0]))
                 throw fail(Reason.INVALID_MODEL, "非法 blockstate 属性选择器");
-            matches &= alternatives(pair[1], properties.get(pair[0]));
+            matches &= alternatives(pair[1], modelProperty(state, pair[0]));
         }
         return matches;
     }
@@ -610,7 +730,29 @@ public final class BlockModelResolver {
         return Arrays.asList(values).contains(actual);
     }
 
-    private boolean condition(JsonElement value, Map<String, String> properties, int depth) throws Failure {
+    private boolean multipartProperty(String expression, String actual) throws Failure {
+        if (expression.indexOf('!') < 0) return alternatives(expression, actual);
+        int format = archive.baseResourceFormat();
+        boolean multiple = expression.indexOf('|') >= 0;
+        if (multiple && format < 15)
+            throw fail(Reason.UNSUPPORTED_MODEL, "基础客户端的 multipart 多值否定语义未核对");
+        // Older clients negate the whole disjunction. Newer clients negate individual terms.
+        boolean groupNegation = format <= 51 && expression.startsWith("!");
+        String terms = groupNegation ? expression.substring(1) : expression;
+        boolean matched = false;
+        for (String term : terms.split("\\|", -1)) {
+            boolean negative = !groupNegation && term.startsWith("!");
+            if (negative && multiple && format <= 51)
+                throw fail(Reason.INVALID_MODEL, "旧式 multipart 只能在候选组开头使用否定");
+            String value = negative ? term.substring(1) : term;
+            if (value.isBlank() || value.contains("!"))
+                throw fail(Reason.INVALID_MODEL, "multipart 否定条件无效");
+            matched |= negative != value.equals(actual);
+        }
+        return actual != null && (groupNegation != matched);
+    }
+
+    private boolean condition(JsonElement value, BlockState state, int depth) throws Failure {
         if (depth >= 32) throw fail(Reason.LIMIT_EXCEEDED, "条件嵌套过深");
         var condition = object(value);
         boolean match = true;
@@ -620,11 +762,11 @@ public final class BlockModelResolver {
                     throw fail(Reason.INVALID_MODEL, "OR/AND 需要非空条件数组");
                 boolean aggregate = entry.getKey().equals("AND");
                 for (var child : entry.getValue().getAsJsonArray()) {
-                    boolean result = condition(child, properties, depth + 1);
+                    boolean result = condition(child, state, depth + 1);
                     if (entry.getKey().equals("OR")) aggregate |= result; else aggregate &= result;
                 }
                 match &= aggregate;
-            } else match &= alternatives(propertyValue(entry.getValue()), properties.get(entry.getKey()));
+            } else match &= multipartProperty(propertyValue(entry.getValue()), modelProperty(state, entry.getKey()));
         }
         return match;
     }
@@ -757,6 +899,9 @@ public final class BlockModelResolver {
         double value = e.getAsDouble();
         if (!Double.isFinite(value) || value < 0 || value > 16) throw fail(Reason.UNSUPPORTED_MODEL, "坐标超出 0..16");
         return value;
+    }
+    private static double angle(JsonObject rotation,String axis)throws Failure {
+        return rotation.has(axis)?number(rotation.get(axis)):0;
     }
     private static double number(JsonElement e) throws Failure {
         if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber())

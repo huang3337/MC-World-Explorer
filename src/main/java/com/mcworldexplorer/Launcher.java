@@ -17,7 +17,11 @@ public final class Launcher {
             showStartupError(e);
             return;
         }
-        App.main(args);
+        try {
+            if (!ClientRuntime.prepare(args)) App.main(args);
+        } finally {
+            ClientRuntime.releaseGpu();
+        }
     }
 
     private static void showStartupError(Exception exception) {

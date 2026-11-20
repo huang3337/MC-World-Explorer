@@ -6,6 +6,8 @@ import javafx.application.Platform;
 import javafx.scene.control.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Window;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
@@ -13,6 +15,7 @@ import java.util.function.*;
 
 /** FX owner for asynchronous library transactions; file IO and adapter startup never run on FX. */
 final class ModelPluginLibraryController implements AutoCloseable {
+    private static final Logger LOGGER=LoggerFactory.getLogger(ModelPluginLibraryController.class);
     // The owner must finish queued worker cleanup before the host JVM can exit.
     // close() only schedules that cleanup; it never waits on the FX thread.
     private final ExecutorService executor=Executors.newSingleThreadExecutor(r->{var thread=new Thread(r,"mcwe-plugin-library");thread.setDaemon(false);return thread;});
@@ -83,7 +86,7 @@ final class ModelPluginLibraryController implements AutoCloseable {
         busy=true;feedback.accept(message);
         activeTask=executor.submit(()->{
             T value=null;Exception problem=null;
-            try{value=work.call();}catch(Exception invalid){problem=invalid;}
+            try{value=work.call();}catch(Exception invalid){LOGGER.warn("Model plugin operation failed: {}",message,invalid);problem=invalid;}
             T result=value;Exception error=problem;
             completionDispatcher.accept(()->{
                 if(closed)return;busy=false;

@@ -19,6 +19,7 @@ public class WorldInfo {
     private int spawnX;
     private int spawnY;
     private int spawnZ;
+    private String spawnDimension;
     private boolean spawnPositionAvailable;
     private double playerX;
     private double playerY;
@@ -103,9 +104,16 @@ public class WorldInfo {
     public void setSpawnZ(int spawnZ) { this.spawnZ = spawnZ; }
 
     public void setSpawnPosition(int spawnX, int spawnY, int spawnZ) {
+        setSpawnPosition(spawnX, spawnY, spawnZ, null);
+    }
+
+    public String getSpawnDimension() { return spawnDimension; }
+
+    public void setSpawnPosition(int spawnX, int spawnY, int spawnZ, String dimension) {
         this.spawnX = spawnX;
         this.spawnY = spawnY;
         this.spawnZ = spawnZ;
+        this.spawnDimension = dimension;
         this.spawnPositionAvailable = true;
     }
 

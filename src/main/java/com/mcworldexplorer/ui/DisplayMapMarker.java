@@ -2,6 +2,7 @@ package com.mcworldexplorer.ui;
 
 import com.mcworldexplorer.map.MapMarker;
 import com.mcworldexplorer.map.MapMarkerType;
+import com.mcworldexplorer.storage.SavedPlaces.Position;
 
 import java.util.Locale;
 import java.util.Objects;
@@ -65,6 +66,19 @@ public record DisplayMapMarker(
         return Optional.ofNullable(playerIdentifier);
     }
 
+    public Position position() {
+        return new Position(marker.dimensionId(), marker.x(), marker.z());
+    }
+
+    public String placeName() {
+        if (isPlayer()) return playerName;
+        return switch (marker.type()) {
+            case PLAYER -> "玩家";
+            case WORLD_SPAWN -> "世界出生点";
+            case NETHER_PORTAL -> "下界传送门";
+        };
+    }
+
     public String tooltipText() {
         if (isPlayer()) {
             return String.format(
@@ -77,11 +91,6 @@ public record DisplayMapMarker(
                     exactY,
                     exactZ);
         }
-        String type = switch (marker.type()) {
-            case PLAYER -> "玩家";
-            case WORLD_SPAWN -> "世界出生点";
-            case NETHER_PORTAL -> "下界传送门";
-        };
-        return type + " · X " + marker.x() + " · Z " + marker.z();
+        return placeName() + " · X " + marker.x() + " · Z " + marker.z();
     }
 }

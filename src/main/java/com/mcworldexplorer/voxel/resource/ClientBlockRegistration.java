@@ -27,6 +27,7 @@ final class ClientBlockRegistration {
     }
     Block block(ResourceLocation id)throws ModelRule.Failure {var result=blocks.get(id);if(result==null)throw unsupported("已选客户端没有已识别的方块注册："+id);return result;}
     Optional<Block> referencedBlock(Member field){return Optional.ofNullable(fields.get(field));}
+    boolean containsBlock(ResourceLocation id){return blocks.containsKey(id);}
     Optional<Block> recognizedItem(ResourceLocation id){return Optional.ofNullable(items.get(id));}
     boolean independentBlockField(Member field)throws IOException,ModelRule.Failure {
         if(fields.containsKey(field))return true;
@@ -120,16 +121,54 @@ final class ClientBlockRegistration {
         if(!c.get(1).operand().equals(s.field("BlockItem.block")))throw unsupported("BlockItem方块引用不是确定字段");
         verifyItemConstructor(s.type("BlockItem"),new HashSet<>());
     }
+    /** A literal passed through the block-key factory has the same identity as a direct registration name. */
+    private Map<Member,ResourceLocation> literalBlockKeys()throws IOException,ModelRule.Failure {
+        var s=symbols;
+        var factories=s.methods("BlockKeys.create");
+        if(factories.size()!=1)return Map.of();
+        var factory=factories.getFirst();
+        var body=code(factory);
+        requireOps(body,178,42,184,184,176);
+        if(!member(body,0).equals(s.field("RegistryKeys.BLOCK"))
+                ||!s.call(member(body,2),"ResourceLocation.withDefaultNamespace")||!s.call(member(body,3),"ResourceKey.create"))return Map.of();
+        var register=s.method("Blocks.register","("+s.descriptor("ResourceKey")+s.descriptor("Block")+")"+s.descriptor("Block"));
+        var registration=code(register);
+        requireOps(registration,178,42,43,184,192,176);
+        if(!member(registration,0).equals(s.field("BuiltInRegistries.BLOCK"))
+                ||!s.call(member(registration,3),"Registry.register")||!registration.get(4).operand().equals(new Type(s.type("Block"))))return Map.of();
+        var init=code(new Member(factory.owner(),"<clinit>","()V"));
+        if(init.isEmpty()||init.size()>3*4096+1||init.size()%3!=1||init.getLast().opcode()!=177)return Map.of();
+        Map<Member,ResourceLocation> keys=new HashMap<>();
+        for(int i=0;i<init.size()-1;i+=3){
+            if(!(init.get(i).operand() instanceof String name)||init.get(i+1).opcode()!=184||!factory.equals(init.get(i+1).operand())
+                    ||init.get(i+2).opcode()!=179||!(init.get(i+2).operand() instanceof Member field)
+                    ||!field.owner().equals(factory.owner())||!field.descriptor().equals(s.descriptor("ResourceKey")))return Map.of();
+            try{if(keys.putIfAbsent(field,new ResourceLocation("minecraft",name))!=null)return Map.of();}
+            catch(IllegalArgumentException invalid){return Map.of();}
+        }
+        return keys;
+    }
+
     private void indexBlocks()throws IOException,ModelRule.Failure {
         var span=new ArrayList<Instruction>();var s=symbols;var seen=new HashSet<Member>();var initializer=code(new Member(s.type("Blocks"),"<clinit>","()V"));linearRegistry("Blocks",initializer);
+        Map<Member,ResourceLocation> keys;
+        try{keys=literalBlockKeys();}
+        catch(ModelRule.Failure failure){
+            if(failure.reason()!=BlockModelResolver.Reason.UNSUPPORTED_MODEL)throw failure;
+            keys=Map.of();
+        }
         for(var ins:initializer){
             span.add(ins);if(ins.opcode()!=179)continue;var field=(Member)ins.operand();
             if(!seen.add(field))throw unsupported("客户端方块注册字段重复写入");
-            if(field.owner().equals(s.type("Blocks"))&&field.descriptor().equals(s.descriptor("Block"))&&span.size()>3&&span.getFirst().operand() instanceof String name){
+            if(field.owner().equals(s.type("Blocks"))&&field.descriptor().equals(s.descriptor("Block"))&&span.size()>3){
+                var first=span.getFirst();
+                var key=first.opcode()==178?keys.get(first.operand()):null;
+                if(!(first.operand() instanceof String)&&key==null){span.clear();continue;}
                 var terminal=span.get(span.size()-2);
                 if(terminal.opcode()==184&&terminal.operand() instanceof Member call&&s.call(call,"Blocks.register")){
+                    if(key!=null&&!call.descriptor().startsWith("("+s.descriptor("ResourceKey"))){span.clear();continue;}
                     if(span.stream().anyMatch(i->i.operand() instanceof Branch||i.opcode()==191))throw unsupported("方块注册含条件控制流");
-                    ResourceLocation id;try{id=ResourceLocation.parse(name);}catch(IllegalArgumentException invalid){throw unsupported("方块注册ID无效");}
+                    ResourceLocation id;try{id=key!=null?key:ResourceLocation.parse((String)first.operand());}catch(IllegalArgumentException invalid){throw unsupported("方块注册ID无效");}
                     Optional<Member> constructor=Optional.empty();
                     if(span.get(1).opcode()==187&&span.get(1).operand() instanceof Type constructed&&span.get(2).opcode()==89){
                         var last=span.get(span.size()-3);if(last.opcode()==183&&last.operand() instanceof Member ctor&&ctor.name().equals("<init>")&&ctor.owner().equals(constructed.internalName()))constructor=Optional.of(ctor);

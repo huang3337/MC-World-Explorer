@@ -1,8 +1,27 @@
 # 解析插件开发说明
 
-适用：Java 主线 `0.7.4`，插件接口 `mcwe-model-api-1-core.1`。当前应用提供通用插件管理，默认不安装插件；Mod 专用适配不随本体提供。旧 `preview.*` 接口包不能直接安装，也不能只改清单版本来迁移。
+本文面向 Java 主线的 `mcwe-model-api-1-core.1` 插件接口。宿主版本可在「关于」中查看，请使用目标宿主的实际 JAR 编译并核对可用方法。宿主默认零预装插件，旧 `preview.*` 插件需移植到该接口。
 
-本说明中的示例仅解释合成资源格式，不适配任何真实 Mod。不需要启动 Minecraft，也不需要把 Mod 或客户端 JAR 加入 Java 类路径。交付范围见 [DECISION-024](decisions/DECISION-024.md)。
+<a id="agent-prompt"></a>
+
+## 直接发给 Agent 的扩展构建提示词
+
+你可以把下面整段复制给 DSH、Claude Code、Codex 等能读取本地文件并运行构建命令的 Agent。把方括号里的内容换成自己的，附上诊断 JSON 即可开始。使用便携版时，在「资源与插件 → 解析诊断 → 插件开发说明」点「复制全文」，也可以把整份说明一次发过去。
+
+```text
+请为 MC World Explorer 的三维预览构建一个可安装的 Java 解析插件。
+我的 MCWE 解压目录是 [含 app 的目录]，Minecraft 实例目录是 [实例目录]。
+我附上了该选区的解析诊断 JSON。目标方块是 [原始方块 ID]，希望看到 [模型或颜色的预期效果]。
+
+请先核对 JSON 中的 hostVersion、pluginApiRevision、方块状态和原因码，再读实例实际选中的 blockstate、模型与相关资源。需要额外材料时，告诉我具体缺哪个文件或哪条颜色绑定依据。
+按本说明的插件接口工作。如果只收到这段提示词，可以从便携版 app/MC-World-Explorer-<版本>.jar 读取 help/PLUGIN_DEVELOPMENT.md。
+请判断问题能否通过模型规则或颜色层声明解决。若是资源缺失或依赖游戏运行时，请说明原因。能适配时，在独立目录写源码和清单，用 JDK 21 和这个便携版的 app/*.jar 编译。只读访问实例与存档，保持 MCWE 本体原样。
+请交付可安装的插件 JAR、源码和复现步骤。用目标状态测试启用前后结果，说明已经验证的效果，以及哪些仍需我在同一三维选区核对。
+```
+
+诊断 JSON 可在「解析诊断 → 导出报告…」获取。能判断颜色层或模型语义的依据可以是一段模型 JSON、实际加载器的实现，或该版本明确的颜色注册。提供 Agent 可以访问的本地路径即可，整个存档和 Mod JAR 无需作为聊天附件上传。
+
+下文的 Boxes 示例使用合成资源，供核对编译、打包和加载流程。宿主离线读取游戏资源，Mod 或客户端 JAR 无需加入 Java 类路径。[交付范围](decisions/DECISION-024.md)
 
 ## 从解析诊断确定问题
 
@@ -34,18 +53,20 @@ JSON 报告当前为 `schemaVersion: 1`，记录 `hostVersion`、`pluginApiRevis
 | `SIMPLE_COLORS` | 当前没有按模型纹理资源解析，先配置正确资源并重新生成，不能直接当作 Mod 或插件失败。 |
 | `INVALID_JSON`、`INVALID_MODEL`、引用循环、无匹配状态 | 检查实际资源和状态。只有证据表明这是合法但宿主尚未理解的表达时，才考虑适配，不能吞掉错误伪装成功。 |
 | `LIMIT_EXCEEDED`、`PREPARATION_LIMIT`、`STATE_NOT_PREPARED` | 缩小选区或降低资源复杂度，并报告预算触发位置。插件仍受宿主读取、递归、几何与进程预算约束。 |
-| `UNBOUND_TINT` | 通用颜色语义无法确定。当前没有任意 Mod 颜色回调注册接口，不能把所有 tint 都涂成草色。 |
+| `UNBOUND_TINT` | 查明目标方块的面索引和颜色来源后，可用 `tintLayers()` 登记固定 RGB 或保存群系的草、叶、枯叶、水色。需要任意 Mod 运行时颜色回调的效果超出该接口。 |
 | `TEXTURE_PREPARATION_FAILED` | 结合详情判断缺纹理、非法纹理或预算错误；几何 loader 插件不一定能解决。 |
 | `MODEL_NOTE`、`INFO` | 可能是静态近似或固定选择等说明，不应直接计作解析失败。 |
 | 依赖游戏运行时渲染、注册恢复、生成资源、物品/实体模型或专用容器服务 | 当前 `core.1` 不提供这些宿主服务。明确留缺项，不能靠执行游戏类补齐。 |
 
 ## 当前插件契约
 
+0.7.5 工作区保留 `mcwe-model-api-1-core.1`。规则通过 `context.state().properties()` 读取模型选择实际使用的属性；`savedProperties()` 返回当前解析输入的原始属性。需要区分注册默认值时可检查可空的 `savedForm()`、其中的 `defaultsKnown()` 与 `dataVersion()`（缺失时为 -1）。模型缓存会复用有效状态相同的结果，规则的几何输出应以有效状态为准。同一外部 worker 的回归样例覆盖了这两个属性视图。
+
 入口类实现 `ModelPlugin`，必须是公开类并提供公开无参构造。`descriptor()` 必须与包清单中的 `plugin` 对象完全一致；`rules()` 返回明确注册的规则。
 
-每条 `ModelRule` 声明唯一 `id()`、自身 `version()`、所处理的 `loaders()` 和额外 JSON `fields()`。宿主按资源里的 loader 或明确声明的 blockstate 选择字段派发，不根据 `targetMods` 猜测解析方式。规则 ID 或 loader 与其他已启用规则冲突时，整次启用失败并保留原状态。
+每条 `ModelRule` 声明唯一 `id()`、自身 `version()`、所处理的 `loaders()` 和允许读取的额外模型字段 `fields()`。若要按 blockstate 根字段选择规则，需另行声明 `stateSelectors()`。宿主按这些入口派发，`targetMods` 用来说明适配目标。规则 ID 或 loader 与其他已启用规则冲突时，整次启用失败并保留原状态。
 
-`Context` 提供当前模型、原始方块状态、纹理绑定、旋转、渲染类型及有界解析服务。优先使用 `elements()`、`child()`、`independentChild()`、`blockstate()`、`assetJson()`、`dataJson()` 等现有宿主服务，让资源依赖与错误继续可追踪。不能取得的上下文应抛出明确的 `ModelRule.Failure`，不要用空气、空列表或猜测值冒充解析成功。
+`Context` 提供当前模型、原始方块状态、纹理绑定、旋转、渲染类型及有界解析服务。普通 blockstate 的 Z 轴旋转由宿主在部件返回后统一应用。插件可用 `Part.zRotation()` 读取已解析子模型的旋转。`BiomeColor.DRY_FOLIAGE` 可查询已核实客户端的保存群系枯叶色。优先使用 `elements()`、`child()`、`independentChild()`、`blockstate()`、`assetJson()`、`dataJson()` 等现有宿主服务，让资源依赖与错误继续可追踪。不能取得的上下文应抛出明确的 `ModelRule.Failure`，不要用空气、空列表或猜测值冒充解析成功。
 
 需要相邻方块、位置、保存实体 NBT 或群系数据时，须分别通过规则的 `neighbors()`、`positionDependent()`、`savedEntityDependent()`、`biomeColorDependent()` 声明真实依赖，并处理准备阶段 `blockContext()` 为空的情况。清单能力当前只接受 `SAVED_DATA`、`NEIGHBORS`、`BIOME_COLOR`；这些是能力说明，不是自动注册规则或操作系统权限。
 
@@ -132,7 +153,7 @@ public final class BoxesPlugin implements ModelPlugin {
 {
   "format": 1,
   "sdkRevision": "mcwe-model-api-1-core.1",
-  "compatibleHosts": ["0.7.4"],
+  "compatibleHosts": ["0.7.5"],
   "execution": "isolated-jvm",
   "entrypoint": "tutorial.BoxesPlugin",
   "plugin": {
@@ -148,7 +169,7 @@ public final class BoxesPlugin implements ModelPlugin {
 }
 ```
 
-`compatibleHosts` 是精确宿主版本列表，不是版本区间或通配表达。依赖插件写在 `dependencies`，键为插件 ID，值为精确插件版本或 `*`；依赖必须已安装并启用，不能形成循环。规则版本、插件版本与宿主版本分别管理。
+`compatibleHosts` 列出验证过的精确宿主版本。此示例面向 0.7.5。适配其他版本时，取该版本应用目录里的 JAR 重新编译并验证，再把对应版本列入清单。依赖插件写在 `dependencies`，键为插件 ID，值为精确插件版本或 `*`；依赖必须已安装并启用，不能形成循环。规则版本、插件版本与宿主版本分别管理。
 
 ### 编译和打包
 
@@ -222,3 +243,16 @@ Get-FileHash -LiteralPath '.\out\boxes-plugin-1.0.0.jar' -Algorithm SHA256
 反馈包含：应用版本、插件版本与 SHA、客户端/加载器/目标 Mod 版本、选区大小、导出的相关诊断条目、启停前后差异，以及最小合法资源和状态。对素材再分发权限不明时，只给资源 ID、来源名称与哈希，不附完整受限资源。
 
 注明验证层次：清单检查、编译、worker 解析、真实保存样本、原生界面和性能测试分别记录。未测与跳过不能计作通过；两个资源样本也不能推出整个 Mod 或多数 Mod 已支持。
+
+## 给已有模型登记颜色层
+
+只提供颜色的插件可以实现 `ModelPlugin.tintLayers()`，几何继续使用资源包声明的模型。以下示例将指定方块模型的索引 0 绑定到保存群系的叶色。
+
+```java
+@Override
+public Collection<TintLayer> tintLayers() {
+    return List.of(new TintLayer(ResourceLocation.parse("example:leaves"), 0, ModelRule.BiomeColor.FOLIAGE, null));
+}
+```
+
+每项声明包含方块 ID、0–255 的模型面索引，以及一种颜色来源。可选来源为 24 位 RGB 常量或 `GRASS`、`FOLIAGE`、`DRY_FOLIAGE`、`WATER`。启用插件时，宿主冻结声明并把它纳入资源缓存指纹，同一方块与索引重复登记会拒绝启用。停用后恢复宿主的颜色绑定。颜色声明随隔离进程握手传递，群系采样由宿主完成。

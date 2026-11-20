@@ -22,9 +22,11 @@ powershell -ExecutionPolicy Bypass -File tools/package-windows.ps1
 
 默认输出在 `build/windows-package/`，包含应用 ZIP、SHA-256 与展开目录。输入仅来自当前 `installDist`，不读取用户安装库或仓库外材料。保留自带 Java、LICENSE 和使用说明。打包脚本不启动界面、不上传文件。
 
+保留上一版展开目录时，可指定独立输出目录，例如 `-OutputName windows-package-0.7.5`。
+
 ## 正式发布前
 
-- 核对最终包包含关于页面、新图标与选区修复；这些更新已经纳入0.7.4。
+- 核对最终包中 EXE 与主 JAR 的版本、便携说明、许可证和校验文件；从解压副本启动并检查本版主要功能。
 - 应用版本以当前 build.gradle 和包内元数据为准，重新测试和构建；不得只重命名旧 ZIP。兼容测试中的历史版本号不随发布号机械替换。
 - 检查最终 Windows 包身份、零预装状态、SHA-256 与启动结果。原生启动及操作的人工验收结果单独记录。
 - 正式发布时准备对应版本的发布说明并核对已知限制；[0.7.4 发布说明](releases/V0.7.4.md)保留为历史记录。不把未知 Mod 支持、未测性能或条件跳过写成通过。

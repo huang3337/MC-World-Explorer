@@ -12,6 +12,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ViewportExporterTest {
     private static final String HOME_PROPERTY = "mcworldexplorer.home";
@@ -27,6 +28,17 @@ class ViewportExporterTest {
             System.clearProperty(HOME_PROPERTY);
         } else {
             System.setProperty(HOME_PROPERTY, originalHome);
+        }
+    }
+
+    @Test
+    void refusesToCreateTemporaryOrFinalDirectoriesInsideTheWorld() throws IOException {
+        Path world = Files.createDirectory(tempDir.resolve("world"));
+        System.setProperty(HOME_PROPERTY, world.toString());
+        var image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        assertThrows(IOException.class, () -> new ViewportExporter().exportToDefault(image, "地表", world));
+        try (var entries = Files.list(world)) {
+            assertFalse(entries.findAny().isPresent());
         }
     }
 

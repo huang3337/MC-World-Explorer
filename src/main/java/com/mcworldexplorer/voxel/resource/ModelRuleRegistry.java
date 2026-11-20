@@ -8,12 +8,21 @@ import java.util.*;
 public final class ModelRuleRegistry {
     private final Map<ResourceLocation,ModelRule> loaders;
     private final List<ModelRule> rules;
+    private final Map<String,Map<Integer,ModelPlugin.TintLayer>> tints;
+    ModelPlugin.TintLayer tint(String block,int index){
+        var layers=tints.get(block);return layers==null?null:layers.get(index);
+    }
     private final String fingerprint;
     private final Set<ModelBlockContext.Offset> neighbors;
     private final Set<String> stateSelectors;
     private final boolean positionDependent;
     public ModelRuleRegistry(Collection<? extends ModelRule> input) {this(input, "");}
-    ModelRuleRegistry(Collection<? extends ModelRule> input,String pluginIdentity) {
+    ModelRuleRegistry(Collection<? extends ModelRule> input,String pluginIdentity) { this(input,pluginIdentity,List.of()); }
+    ModelRuleRegistry(Collection<? extends ModelRule> input,String pluginIdentity,Collection<ModelPlugin.TintLayer> layers) {
+        if(layers.size()>4096)throw new IllegalArgumentException("插件颜色层超过4096项");
+        tints=new TreeMap<>();
+        for(var layer:layers)if(tints.computeIfAbsent(layer.block().toString(),k->new TreeMap<>()).putIfAbsent(layer.index(),layer)!=null)
+            throw new IllegalArgumentException("颜色层绑定冲突："+layer.block()+"["+layer.index()+"]");
         Objects.requireNonNull(input);if(input.size()>256)throw new IllegalArgumentException("规则数量超过256");
         Map<ResourceLocation,ModelRule> registered=new TreeMap<>(Comparator.comparing(ResourceLocation::toString));
         Set<ResourceLocation> ids=new HashSet<>();List<ModelRule> values=new ArrayList<>();
@@ -37,6 +46,7 @@ public final class ModelRuleRegistry {
             update(digest,"model-rule-api:"+ModelRule.API_VERSION+":core-074-v1");
             update(digest,"host-definition:"+ModelDefinitionProtocol.REVISION);
             update(digest,"host-block-state:"+ClientBlockSymbols.REVISION);
+            tints.values().forEach(m->m.values().forEach(layer->update(digest,"tint:"+layer)));
             if(!pluginIdentity.isEmpty())update(digest,"external-plugins:"+pluginIdentity);
             for(var rule:values) {
                 update(digest,rule.id().toString());update(digest,rule.version());
@@ -60,7 +70,7 @@ public final class ModelRuleRegistry {
     public Set<ModelBlockContext.Offset> neighbors(){return neighbors;}
     public Set<String> stateSelectors(){return stateSelectors;}
     public boolean positionDependent(){return positionDependent;}
-    public ModelRuleRegistry with(ModelRule... additions){var combined=new ArrayList<>(rules);combined.addAll(List.of(additions));return new ModelRuleRegistry(combined);}
+    public ModelRuleRegistry with(ModelRule... additions){var combined=new ArrayList<>(rules);combined.addAll(List.of(additions));return new ModelRuleRegistry(combined,fingerprint,tints.values().stream().flatMap(m->m.values().stream()).toList());}
     public boolean equivalent(ResourceLocation first,ResourceLocation second){return first.equals(second)||(loaders.containsKey(first)&&loaders.get(first)==loaders.get(second));}
     private record Registered(ModelRule implementation,ResourceLocation id,String version,Set<ResourceLocation> loaders,Set<String> fields,Set<String> stateSelectors,Set<ModelBlockContext.Offset> neighbors,boolean positionDependent,boolean biomeColorDependent,boolean savedEntityDependent,RootTransformMode rootTransformMode,boolean inheritRenderType)implements ModelRule {
         public List<BlockModelResolver.Part> resolve(Context context)throws java.io.IOException,Failure{return implementation.resolve(context);}

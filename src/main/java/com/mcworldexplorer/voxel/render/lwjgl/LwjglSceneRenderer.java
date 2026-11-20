@@ -14,6 +14,7 @@ import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
 import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
 import static org.lwjgl.opengl.GL11.glBlendFunc;
 import static org.lwjgl.opengl.GL11.glDrawElements;
+import static org.lwjgl.opengl.GL11.glDepthMask;
 import static org.lwjgl.opengl.GL11.glEnable;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
@@ -57,25 +58,25 @@ public final class LwjglSceneRenderer implements AutoCloseable {
         shader.use();
         shader.setMvp(viewProjection);
         scene.bindTexture();
-        var ordered=new java.util.ArrayList<>(scene.meshes());
-        ordered.sort((a,b)->{
-            boolean ta=a.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT||a.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID;
-            boolean tb=b.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT||b.layer()==com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID;
-            if(ta!=tb)return ta?1:-1;
-            return ta?Float.compare(b.projectedDepth(viewProjection),a.projectedDepth(viewProjection)):0;
-        });
         try {
-        for (OpenGlMeshResources mesh : ordered) {
-            org.lwjgl.opengl.GL11.glDepthMask(mesh.layer()!=com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT
-                    &&mesh.layer()!=com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID);
-            shader.setOffset(mesh.offsetX(), mesh.offsetZ());
-            shader.setColor(mesh.rgb(), mesh.alpha());
-            shader.setTextured(mesh.textured());
-            shader.setShaded(mesh.shaded());
-            glBindVertexArray(mesh.vertexArray());
-            glDrawElements(GL_TRIANGLES, mesh.indexCount(), GL_UNSIGNED_INT, 0L);
+            glDepthMask(true);
+            for (OpenGlMeshResources mesh : scene.meshes()) {
+                shader.setOffset(mesh.offsetX(), mesh.offsetZ());
+                shader.setColor(mesh.rgb(), mesh.alpha());
+                shader.setTextured(mesh.textured());
+                shader.setShaded(mesh.shaded());
+                glBindVertexArray(mesh.vertexArray());
+                glDrawElements(GL_TRIANGLES, mesh.indexCount(), GL_UNSIGNED_INT, 0L);
+            }
+            glDepthMask(false);
+            shader.setOffset(0, 0);
+            shader.setVertexMaterial(true);
+            scene.drawTranslucent(viewProjection);
+        } finally {
+            shader.setVertexMaterial(false);
+            glDepthMask(true);
+            glBindVertexArray(0);
         }
-        } finally { org.lwjgl.opengl.GL11.glDepthMask(true); glBindVertexArray(0); }
     }
 
     private void requireOwnerThread() {

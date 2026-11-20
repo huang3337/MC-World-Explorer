@@ -12,7 +12,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class ExternalModelPluginPackageTest {
     @TempDir Path temporary;
     private Map<String,byte[]> entries()throws IOException {
-        return new LinkedHashMap<>(Map.of(ModelPluginManifest.ENTRY,ExternalModelPluginTest.manifestJson().getBytes(java.nio.charset.StandardCharsets.UTF_8),"example/PlanePlugin.class",new byte[]{0,1,2,3}));
+        var entries = new LinkedHashMap<String, byte[]>();
+        entries.put(ModelPluginManifest.ENTRY, ExternalModelPluginTest.manifestJson().getBytes(StandardCharsets.UTF_8));
+        entries.put("example/PlanePlugin.class", new byte[]{0, 1, 2, 3});
+        return entries;
     }
     private Path write(Map<String,byte[]> entries)throws IOException {
         Path file=temporary.resolve(UUID.randomUUID()+".jar");try(var zip=new ZipOutputStream(Files.newOutputStream(file))){for(var entry:entries.entrySet()){zip.putNextEntry(new ZipEntry(entry.getKey()));zip.write(entry.getValue());zip.closeEntry();}}return file;

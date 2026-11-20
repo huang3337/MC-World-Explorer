@@ -115,7 +115,7 @@ final class ResourceSettingsPane extends VBox {
         apply.setId("modelPluginsApply");apply.getStyleClass().add("primary-action");apply.setOnAction(e->applyDraft());
         summary.setMaxHeight(38);summary.setId("modelPluginSummary");
         var bottom=new BorderPane();bottom.setCenter(summary);bottom.setRight(new FlowPane(8,8,disableAll,apply));BorderPane.setMargin(summary,new Insets(0,8,0,0));
-        feedback.setId("modelPluginsFeedback");feedback.setPrefRowCount(2);feedback.setPrefHeight(46);feedback.setMaxHeight(64);feedback.setMinHeight(0);feedback.getStyleClass().add("settings-feedback");feedback.managedProperty().bind(feedback.textProperty().isNotEmpty());feedback.visibleProperty().bind(feedback.managedProperty());
+        feedback.setId("modelPluginsFeedback");feedback.setPrefRowCount(2);feedback.setPrefHeight(46);feedback.setMaxHeight(64);feedback.setMinHeight(Region.USE_PREF_SIZE);feedback.getStyleClass().add("settings-feedback");feedback.managedProperty().bind(feedback.textProperty().isNotEmpty());feedback.visibleProperty().bind(feedback.managedProperty());
         var boundary=value();boundary.setText("安装后默认停用；关闭窗口会放弃未应用的勾选。");boundary.getStyleClass().add("muted-text");
         var guide=new Hyperlink("插件开发说明");guide.setId("pluginDevelopmentGuide");guide.setOnAction(e->host.openPluginGuide());
         var foot=new FlowPane(8,4,boundary,guide);
@@ -168,7 +168,7 @@ final class ResourceSettingsPane extends VBox {
     private Set<ResourceLocation> selected(){var result=new HashSet<ResourceLocation>();rows.forEach(row->{if(row.enabled.get())result.add(row.id());});return Set.copyOf(result);}
     private void updateDraft(){
         Set<ResourceLocation> selected=selected();boolean dirty=!selected.equals(applied);
-        summary.setText("启用 "+selected.size()+" / "+rows.size()+" 项"+(dirty?" · 有未应用更改":""));
+        summary.setText("已启用 "+applied.size()+" / "+rows.size()+" 项"+(dirty?" · 有未应用更改":""));
         apply.setDisable(!dirty||!host.canApply()||applying);disableAll.setDisable(rows.isEmpty()||selected.isEmpty()||applying||host.pluginOperationRunning());
         pluginList.refresh();updateActions();
     }

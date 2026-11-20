@@ -30,7 +30,16 @@ public final class ChunkSection {
     }
 
     public boolean contains(String blockName) {
-        return palette.stream().anyMatch(state -> state.name().equals(blockName));
+        for (var state : palette) if (state.name().equals(blockName)) return true;
+        return false;
+    }
+    /** A single-entry palette identifies every position without unpacking any indices. */
+    public java.util.Optional<BlockState> uniformState() {
+        return palette.size()==1 ? java.util.Optional.of(palette.getFirst()) : java.util.Optional.empty();
+    }
+    public boolean containsAny(java.util.Set<String> names) {
+        for (var state : palette) if (names.contains(state.name())) return true;
+        return false;
     }
     /** Exact used-state counts, including single-entry sections; unused palette entries are excluded. */
     public java.util.Map<BlockState,Integer> usedStateCounts()throws ChunkDecodeException {

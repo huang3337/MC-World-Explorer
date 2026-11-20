@@ -2,13 +2,10 @@ package com.mcworldexplorer.nbt;
 
 import com.mcworldexplorer.world.WorldInfo;
 import com.mcworldexplorer.world.GameType;
-import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.BinaryTagIO;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.kyori.adventure.nbt.ListBinaryTag;
 import net.kyori.adventure.nbt.BinaryTagTypes;
-import net.kyori.adventure.nbt.NumberBinaryTag;
-import net.kyori.adventure.nbt.StringBinaryTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,14 +81,8 @@ public class LevelDatReader {
         }
         
         // Spawn
-        if (data.keySet().contains("SpawnX")
-                && data.keySet().contains("SpawnY")
-                && data.keySet().contains("SpawnZ")) {
-            info.setSpawnPosition(
-                    data.getInt("SpawnX"),
-                    data.getInt("SpawnY"),
-                    data.getInt("SpawnZ"));
-        }
+        SavedSpawn.read(data, "spawn").ifPresent(spawn ->
+                info.setSpawnPosition(spawn.x(), spawn.y(), spawn.z(), spawn.dimension()));
 
         // Version (1.9+)
         CompoundBinaryTag versionTag = data.getCompound("Version");
@@ -120,17 +111,10 @@ public class LevelDatReader {
                         pos.getDouble(0),
                         pos.getDouble(1),
                         pos.getDouble(2),
-                        readDimension(player.get("Dimension")));
+                        SavedSpawn.readDimension(player.get("Dimension")));
             }
-            if (player.keySet().contains("SpawnX")
-                    && player.keySet().contains("SpawnY")
-                    && player.keySet().contains("SpawnZ")) {
-                info.setPlayerRespawnPosition(
-                        player.getInt("SpawnX"),
-                        player.getInt("SpawnY"),
-                        player.getInt("SpawnZ"),
-                        readDimension(player.get("SpawnDimension")));
-            }
+            SavedSpawn.read(player, "respawn").ifPresent(spawn ->
+                    info.setPlayerRespawnPosition(spawn.x(), spawn.y(), spawn.z(), spawn.dimension()));
         }
 
         // Check for icon
@@ -141,16 +125,6 @@ public class LevelDatReader {
 
         info.setParsed(true);
         return info;
-    }
-
-    private static String readDimension(BinaryTag dimensionTag) {
-        if (dimensionTag instanceof StringBinaryTag stringTag) {
-            return stringTag.value();
-        }
-        if (dimensionTag instanceof NumberBinaryTag numberTag) {
-            return Integer.toString(numberTag.intValue());
-        }
-        return dimensionTag == null ? null : "";
     }
 
     private static WorldInfo createUnparsedWorld(Path worldFolder) {

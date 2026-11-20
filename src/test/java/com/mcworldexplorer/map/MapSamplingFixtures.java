@@ -10,7 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-final class MapSamplingFixtures {
+public final class MapSamplingFixtures {
     static byte[] nbt(String block, int sectionY) throws IOException {
         var palette = ListBinaryTag.builder(BinaryTagTypes.COMPOUND)
                 .add(CompoundBinaryTag.builder().putString("Name", block).build()).build();
@@ -38,7 +38,7 @@ final class MapSamplingFixtures {
         }
     }
 
-    static void region(Path path, String block, int sectionY, int timestamp, int... slots) throws IOException {
+    public static void region(Path path, String block, int sectionY, int timestamp, int... slots) throws IOException {
         Files.createDirectories(path.getParent());
         byte[] payload = nbt(block, sectionY);
         ByteBuffer bytes = ByteBuffer.allocate((2 + slots.length) * 4096);

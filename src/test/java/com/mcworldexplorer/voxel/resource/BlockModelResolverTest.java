@@ -20,6 +20,29 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class BlockModelResolverTest {
     @TempDir Path home;
     private int sequence;
+
+    @Test void missingRegistryOnlyBlocksSelectorsThatNeedAnOmittedValue() throws Exception {
+        var state = new BlockState("minecraft:stone", Map.of(), new BlockState.SavedForm(999999,Map.of(),false));
+        for (String definition : List.of(
+                """
+                {"variants":{"axis=y":{"model":"block/stone"}}}
+                """,
+                """
+                {"multipart":[{"apply":{"model":"block/stone"}},{"when":{"axis":"y"},"apply":{"model":"block/stone"}}]}
+                """)) {
+            try (var archive = open(Map.of(STATE, definition))) {
+                var resolver = new BlockModelResolver(archive);
+                var result = resolver.resolve(state);
+                assertEquals(UNKNOWN_DEFAULT_STATE, result.reason());
+                assertTrue(result.detail().contains("999999"));
+                assertTrue(result.detail().contains("axis"));
+                assertTrue(resolver.resolve(state.withProperties(Map.of("axis","y"))).resolved());
+            }
+        }
+        try (var archive = open(Map.of(STATE,SIMPLE_STATE))) {
+            assertTrue(new BlockModelResolver(archive).resolve(state).resolved());
+        }
+    }
     private static final String STATE = "assets/minecraft/blockstates/stone.json";
     private static final String MODEL = "assets/minecraft/models/block/stone.json";
     private static final String PARENT = "assets/minecraft/models/block/base.json";
@@ -33,6 +56,135 @@ class BlockModelResolverTest {
         return "[{\"from\":[0,0,0],\"to\":[16,16,16],\"faces\":{" + String.join(",", faces) + "}}]";
     }
 
+    @Test void stateRootParentLeavesVariantAndMultipartDispatchIntact() throws Exception {
+        var state = new BlockState("minecraft:stone", Map.of());
+        for (var dispatch : List.of("\"variants\":{\"\":{\"model\":\"block/stone\"}}",
+                "\"multipart\":[{\"apply\":{\"model\":\"block/stone\"}}]")) {
+            try (var archive = open(Map.of(STATE, "{\"parent\":\"absent:block/example\"," + dispatch + "}"))) {
+                var result = new BlockModelResolver(archive).resolve(state);
+                assertTrue(result.resolved(), result.detail());
+                assertEquals(6, result.model().orElseThrow().faces().size());
+                assertTrue(result.sources().stream().noneMatch(s -> s.id().namespace().equals("absent")));
+            }
+        }
+        try (var archive = open(Map.of(STATE, "{\"parent\":\"block/stone\"}"))) {
+            assertEquals(INVALID_MODEL, new BlockModelResolver(archive).resolve(state).reason());
+        }
+    }
+
+    @Test void compositeItemPassVisibilityFollowsTheDeclaredLoader() throws Exception {
+        for (String loader : List.of("forge:composite", "neoforge:composite")) {
+            for (String order : List.of("", ",\"item_render_order\":[\"a\",\"b\"]", ",\"item_render_order\":[\"a\"]")) {
+                String definition = """
+                        {"loader":"%s","children":{"a":%s,"b":%s},"visibility":{"b":false}%s}
+                        """.formatted(loader, model(cube()), model(cube()), order);
+                try (var archive = open(Map.of(MODEL, definition))) {
+                    var result = new BlockModelResolver(archive).resolve(new BlockState("minecraft:stone", Map.of()));
+                    if (loader.equals("forge:composite") && !order.equals(",\"item_render_order\":[\"a\"]")) {
+                        assertEquals(INVALID_MODEL, result.reason(), result.detail());
+                    } else {
+                        assertTrue(result.resolved(), result.detail());
+                        assertEquals(6, result.model().orElseThrow().faces().size());
+                    }
+                }
+            }
+        }
+    }
+
+    @Test void resolvesAllHangingSignBranchesFromThe263Client() throws Exception {
+        String path=System.getenv("MCWE_TINT_263_WORLD");assumeTrue(path!=null);
+        Path instance=Path.of(path).getParent().getParent(),client=instance.resolve(instance.getFileName()+".jar");
+        try(var zip=new java.util.zip.ZipFile(client.toFile());var archive=ClientResourceArchive.open(client,"26.3")){
+            var resolver=new BlockModelResolver(archive);
+            String folder="assets/minecraft/blockstates/";
+            var signs=zip.stream().map(ZipEntry::getName).filter(n->n.startsWith(folder)&&n.endsWith("_hanging_sign.json")&&!n.contains("_wall_")).toList();
+            assertEquals(13,signs.size());
+            for(var file:signs) for(boolean attached:List.of(false,true)) for(int turn=0;turn<16;turn++){
+                String id=file.substring(folder.length(),file.length()-5);
+                var state=new BlockState("minecraft:"+id,Map.of("attached",""+attached,"rotation",""+turn));
+                var result=resolver.resolve(state);
+                assertTrue(result.resolved(),()->state+" "+result.detail());
+                var part=result.model().orElseThrow().parts().getFirst();
+                assertFalse(part.faces().isEmpty());
+                if(!attached && turn%4==3){
+                    assertEquals("block/"+id+"_rot_3",part.id().path());
+                    assertEquals(turn/4*90,part.yRotation());
+                    assertEquals(4,part.faces().stream().filter(f->f.vertices().size()==4).count());
+                    assertTrue(part.faces().stream().flatMap(f->ModelGeometry.bake(f,part).positions().stream()).allMatch(Float::isFinite));
+                }
+            }
+        }
+    }
+
+    private static String packFormat(int format) {
+        return "{\"id\":\"1.21.1\",\"world_version\":3955,\"pack_version\":{\"resource\":"+format+"}}";
+    }
+
+    @Test void multipartNegationUsesTheBaseClientGrammar() throws Exception {
+        String model = "{\"model\":\"block/stone\"}";
+        String definition = """
+                {"multipart":[{"apply":%s},{"when":{"AND":[{"axis":"%s"}]},"apply":%s}]}
+                """;
+        for (int format : List.of(46,47,51,52,54,55,97)) {
+            for (String expression : List.of("!x", "!x|y","x|!y","!x|!y")) {
+                try (var archive = open(Map.of(STATE,definition.formatted(model,expression,model),"version.json",packFormat(format)))) {
+                    var resolver = new BlockModelResolver(archive);
+                    for (String axis : List.of("x","y","z","")) {
+                        var result = resolver.resolve(state(axis.isEmpty()?Map.of():Map.of("axis",axis)));
+                        if (format <= 51 && expression.contains("|!")) {
+                            assertEquals(INVALID_MODEL,result.reason()); continue;
+                        }
+                        boolean matched = !axis.isEmpty() && switch(expression) {
+                            case "!x" -> !axis.equals("x");
+                            case "!x|y" -> format <= 51 ? axis.equals("z") : !axis.equals("x");
+                            case "x|!y" -> !axis.equals("y");
+                            default -> true;
+                        };
+                        assertTrue(result.resolved(),result.detail());
+                        assertEquals(matched?2:1,result.model().orElseThrow().parts().size(),format+" "+expression+" "+axis);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test void cuboidRotationPrecedesThreeAxisDispatchAndKeepsUvAndCull() throws Exception {
+        String rotation = "\"rotation\":{\"origin\":[4,4,4],\"x\":90,\"y\":90},";
+        String stateJson = SIMPLE_STATE.replace("\"model\":","\"x\":90,\"y\":90,\"z\":90,\"uvlock\":true,\"model\":");
+        try(var archive=open(Map.of(MODEL,model(cube()).replace("\"from\":",rotation+"\"from\":"),
+                STATE,stateJson,"version.json",packFormat(74)))) {
+            var result=new BlockModelResolver(archive).resolve(state(Map.of()));
+            assertTrue(result.resolved(),result.detail());
+            var part=result.model().orElseThrow().parts().getFirst();
+            assertEquals(90,part.zRotation());
+            var face=part.faces().stream().filter(f->f.direction()==BlockModelResolver.Direction.UP).findFirst().orElseThrow();
+            var first=face.vertices().getFirst();
+            // (0,16,0) about (4,4,4), positive X then Y -> (16,8,8).
+            assertEquals(16,first.x(),1e-5);assertEquals(8,first.y(),1e-5);assertEquals(8,first.z(),1e-5);
+            var quad=ModelGeometry.bake(face,part);
+            // Dispatch about the block center uses negative quarter turns. Y+ -> X+ -> Y-.
+            assertEquals(BlockModelResolver.Direction.DOWN,quad.cull());
+            assertEquals(List.of(0f,1f,1f,1f,1f,0f,0f,0f),quad.uv());
+        }
+        try(var archive=open(Map.of(STATE,stateJson,"version.json",packFormat(73)))){
+            assertEquals(UNSUPPORTED_MODEL,new BlockModelResolver(archive).resolve(state(Map.of())).reason());
+        }
+        try(var archive=open(Map.of(MODEL,model(cube()).replace("\"from\":",rotation+"\"from\":"),"version.json",packFormat(73)))){
+            assertEquals(UNSUPPORTED_MODEL,new BlockModelResolver(archive).resolve(state(Map.of())).reason());
+        }
+    }
+
+    @Test void modernAxisAngleTakesPrecedenceAndRescalesWithoutSingularities() throws Exception {
+        String prefix="\"rotation\":{\"origin\":[0,0,0],\"axis\":\"z\",\"angle\":450,\"x\":30,\"rescale\":true},";
+        try(var archive=open(Map.of(MODEL,model(cube()).replace("\"from\":",prefix+"\"from\":"),"version.json",packFormat(74)))) {
+            var result=new BlockModelResolver(archive).resolve(state(Map.of()));
+            assertTrue(result.resolved(),result.detail());
+            var up=result.model().orElseThrow().faces().stream().filter(f->f.direction()==BlockModelResolver.Direction.UP).findFirst().orElseThrow();
+            assertEquals(-16,up.vertices().getFirst().x(),1e-5);
+            assertEquals(0,up.vertices().getFirst().y(),1e-5);
+        }
+    }
+
     @Test void combinesNestedMultipartConditionsAndKeepsPerPartTransforms() throws Exception {
         String multipart="{\"multipart\":[{\"apply\":{\"model\":\"block/stone\"}},{\"when\":{\"OR\":[{\"axis\":\"x|z\"},{\"AND\":[{\"axis\":\"y\"},{\"open\":\"true\"}]}]},\"apply\":[{\"model\":\"block/stone\",\"y\":90,\"uvlock\":true}]}]}";
         try(var archive=open(Map.of(STATE,multipart))) {
@@ -40,7 +192,7 @@ class BlockModelResolverTest {
             var connected=resolver.resolve(state(Map.of("axis","z"))).model().orElseThrow();
             assertEquals(2,connected.parts().size());assertEquals(12,connected.faces().size());
             assertEquals(90,connected.parts().getLast().yRotation());assertTrue(connected.parts().getLast().uvLock());
-            assertTrue(connected.fixedFirstAlternative());
+            assertFalse(connected.fixedFirstAlternative());
             assertEquals(1,resolver.resolve(state(Map.of("axis","y","open","false"))).model().orElseThrow().parts().size());
             assertEquals(2,resolver.resolve(state(Map.of("axis","y","open","true"))).model().orElseThrow().parts().size());
         }
@@ -77,6 +229,29 @@ class BlockModelResolverTest {
         }
         assertFallback(AMBIGUOUS_VARIANT, STATE,
                 "{\"variants\":{\"\":{\"model\":\"block/stone\"},\"axis=x\":{\"model\":\"block/stone\"}}}", Map.of("axis", "x"));
+    }
+
+    @Test void positionalChoicesValidateEveryWeightAndOnlyLoadTheSelectedModel() throws Exception {
+        String definition="""
+                {"variants":{"":[{"model":"block/stone","weight":2},{"model":"block/missing","weight":1}]}}
+                """;
+        var block=state(Map.of());
+        try(var archive=open(Map.of(STATE,definition))) {
+            var resolver=new BlockModelResolver(archive);
+            var outcomes=new HashSet<BlockModelResolver.Reason>();
+            for(int x=-12;x<12;x++){
+                int selected=WeightedVariantsTest.reference(WeightedVariantsTest.randomAt(x,70,-19,false),new int[]{2,1},true);
+                var result=resolver.resolveAt(block,new ModelBlockContext.Position(x,70,-19));
+                assertEquals(selected==0?RESOLVED:MISSING_RESOURCE,result.reason());
+                result.model().ifPresent(model->assertFalse(model.fixedFirstAlternative()));
+                outcomes.add(result.reason());
+            }
+            assertEquals(Set.of(RESOLVED,MISSING_RESOURCE),outcomes);
+        }
+        for(String invalid:List.of("0","-1","1.5")){
+            assertFallback(INVALID_MODEL,STATE,definition.replace("weight\":1","weight\":"+invalid),Map.of());
+        }
+        assertFallback(LIMIT_EXCEEDED,STATE,definition.replace("weight\":2","weight\":2147483647"),Map.of());
     }
 
     @Test void retainsExplicitUvFaceRotationTintAndOverlayLayers() throws Exception {

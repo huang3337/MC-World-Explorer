@@ -53,6 +53,9 @@ public final class PortablePaths {
     }
 
     private static Path detectedApplicationRoot() {
+        Path project = pathProperty("mcwe.projectDir");
+        if (project != null && Files.isRegularFile(project.resolve("build.gradle"))
+                && Files.isRegularFile(project.resolve("settings.gradle"))) return normalized(project);
         return resolveApplicationRoot(
                 codeLocation(),
                 pathProperty("user.dir"),

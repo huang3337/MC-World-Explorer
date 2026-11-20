@@ -11,7 +11,7 @@ class VoxelShaderProgramTest {
     @Test
     void loadsPackagedShadersAndRejectsMissingResource() throws Exception {
         assertTrue(VoxelShaderProgram.read("/v05/shaders/voxel.vert").contains("uOffset"));
-        assertTrue(VoxelShaderProgram.read("/v05/shaders/voxel.frag").contains("uColor"));
+        assertTrue(VoxelShaderProgram.read("/v05/shaders/voxel.frag").contains("vColor"));
         assertThrows(IOException.class,
                 () -> VoxelShaderProgram.read("/v05/shaders/missing.frag"));
     }

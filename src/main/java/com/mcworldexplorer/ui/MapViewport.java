@@ -8,6 +8,7 @@ import com.mcworldexplorer.map.MapTileBounds;
 import com.mcworldexplorer.map.MapTileKey;
 import com.mcworldexplorer.map.MapViewportState;
 import com.mcworldexplorer.map.MapZoomLevel;
+import com.mcworldexplorer.storage.SavedPlaces.Position;
 import com.mcworldexplorer.viewer.ViewerRangePreset;
 import com.mcworldexplorer.viewer.ViewerPerformanceProfile;
 import com.mcworldexplorer.voxel.data.ChunkRectangle;
@@ -19,6 +20,7 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
+import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.KeyCode;
@@ -27,6 +29,7 @@ import javafx.scene.paint.Color;
 import javafx.util.Duration;
 
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,7 +44,10 @@ public final class MapViewport extends Region {
     private static final double MIN_VISUAL_ZOOM = MapDisplayZoom.PIXELS_4.blocksPerPixel();
     private static final double MAX_VISUAL_ZOOM = MapDisplayZoom.BLOCKS_16.blocksPerPixel();
     private static final double WHEEL_ZOOM_DIVISOR = 240;
-    private static final double CLICK_DRAG_THRESHOLD = 4;
+    static final double CLICK_DRAG_THRESHOLD = 4;
+    private static final double PLACE_RADIUS = 4;
+    private static final double PLACE_STROKE_WIDTH = 1.5;
+    private static final double PLACE_OUTER_RADIUS = PLACE_RADIUS + PLACE_STROKE_WIDTH / 2;
 
     private boolean displayBatch, displayDirty;
     public void beginDisplayBatch() { displayBatch = true; }
@@ -82,12 +88,13 @@ public final class MapViewport extends Region {
         }
     }
     private final Canvas canvas = new Canvas();
+    final PlaceLineOverlay placeLines = new PlaceLineOverlay(this, canvas);
     private final Map<MapTileKey, Image> tiles = new java.util.LinkedHashMap<>(16, .75f, true);
     private final Set<MapTileKey> validatedKeys = new LinkedHashSet<>();
     private final Map<MapTileKey, List<MapMarker>> tileMarkers = new HashMap<>();
     private final Map<MapTileKey, Image> partialTiles = new HashMap<>();
     private final Map<MapTileKey, List<MapMarker>> partialTileMarkers = new HashMap<>();
-    private final List<DisplayMapMarker> fixedMarkers = new ArrayList<>();
+    private List<DisplayMapMarker> fixedMarkers = List.of();
     private final Tooltip markerTooltip = new Tooltip();
     private final BooleanProperty showPlayer = new SimpleBooleanProperty(true);
     private final BooleanProperty showSpawn = new SimpleBooleanProperty(true);
@@ -122,7 +129,16 @@ public final class MapViewport extends Region {
     private String highlightedPlayerIdentifier;
     private boolean viewerSelectionMode;
     private boolean viewerFreeSelection;
-    private boolean secondaryPanning;
+    record PlaceHit(Position position, DisplayMapMarker original) {}
+    record BlockClick(long x, long z, PlaceHit marker, com.mcworldexplorer.storage.SavedPlaces.Link line,
+                      double screenX, double screenY) {}
+    private Consumer<BlockClick> blockMenuRequested = ignored -> {};
+    private boolean secondaryPressed;
+    private boolean secondaryDragged;
+    private long pressedBlockX;
+    private long pressedBlockZ;
+    private PlaceHit pressedPlace;
+    private Map<Position, String> namedPlaces = Map.of();
     private ChunkRectangle viewerDragStart;
     private ViewerPerformanceProfile viewerProfile = ViewerPerformanceProfile.BASIC;
     private Consumer<ChunkRectangle> viewerSelectionChanged = ignored -> {};
@@ -135,7 +151,7 @@ public final class MapViewport extends Region {
     private boolean pointerInside;
 
     public MapViewport() {
-        getChildren().add(canvas);
+        getChildren().addAll(canvas, placeLines.measurement);
         setMinSize(0, 0);
         setFocusTraversable(true);
         showPlayer.addListener((observable, oldValue, newValue) -> draw());
@@ -144,23 +160,19 @@ public final class MapViewport extends Region {
         zoomSettle.setOnFinished(event -> settleVisualZoom());
         canvas.setOnMousePressed(event -> {
             hideMarkerTooltip();
-            if (event.getButton() == MouseButton.SECONDARY && viewerSelectionMode && viewerFreeSelection) {
-                secondaryPanning = true;
-                dragX = event.getX();
-                dragY = event.getY();
-                canvas.setCursor(Cursor.CLOSED_HAND);
+            if (event.getButton() == MouseButton.SECONDARY) {
+                if (state == null || primaryPressed) return;
+                secondaryPressed = true;
+                secondaryDragged = false;
+                pressX = dragX = event.getX();
+                pressY = dragY = event.getY();
+                pressedBlockX = blockXAt(pressX);
+                pressedBlockZ = blockZAt(pressY);
+                pressedPlace = placeAt(pressX, pressY, 0);
                 return;
             }
             if (event.getButton() == MouseButton.PRIMARY) {
-                DisplayMapMarker marker = viewerSelectionMode
-                        ? null
-                        : markerAt(event.getX(), event.getY());
-                if (marker != null) {
-                    state.centerOn(marker.marker().x(), marker.marker().z());
-                    draw();
-                    viewportChanged.run();
-                    return;
-                }
+                secondaryPressed = false;
                 primaryPressed = true;
                 dragging = false;
                 pressX = event.getX();
@@ -184,12 +196,18 @@ public final class MapViewport extends Region {
         canvas.setOnMouseDragged(event -> {
             trackPointer(event.getX(), event.getY());
             hideMarkerTooltip();
-            if (state != null && secondaryPanning && event.isSecondaryButtonDown()) {
-                state.panPixels(event.getX() - dragX, event.getY() - dragY);
-                dragX = event.getX();
-                dragY = event.getY();
-                draw();
-                viewportChanged.run();
+            if (state != null && secondaryPressed && event.isSecondaryButtonDown()) {
+                if (Math.hypot(event.getX() - pressX, event.getY() - pressY) > CLICK_DRAG_THRESHOLD) {
+                    secondaryDragged = true;
+                }
+                if (secondaryDragged) {
+                    state.panPixels(event.getX() - dragX, event.getY() - dragY);
+                    dragX = event.getX();
+                    dragY = event.getY();
+                    canvas.setCursor(Cursor.CLOSED_HAND);
+                    draw();
+                    viewportChanged.run();
+                }
                 return;
             }
             if (state == null || !event.isPrimaryButtonDown() || !primaryPressed) {
@@ -218,6 +236,19 @@ public final class MapViewport extends Region {
             viewportChanged.run();
         });
         canvas.setOnMouseReleased(event -> {
+            if (event.getButton() == MouseButton.SECONDARY) {
+                boolean click = secondaryPressed && !secondaryDragged && state != null
+                        && canvas.contains(event.getX(), event.getY())
+                        && Math.hypot(event.getX() - pressX, event.getY() - pressY) <= CLICK_DRAG_THRESHOLD;
+                secondaryPressed = false;
+                canvas.setCursor(viewerSelectionCursor());
+                if (click) blockMenuRequested.accept(new BlockClick(
+                        pressedBlockX, pressedBlockZ, pressedPlace,
+                        pressedPlace == null && !viewerSelectionMode ? placeLines.hit(pressX, pressY) : null,
+                        event.getScreenX(), event.getScreenY()));
+                event.consume();
+                return;
+            }
             if (event.getButton() == MouseButton.PRIMARY && primaryPressed
                     && viewerSelectionMode && viewerFreeSelection && viewerDragStart != null) {
                 updateViewerCandidate(event.getX(), event.getY());
@@ -242,7 +273,7 @@ public final class MapViewport extends Region {
                             event.getY() - pressY)) {
                 retryRequested.accept(pressedFailedKey);
             }
-            secondaryPanning = false;
+            secondaryPressed = false;
             viewerDragStart = null;
             primaryPressed = false;
             dragging = false;
@@ -256,20 +287,7 @@ public final class MapViewport extends Region {
             if (state == null || event.getDeltaY() == 0 || (viewerFreeSelection && primaryPressed)) {
                 return;
             }
-            zoomAnchorX = event.getX();
-            zoomAnchorY = event.getY();
-            double factor = Math.pow(2, -event.getDeltaY() / WHEEL_ZOOM_DIVISOR);
-            double next = clampVisualZoom(state.visualBlocksPerPixel() * factor);
-            state.zoomVisualAt(
-                    next,
-                    zoomAnchorX,
-                    zoomAnchorY,
-                    getWidth(),
-                    getHeight());
-            updateViewerCandidate(event.getX(), event.getY());
-            draw();
-            visualChanged.run();
-            zoomSettle.playFromStart();
+            wheelZoom(event.getX(), event.getY(), event.getDeltaY());
             event.consume();
         });
         canvas.setOnMouseEntered(event -> {
@@ -290,7 +308,15 @@ public final class MapViewport extends Region {
                 draw();
                 return;
             }
-            DisplayMapMarker marker = markerAt(event.getX(), event.getY());
+            PlaceHit hit = placeAt(event.getX(), event.getY(), 0);
+            DisplayMapMarker marker = hit == null ? null : hit.original();
+            var line = marker == null ? placeLines.hit(event.getX(), event.getY()) : null;
+            placeLines.hover(line);
+            if (line != null) {
+                showTooltip(Optional.of(line.distances()), event.getScreenX(), event.getScreenY());
+                canvas.setCursor(Cursor.HAND);
+                return;
+            }
             MapTileKey failedKey = marker == null
                     ? failedTileAt(event.getX(), event.getY())
                     : null;
@@ -299,10 +325,16 @@ public final class MapViewport extends Region {
                             ? Optional.empty()
                             : Optional.of(incompleteReasons.getOrDefault(failedKey, "加载失败，点击重试"))
                     : displayMarkerTooltipText(marker);
+            if (hit != null && namedPlaces.containsKey(hit.position())) {
+                String name = namedPlaces.get(hit.position());
+                if (marker == null) text = Optional.of(name);
+                else if (!name.equals(marker.placeName())) text = Optional.of(name + "\n" + marker.tooltipText());
+            }
             showTooltip(text, event.getScreenX(), event.getScreenY());
-            canvas.setCursor(marker == null && failedKey == null ? Cursor.DEFAULT : Cursor.HAND);
+            canvas.setCursor(hit == null && failedKey == null ? Cursor.DEFAULT : Cursor.HAND);
         });
         canvas.setOnMouseExited(event -> {
+            placeLines.hover(null);
             pointerInside = false;
             visualChanged.run();
             hideMarkerTooltip();
@@ -329,7 +361,25 @@ public final class MapViewport extends Region {
         draw();
     }
 
-    private void trackPointer(double x, double y) {
+    void wheelZoom(double x, double y, double delta) {
+        if (state == null || delta == 0) return;
+        zoomAnchorX = x;
+        zoomAnchorY = y;
+        double next = clampVisualZoom(state.visualBlocksPerPixel() * Math.pow(2, -delta / WHEEL_ZOOM_DIVISOR));
+        state.zoomVisualAt(next, x, y, getWidth(), getHeight());
+        updateViewerCandidate(x, y);
+        draw();
+        visualChanged.run();
+        zoomSettle.playFromStart();
+    }
+
+    void panLineView(double dx, double dy) {
+        state.panPixels(dx, dy);
+        draw();
+        viewportChanged.run();
+    }
+
+    void trackPointer(double x, double y) {
         lastPointerX = x;
         lastPointerY = y;
         pointerInside = x >= 0 && y >= 0 && x < getWidth() && y < getHeight();
@@ -337,8 +387,25 @@ public final class MapViewport extends Region {
 
     public String pointerCoordinates() {
         if (state == null || !pointerInside) return "鼠标坐标 —";
-        return "鼠标 X " + (long) Math.floor(state.worldXAt(lastPointerX, getWidth()))
-                + " · Z " + (long) Math.floor(state.worldZAt(lastPointerY, getHeight()));
+        return "鼠标 X " + blockXAt(lastPointerX) + " · Z " + blockZAt(lastPointerY);
+    }
+
+    long blockXAt(double x) {
+        return (long) Math.floor(state.worldXAt(x, getWidth()));
+    }
+
+    long blockZAt(double y) {
+        return (long) Math.floor(state.worldZAt(y, getHeight()));
+    }
+
+    void setOnBlockMenuRequested(Consumer<BlockClick> handler) {
+        blockMenuRequested = java.util.Objects.requireNonNull(handler);
+    }
+
+    void setNamedPlaces(Map<Position, String> places) {
+        if (namedPlaces.equals(places)) return;
+        namedPlaces = Map.copyOf(places);
+        draw();
     }
 
     public MapViewportState viewportState() {
@@ -377,8 +444,10 @@ public final class MapViewport extends Region {
     }
 
     public void setViewerSelectionMode(boolean enabled) {
+        placeLines.cancel();
+        placeLines.hover(null);
         primaryPressed = false;
-        secondaryPanning = false;
+        secondaryPressed = false;
         viewerDragStart = null;
         viewerSelectionMode = enabled;
         if (!enabled) {
@@ -414,7 +483,7 @@ public final class MapViewport extends Region {
 
     public void clearViewerLockedSelection() {
         primaryPressed = false;
-        secondaryPanning = false;
+        secondaryPressed = false;
         viewerDragStart = null;
         viewerSelection.clear();
         updateViewerCandidateFromPointer();
@@ -481,7 +550,8 @@ public final class MapViewport extends Region {
         incompleteReasons.remove(key);
         validatedKeys.add(key);
         tiles.put(key, image);
-        tileMarkers.put(key, List.copyOf(markers));
+        if (markers.isEmpty()) tileMarkers.remove(key);
+        else tileMarkers.put(key, List.copyOf(markers));
         partialTiles.remove(key);
         partialTileMarkers.remove(key);
         failedKeys = without(failedKeys, key);
@@ -506,7 +576,8 @@ public final class MapViewport extends Region {
             return;
         }
         partialTiles.put(key, image);
-        partialTileMarkers.put(key, List.copyOf(markers));
+        if (markers.isEmpty()) partialTileMarkers.remove(key);
+        else partialTileMarkers.put(key, List.copyOf(markers));
         enforceDisplayBudget(key);
         draw();
     }
@@ -562,7 +633,8 @@ public final class MapViewport extends Region {
     }
 
     public void clearTiles() {
-        secondaryPanning = false;
+        placeLines.cancel();
+        secondaryPressed = false;
         viewerDragStart = null;
         tiles.clear();
         validatedKeys.clear();
@@ -585,8 +657,7 @@ public final class MapViewport extends Region {
 
     public void setFixedMarkers(List<DisplayMapMarker> markers) {
         hideMarkerTooltip();
-        fixedMarkers.clear();
-        fixedMarkers.addAll(markers);
+        fixedMarkers = markers.stream().distinct().toList();
         draw();
     }
 
@@ -648,17 +719,24 @@ public final class MapViewport extends Region {
         }
     }
 
-    public BufferedImage snapshotImage() {
-        WritableImage snapshot = canvas.snapshot(null, null);
+    public BufferedImage snapshotTerrain() {
+        Canvas terrain = new Canvas(canvas.getWidth(), canvas.getHeight());
+        GraphicsContext graphics = terrain.getGraphicsContext2D();
+        drawBackground(graphics);
+        graphics.setImageSmoothing(false);
+        for (var entry : tiles.entrySet()) {
+            if (targetKeys.contains(entry.getKey()) && validatedKeys.contains(entry.getKey())) {
+                drawTile(graphics, entry.getKey(), entry.getValue());
+            }
+        }
+        WritableImage snapshot = terrain.snapshot(null, null);
         BufferedImage output = new BufferedImage(
                 (int) snapshot.getWidth(),
                 (int) snapshot.getHeight(),
                 BufferedImage.TYPE_INT_ARGB);
-        for (int y = 0; y < output.getHeight(); y++) {
-            for (int x = 0; x < output.getWidth(); x++) {
-                output.setRGB(x, y, snapshot.getPixelReader().getArgb(x, y));
-            }
-        }
+        int[] pixels = ((DataBufferInt) output.getRaster().getDataBuffer()).getData();
+        snapshot.getPixelReader().getPixels(0, 0, output.getWidth(), output.getHeight(),
+                PixelFormat.getIntArgbInstance(), pixels, 0, output.getWidth());
         return output;
     }
 
@@ -694,12 +772,11 @@ public final class MapViewport extends Region {
         zoomTargetChanged.run();
     }
 
-    private void draw() {
+    void draw() {
         if (displayBatch) { displayDirty = true; return; }
         GraphicsContext graphics = canvas.getGraphicsContext2D();
         graphics.setImageSmoothing(isShowingTemporaryScale());
-        graphics.setFill(Color.web("#20262b"));
-        graphics.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawBackground(graphics);
         if (state == null) {
             return;
         }
@@ -719,8 +796,68 @@ public final class MapViewport extends Region {
                     size,
                     size);
         }
-        visibleMarkers().forEach(marker -> drawMarker(graphics, marker));
+        var visible = visibleMarkers();
+        placeLines.draw(graphics, visible);
+        Set<Position> originalPositions = new java.util.HashSet<>();
+        for (var marker : visible) {
+            drawMarker(graphics, marker);
+            originalPositions.add(marker.position());
+        }
+        drawNamedPlaces(graphics, originalPositions);
         drawViewerSelections(graphics);
+    }
+
+    private void drawNamedPlaces(GraphicsContext graphics, Set<Position> originalPositions) {
+        for (Position place : namedPlaces.keySet()) {
+            if (originalPositions.contains(place)) continue;
+            double x = placeScreenX(place);
+            double y = placeScreenY(place);
+            if (x < -PLACE_OUTER_RADIUS || y < -PLACE_OUTER_RADIUS ||
+                    x > canvas.getWidth() + PLACE_OUTER_RADIUS || y > canvas.getHeight() + PLACE_OUTER_RADIUS) continue;
+            graphics.setFill(Color.DARKGOLDENROD);
+            graphics.fillOval(x - PLACE_RADIUS, y - PLACE_RADIUS, 2 * PLACE_RADIUS, 2 * PLACE_RADIUS);
+            graphics.setStroke(Color.WHITE);
+            graphics.setLineWidth(PLACE_STROKE_WIDTH);
+            graphics.strokeOval(x - PLACE_RADIUS, y - PLACE_RADIUS, 2 * PLACE_RADIUS, 2 * PLACE_RADIUS);
+        }
+    }
+
+    double placeScreenX(Position place) {
+        return state.screenXFor(place.x() + 0.5, canvas.getWidth());
+    }
+
+    double placeScreenY(Position place) {
+        return state.screenYFor(place.z() + 0.5, canvas.getHeight());
+    }
+
+    PlaceHit placeAt(double x, double y, double snapRadius) {
+        return state == null ? null : placeAt(x, y, snapRadius, visibleMarkers());
+    }
+
+    PlaceHit placeAt(double x, double y, double snapRadius, List<DisplayMapMarker> visible) {
+        PlaceHit closest = null;
+        double best = Double.POSITIVE_INFINITY;
+        double originalRadius = Math.max(MARKER_RADIUS + 1, snapRadius);
+        for (var marker : visible) {
+            Position place = marker.position();
+            double distance = Math.hypot(x - placeScreenX(place), y - placeScreenY(place));
+            if (distance <= originalRadius && distance <= best) {
+                closest = new PlaceHit(place, marker);
+                best = distance;
+            }
+        }
+        double namedRadius = Math.max(PLACE_OUTER_RADIUS, snapRadius);
+        for (Position place : namedPlaces.keySet()) {
+            double dx = x - placeScreenX(place);
+            double dy = y - placeScreenY(place);
+            double distance = Math.hypot(dx, dy);
+            if (distance <= namedRadius && distance <= best
+                    && (closest == null || !closest.position().equals(place))) {
+                best = distance;
+                closest = new PlaceHit(place, null);
+            }
+        }
+        return closest;
     }
 
     private void drawViewerSelections(GraphicsContext graphics) {
@@ -828,46 +965,54 @@ public final class MapViewport extends Region {
             if (isTarget != targetLevel) {
                 continue;
             }
-            MapTileBounds bounds = entry.getKey().bounds();
-            double x = state.screenXFor(bounds.minX(), canvas.getWidth());
-            double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
-            double size = bounds.blockWidth() / state.visualBlocksPerPixel();
-            graphics.drawImage(
-                    entry.getValue(),
-                    Math.floor(x),
-                    Math.floor(y),
-                    Math.ceil(size),
-                    Math.ceil(size));
+            drawTile(graphics, entry.getKey(), entry.getValue());
         }
     }
 
+    private void drawBackground(GraphicsContext graphics) {
+        graphics.setFill(Color.web("#20262b"));
+        graphics.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+    }
+
+    private void drawTile(GraphicsContext graphics, MapTileKey key, Image image) {
+        MapTileBounds bounds = key.bounds();
+        double x = state.screenXFor(bounds.minX(), canvas.getWidth());
+        double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
+        double left = tileEdge(x);
+        double top = tileEdge(y);
+        // Adjacent tiles must quantize the same world edge to the same screen pixel.
+        double right = tileEdge(state.screenXFor(bounds.maxXExclusive(), canvas.getWidth()));
+        double bottom = tileEdge(state.screenYFor(bounds.maxZExclusive(), canvas.getHeight()));
+        if (right <= 0 || bottom <= 0 || left >= canvas.getWidth() || top >= canvas.getHeight()) return;
+        graphics.drawImage(image, left, top, right - left, bottom - top);
+    }
+
+    private static double tileEdge(double projected) {
+        // Wheel round trips can put an integral edge a few floating-point steps below the pixel.
+        double nearest = Math.rint(projected);
+        return Math.abs(projected - nearest) < 1e-7 ? nearest : Math.floor(projected);
+    }
+
     private void drawPartialTiles(GraphicsContext graphics, boolean target) {
-        graphics.save();
-        // A completed target's transparent pixels must not expose old fallback terrain.
-        if (!target) {
-            graphics.beginPath();
-            for (var key : targetKeys) if (!tiles.containsKey(key)) {
-                var b = key.bounds();
-                graphics.rect(state.screenXFor(b.minX(), canvas.getWidth()),
-                        state.screenYFor(b.minZ(), canvas.getHeight()),
-                        b.blockWidth() / state.visualBlocksPerPixel(), b.blockHeight() / state.visualBlocksPerPixel());
-            }
-            graphics.clip();
-        }
+        boolean clipped = false;
         for (Map.Entry<MapTileKey, Image> entry : partialTiles.entrySet()) {
             if (targetKeys.contains(entry.getKey()) != target) continue;
-            MapTileBounds bounds = entry.getKey().bounds();
-            double x = state.screenXFor(bounds.minX(), canvas.getWidth());
-            double y = state.screenYFor(bounds.minZ(), canvas.getHeight());
-            double size = bounds.blockWidth() / state.visualBlocksPerPixel();
-            graphics.drawImage(
-                    entry.getValue(),
-                    Math.floor(x),
-                    Math.floor(y),
-                    Math.ceil(size),
-                    Math.ceil(size));
+            if (!target && !clipped) {
+                // Only fallback partials need a mask over the still-missing target tiles.
+                graphics.save();
+                graphics.beginPath();
+                for (var key : targetKeys) if (!tiles.containsKey(key)) {
+                    var b = key.bounds();
+                    graphics.rect(state.screenXFor(b.minX(), canvas.getWidth()),
+                            state.screenYFor(b.minZ(), canvas.getHeight()),
+                            b.blockWidth() / state.visualBlocksPerPixel(), b.blockHeight() / state.visualBlocksPerPixel());
+                }
+                graphics.clip();
+                clipped = true;
+            }
+            drawTile(graphics, entry.getKey(), entry.getValue());
         }
-        graphics.restore();
+        if (clipped) graphics.restore();
     }
 
     private void drawFailedTiles(GraphicsContext graphics) {
@@ -936,8 +1081,8 @@ public final class MapViewport extends Region {
 
     private void drawMarker(GraphicsContext graphics, DisplayMapMarker displayMarker) {
         MapMarker marker = displayMarker.marker();
-        double x = state.screenXFor(marker.x(), canvas.getWidth());
-        double y = state.screenYFor(marker.z(), canvas.getHeight());
+        double x = placeScreenX(displayMarker.position());
+        double y = placeScreenY(displayMarker.position());
         if (displayMarker.identifier()
                 .filter(identifier -> identifier.equals(highlightedPlayerIdentifier))
                 .isPresent()) {
@@ -957,21 +1102,6 @@ public final class MapViewport extends Region {
                 MARKER_RADIUS * 2, MARKER_RADIUS * 2);
         graphics.strokeOval(x - MARKER_RADIUS, y - MARKER_RADIUS,
                 MARKER_RADIUS * 2, MARKER_RADIUS * 2);
-    }
-
-    private DisplayMapMarker markerAt(double screenX, double screenY) {
-        if (state == null) {
-            return null;
-        }
-        for (DisplayMapMarker displayMarker : visibleMarkers()) {
-            MapMarker marker = displayMarker.marker();
-            double x = state.screenXFor(marker.x(), canvas.getWidth());
-            double y = state.screenYFor(marker.z(), canvas.getHeight());
-            if (Math.hypot(screenX - x, screenY - y) <= MARKER_RADIUS + 3) {
-                return displayMarker;
-            }
-        }
-        return null;
     }
 
     private MapTileKey failedTileAt(double screenX, double screenY) {
@@ -1010,6 +1140,12 @@ public final class MapViewport extends Region {
     }
 
     private List<DisplayMapMarker> visibleMarkers() {
+        if (!showPortals.get() || (tileMarkers.isEmpty() && partialTileMarkers.isEmpty())) {
+            for (var marker : fixedMarkers) {
+                if (!isMarkerVisible(marker)) return fixedMarkers.stream().filter(this::isMarkerVisible).toList();
+            }
+            return fixedMarkers;
+        }
         List<DisplayMapMarker> markers = new ArrayList<>(fixedMarkers);
         List<MapMarker> portals = java.util.stream.Stream.concat(
                         tileMarkers.entrySet().stream().filter(e -> validatedKeys.contains(e.getKey())).map(Map.Entry::getValue),
@@ -1066,7 +1202,7 @@ public final class MapViewport extends Region {
         }
     }
 
-    private void hideMarkerTooltip() {
+    void hideMarkerTooltip() {
         markerTooltip.hide();
         markerTooltip.setText("");
     }

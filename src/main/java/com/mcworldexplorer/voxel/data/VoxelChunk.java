@@ -55,7 +55,7 @@ public final class VoxelChunk {
     }
 
     public java.util.Optional<BlockEntityData> blockEntity(long x,int y,long z) {
-        if(Math.floorDiv(x,16)!=chunkX||Math.floorDiv(z,16)!=chunkZ)return java.util.Optional.empty();
+        if(blockEntities.isEmpty()||Math.floorDiv(x,16)!=chunkX||Math.floorDiv(z,16)!=chunkZ)return java.util.Optional.empty();
         return java.util.Optional.ofNullable(blockEntities.get(entityKey(x,y,z)));
     }
     private static long entityKey(long x,int y,long z){return ((long)y<<8)|((z&15)<<4)|(x&15);}

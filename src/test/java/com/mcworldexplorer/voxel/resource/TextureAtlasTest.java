@@ -14,6 +14,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TextureAtlasTest {
     @TempDir Path home;
+    @Test void readsRawGrayscaleAndAlphaWithoutDisplayGammaConversion() throws Exception {
+        // Two stored gray samples, 128 and 48, as gray, transparent-key gray, and gray/alpha PNGs.
+        var samples=List.of(
+                "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAAAAADRSSBWAAAAC0lEQVR4nGNoMAAAATMAsR8r+RgAAAAASUVORK5CYII=",
+                "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAAAAADRSSBWAAAAAnRSTlMAMFBK/ZQAAAALSURBVHicY2gwAAABMwCxHyv5GAAAAABJRU5ErkJggg==",
+                "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAQAAABeK7cBAAAADUlEQVR4nGNoqDdgAAAD4gEwHAAGiwAAAABJRU5ErkJggg==");
+        for(int i=0;i<samples.size();i++){
+            var image=TextureAtlas.decode(java.util.Base64.getDecoder().decode(samples.get(i)),false);
+            assertEquals(i==2?0x7f808080:0xff808080,image.getRGB(0,0));
+            assertEquals(i==0?0xff303030:0x00303030,image.getRGB(1,0));
+        }
+    }
+
     @Test void missingAndCorruptPngFallBackWithoutBreakingThePalette() throws Exception {
         for(String reference:List.of("block/stone","block/missing")) {
             Path jar=home.resolve(reference.endsWith("stone")?"corrupt.jar":"missing.jar");

@@ -27,6 +27,7 @@ import static org.lwjgl.opengl.GL20.glLinkProgram;
 import static org.lwjgl.opengl.GL20.glShaderSource;
 import static org.lwjgl.opengl.GL20.glUniform3f;
 import static org.lwjgl.opengl.GL20.glUniform4f;
+import static org.lwjgl.opengl.GL20.glUniform1i;
 import static org.lwjgl.opengl.GL20.glUniformMatrix4fv;
 import static org.lwjgl.opengl.GL20.glUseProgram;
 
@@ -36,8 +37,9 @@ public final class VoxelShaderProgram implements AutoCloseable {
     private final int offsetLocation;
     private final int colorLocation;
     private final int texturedLocation;
-    private final int atlasLocation;
     private final int shadedLocation;
+    private final int atlasLocation;
+    private final int vertexMaterialLocation;
 
     public VoxelShaderProgram() throws IOException {
         int vertex = compile(GL_VERTEX_SHADER, read("/v05/shaders/voxel.vert"));
@@ -69,8 +71,9 @@ public final class VoxelShaderProgram implements AutoCloseable {
             offsetLocation = requiredUniform("uOffset");
             colorLocation = requiredUniform("uColor");
             texturedLocation = requiredUniform("uTextured");
-            atlasLocation = requiredUniform("uAtlas");
             shadedLocation = requiredUniform("uShaded");
+            atlasLocation = requiredUniform("uAtlas");
+            vertexMaterialLocation = requiredUniform("uVertexMaterial");
         } catch (RuntimeException failure) {
             close();
             throw failure;
@@ -94,11 +97,15 @@ public final class VoxelShaderProgram implements AutoCloseable {
     }
 
     public void setTextured(boolean textured) {
-        org.lwjgl.opengl.GL20.glUniform1i(texturedLocation, textured ? 1 : 0);
-        org.lwjgl.opengl.GL20.glUniform1i(atlasLocation, 0);
+        glUniform1i(texturedLocation, textured ? 1 : 0);
+        glUniform1i(atlasLocation, 0);
     }
 
-    public void setShaded(boolean shaded) { org.lwjgl.opengl.GL20.glUniform1i(shadedLocation,shaded?1:0); }
+    public void setShaded(boolean shaded) { glUniform1i(shadedLocation, shaded ? 1 : 0); }
+
+    void setVertexMaterial(boolean enabled) {
+        glUniform1i(vertexMaterialLocation, enabled ? 1 : 0);
+    }
 
     public void setColor(int rgb, float alpha) {
         glUniform4f(

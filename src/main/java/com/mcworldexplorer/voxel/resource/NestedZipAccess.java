@@ -13,23 +13,42 @@ final class NestedZipAccess implements AutoCloseable {
     private record Handle(List<FileSystem> systems,long bytes){Path root(){return systems.getLast().getPath("/");}}
     private final Map<Key,Handle> handles=new LinkedHashMap<>(8,.75f,true);
     private final CancellationSignal cancel;
+    private final int maxOpenChains;
+    private byte[] lengthCheckBuffer;
     private long openBytes;
     private boolean closed;
-    NestedZipAccess(CancellationSignal cancel){this.cancel=Objects.requireNonNull(cancel);}
+    NestedZipAccess(CancellationSignal cancel){this(cancel,4);}
+    NestedZipAccess(CancellationSignal cancel,int maxOpenChains){
+        this.cancel=Objects.requireNonNull(cancel);
+        if(maxOpenChains<1||maxOpenChains>4)throw new IllegalArgumentException("嵌套归档句柄上限须为1..4");
+        this.maxOpenChains=maxOpenChains;
+    }
     Set<Path> paths(){Set<Path> paths=new HashSet<>();for(var key:handles.keySet())paths.add(key.path());return paths;}
     Path root(Path path,List<String> chain)throws IOException {
         check();if(chain.isEmpty()||chain.size()>4)throw new IOException("嵌套资源层数须为1..4");
         var key=new Key(path,chain);var cached=handles.get(key);if(cached!=null)return cached.root();
-        while(handles.size()>=4)evict();List<FileSystem> opened=new ArrayList<>();long bytes=0;
+        List<FileSystem> opened=new ArrayList<>();long bytes=0;
         try {
-            opened.add(FileSystems.newFileSystem(path));
+            if(maxOpenChains==1 && !handles.isEmpty()){
+                var previous=handles.entrySet().iterator().next();
+                if(previous.getKey().path().equals(path)){
+                    // Consecutive sibling jars share one outer directory. Release every nested mount first.
+                    var handle=handles.remove(previous.getKey());
+                    openBytes-=handle.bytes();
+                    opened.add(handle.systems().getFirst());
+                    close(handle.systems().subList(1,handle.systems().size()),null);
+                }
+            }
+            while(handles.size()>=maxOpenChains)evict();
+            if(opened.isEmpty())opened.add(FileSystems.newFileSystem(path));
             for(String entry:chain) {
                 check();safe(entry);Path child=opened.getLast().getPath("/"+entry);long size=Files.size(child);
                 if(size<22||size>MAX_NESTED_BYTES)throw new IOException("嵌套JAR须在22字节..32MiB预算内");
                 bytes+=size;if(bytes>MAX_OPEN_BYTES)throw new IOException("嵌套链工作内存超过96MiB");
                 while(openBytes+bytes>MAX_OPEN_BYTES&&!handles.isEmpty())evict();
                 // Verify actual decompressed size before the provider can buffer a nested archive.
-                try(var input=Files.newInputStream(child)){byte[] buffer=new byte[65536];long total=0;int n;while((n=input.read(buffer))!=-1){check();total+=n;if(total>size||total>MAX_NESTED_BYTES)throw new IOException("嵌套JAR解压长度超限");}if(total!=size)throw new IOException("嵌套JAR解压长度不符");}
+                if(lengthCheckBuffer==null)lengthCheckBuffer=new byte[65536];
+                try(var input=Files.newInputStream(child)){long total=0;int n;while((n=input.read(lengthCheckBuffer))!=-1){check();total+=n;if(total>size||total>MAX_NESTED_BYTES)throw new IOException("嵌套JAR解压长度超限");}if(total!=size)throw new IOException("嵌套JAR解压长度不符");}
                 opened.add(FileSystems.newFileSystem(child));
             }
             var handle=new Handle(List.copyOf(opened),bytes);handles.put(key,handle);openBytes+=bytes;return handle.root();

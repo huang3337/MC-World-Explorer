@@ -3,9 +3,7 @@ package com.mcworldexplorer.preview;
 import com.mcworldexplorer.region.RegionChunkData;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Optional;
 
 public final class SurfaceSampler {
@@ -28,11 +26,9 @@ public final class SurfaceSampler {
         if (parsed == null || layer == null) {
             throw new IllegalArgumentException("parsed chunk and layer must not be null");
         }
-        List<ChunkSectionView> sections = new ArrayList<>(parsed.sections());
         ChunkSurface surface = new ChunkSurface(parsed.layout());
         if (layer.isSurfaceOverview()) {
-            sections.sort(Comparator.comparingInt(ChunkSectionView::sectionY).reversed());
-            for (ChunkSectionView section : sections) {
+            for (ChunkSectionView section : parsed.sections().reversed()) {
                 fillSurface(surface, section);
                 if (surface.getPopulatedColumnCount() == ChunkSurface.WIDTH * ChunkSurface.WIDTH) {
                     break;
@@ -89,19 +85,20 @@ public final class SurfaceSampler {
 
     private static void fillSurface(ChunkSurface surface, ChunkSectionView section)
             throws SurfaceSamplingException {
-        for (int localY = 15; localY >= 0; localY--) {
-            for (int localZ = 0; localZ < 16; localZ++) {
-                for (int localX = 0; localX < 16; localX++) {
-                    if (surface.hasColumn(localX, localZ)) {
-                        continue;
-                    }
-                    String blockName = section.blockName(localX, localY, localZ);
+        var uniform = section.uniformBlockName();
+        if (uniform.isPresent() && isAir(uniform.get())) return;
+        for (int localZ = 0; localZ < 16; localZ++) {
+            for (int localX = 0; localX < 16; localX++) {
+                if (surface.hasColumn(localX, localZ)) continue;
+                for (int localY = 15; localY >= 0; localY--) {
+                    String blockName = uniform.isPresent() ? uniform.get() : section.blockName(localX, localY, localZ);
                     if (!isAir(blockName)) {
                         surface.setColumn(
                                 localX,
                                 localZ,
                                 blockName,
                                 section.sectionY() * 16 + localY);
+                        break;
                     }
                 }
             }
@@ -112,16 +109,29 @@ public final class SurfaceSampler {
             ChunkSurface surface,
             ParsedChunkSections parsed,
             PreviewLayer layer) throws SurfaceSamplingException {
+        // At most 32 rows. Resolve each section once for all 256 columns.
+        ChunkSectionView[] rows = new ChunkSectionView[layer.maxY() - layer.minY() + 1];
+        for (ChunkSectionView section : parsed.sections()) {
+            long start = 16L * section.sectionY() - layer.minY();
+            if (start < rows.length && start + 16 > 0) {
+                Arrays.fill(rows, (int)Math.max(0, start), (int)Math.min(rows.length, start + 16), section);
+            }
+        }
         for (int localZ = 0; localZ < 16; localZ++) {
             for (int localX = 0; localX < 16; localX++) {
-                for (int y = layer.maxY(); y >= layer.minY(); y--) {
-                    String ground = parsed.blockName(localX, y, localZ);
-                    if (!isAir(ground)
-                            && isAir(parsed.blockName(localX, y + 1, localZ))
-                            && isAir(parsed.blockName(localX, y + 2, localZ))) {
-                        surface.setColumn(localX, localZ, ground, y);
-                        break;
+                String above = null, twoAbove = null;
+                for (int row = rows.length - 1; row >= 0; row--) {
+                    int y = layer.minY() + row;
+                    String ground = rows[row] == null ? "minecraft:air" : rows[row].blockName(localX, y & 15, localZ);
+                    if (!isAir(ground)) {
+                        if (above == null) above = parsed.blockName(localX, y + 1, localZ);
+                        if (isAir(above) && isAir(twoAbove == null ? parsed.blockName(localX, y + 2, localZ) : twoAbove)) {
+                            surface.setColumn(localX, localZ, ground, y);
+                            break;
+                        }
                     }
+                    twoAbove = above;
+                    above = ground;
                 }
             }
         }

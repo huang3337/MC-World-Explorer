@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 public final class PreviewCache {
-    private static final String RENDER_VERSION = "0.2.1-layer-1";
+    private static final String RENDER_VERSION = "0.2.1-layer-2";
 
     public PreviewCacheResult store(WorldInfo world, PreviewGenerationResult result) throws IOException {
         if (world == null || result == null) {

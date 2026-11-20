@@ -2,13 +2,10 @@ package com.mcworldexplorer.nbt;
 
 import com.mcworldexplorer.preview.WorldDimension;
 import com.mcworldexplorer.world.PlayerLocation;
-import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.BinaryTagIO;
 import net.kyori.adventure.nbt.BinaryTagTypes;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.kyori.adventure.nbt.ListBinaryTag;
-import net.kyori.adventure.nbt.NumberBinaryTag;
-import net.kyori.adventure.nbt.StringBinaryTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +47,9 @@ public final class PlayerDataReader {
             throw new IllegalArgumentException("worldFolder must not be null");
         }
         Path normalizedWorld = worldFolder.toAbsolutePath().normalize();
-        Path playerDirectory = normalizedWorld.resolve("playerdata");
+        Path modernDirectory = normalizedWorld.resolve("players/data");
+        Path playerDirectory = Files.isDirectory(modernDirectory)
+                ? modernDirectory : normalizedWorld.resolve("playerdata");
         if (!Files.isDirectory(playerDirectory)) {
             return List.of();
         }
@@ -97,7 +96,7 @@ public final class PlayerDataReader {
         double x = position.getDouble(0);
         double y = position.getDouble(1);
         double z = position.getDouble(2);
-        String dimensionId = readDimension(root.get("Dimension"));
+        String dimensionId = SavedSpawn.readDimension(root.get("Dimension"));
         if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
                 || dimensionId == null || dimensionId.isBlank()) {
             return Optional.empty();
@@ -228,15 +227,5 @@ public final class PlayerDataReader {
             }
         }
         return Optional.of(decoded.toString());
-    }
-
-    private static String readDimension(BinaryTag dimensionTag) {
-        if (dimensionTag instanceof StringBinaryTag stringTag) {
-            return stringTag.value();
-        }
-        if (dimensionTag instanceof NumberBinaryTag numberTag) {
-            return Integer.toString(numberTag.intValue());
-        }
-        return dimensionTag == null ? null : "";
     }
 }

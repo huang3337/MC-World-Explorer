@@ -22,6 +22,7 @@ class ExternalModelPluginTest {
         import com.mcworldexplorer.voxel.resource.BlockModelResolver.Part;
         public final class WorkerPlugin implements ModelPlugin {
             public Descriptor descriptor(){return new Descriptor(ResourceLocation.parse("outside:worker"),"Worker fixture","VERSION",1,"Worker test",Set.of("outside"),DEPENDENCIES,Set.of());}
+            public Collection<TintLayer> tintLayers(){return List.of(new TintLayer(ResourceLocation.parse("outside:foliage"),0,null,0x125678));}
             public Collection<? extends ModelRule> rules(){return List.of(new Rule());}
             private record Rule() implements ModelRule {
                 public ResourceLocation id(){return ResourceLocation.parse("outside:plain");}
@@ -30,6 +31,11 @@ class ExternalModelPluginTest {
                 public Set<String> fields(){return Set.of("nodes","mode");}
                 public List<Part> resolve(Context c)throws java.io.IOException,Failure {
                     var definition=c.definition();String mode=definition.get("mode").getAsString();
+                    if(mode.equals("saved")){
+                        var state=c.state();
+                        if(state.savedForm().dataVersion()!=5023 || !state.savedProperties().isEmpty()
+                                || !"y".equals(state.properties().get("axis")))throw new IllegalStateException("Lost saved state");
+                    }
                     System.out.println("Plugin output must not corrupt transport");
                     if(mode.equals("crash"))System.exit(7);
                     if(mode.equals("loop"))while(true)Thread.onSpinWait();
@@ -83,8 +89,11 @@ class ExternalModelPluginTest {
         Path jar=build();var receipt=ExternalModelPluginPackage.inspect(jar,"0.7.4");long pid;
         try(var plugin=new ExternalModelPlugin(receipt,"0.7.4",Duration.ofSeconds(10))){
             pid=plugin.processId();var registry=ModelPluginCatalog.core().with(plugin).select(Set.of(plugin.descriptor().id())).rules();
-            for(String mode:List.of("plain","recursive")){
-                var resolved=new BlockModelResolver(source(mode,false),registry).resolve(new BlockState("another:shape",Map.of()));
+            assertEquals(0x125678,registry.tint("outside:foliage",0).rgb());
+            assertNull(ModelPluginCatalog.core().with(plugin).select(Set.of()).rules().tint("outside:foliage",0));
+            for(String mode:List.of("plain","recursive","saved")){
+                var state=new BlockState("another:shape",Map.of("axis","y"),new BlockState.SavedForm(5023,Map.of(),true));
+                var resolved=new BlockModelResolver(source(mode,false),registry).resolve(state);
                 assertTrue(resolved.resolved(),resolved.detail());assertEquals(1,resolved.model().orElseThrow().faces().size());
             }
         }

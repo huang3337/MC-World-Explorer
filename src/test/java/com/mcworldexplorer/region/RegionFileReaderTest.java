@@ -156,6 +156,38 @@ class RegionFileReaderTest {
                         0));
     }
 
+    @Test
+    void checksTheCompressedStreamEvenWhenItsOutputExactlyFillsTheLimit() throws IOException {
+        byte[] bytes = new byte[16384];
+        Path region = tempDir.resolve("bounded.mca");
+        for (var format : java.util.List.of(ChunkCompression.GZIP, ChunkCompression.ZLIB)) {
+            byte[] compressed = compress(format, bytes);
+            assertArrayEquals(bytes, ChunkDecompressor.decompress(format, compressed, bytes.length, region, 0, 0));
+            assertReason(RegionReadException.Reason.DECOMPRESSED_SIZE_LIMIT,
+                    () -> ChunkDecompressor.decompress(format, compressed, bytes.length - 1, region, 0, 0));
+        }
+        byte[] damaged = compress(ChunkCompression.GZIP, bytes);
+        damaged[damaged.length - 8] ^= 1;
+        assertReason(RegionReadException.Reason.DAMAGED_COMPRESSED_DATA,
+                () -> ChunkDecompressor.decompress(ChunkCompression.GZIP, damaged, bytes.length, region, 0, 0));
+    }
+
+    @Test
+    void chunksOnEitherSideOfTheScratchBufferKeepIndependentBytes() throws IOException {
+        var region = tempDir.resolve("sizes.mca");
+        for (int size : new int[]{65535, 65536, 65537, 170000}) {
+            byte[] bytes = new byte[size];
+            new java.util.Random(size).nextBytes(bytes);
+            byte[] compressed = compress(ChunkCompression.ZLIB, bytes);
+            byte[] result = ChunkDecompressor.decompress(ChunkCompression.ZLIB, compressed, size, region, 0, 0);
+            assertReason(RegionReadException.Reason.DECOMPRESSED_SIZE_LIMIT, () ->
+                    ChunkDecompressor.decompress(ChunkCompression.ZLIB, compressed, size - 1, region, 0, 0));
+            ChunkDecompressor.decompress(ChunkCompression.GZIP, compress(ChunkCompression.GZIP, new byte[size]),
+                    size, region, 1, 0);
+            assertArrayEquals(bytes, result);
+        }
+    }
+
     private void assertUnsupportedCompression(int compressionId) throws IOException {
         Path region = tempDir.resolve("unsupported-" + compressionId + ".mca");
         writeRegion(region, 0, 0, 0, compressionId, new byte[0]);

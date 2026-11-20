@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,6 +18,80 @@ class PortableSettingsTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void settingsPageMigratesMissingOrUnknownFieldsAndPreservesWorldBindings() throws IOException {
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, tempDir.toString());
+        Path config = Files.createDirectories(tempDir.resolve("config")).resolve("settings.properties");
+        Files.writeString(config, "map_pipeline=future\nmap_scan_workers=8\nheap_mib=-1\nother=keep\n");
+        var settings = new PortableSettings();
+        assertEquals(new RuntimePreferences(RuntimePreferences.MapMode.AUTO, 0, 2), settings.loadRuntimePreferences());
+        var world = tempDir.resolve("world");
+        var client = tempDir.resolve("client.jar");
+        settings.saveClientResourcePath(world, "1.21.5", client);
+        var selected = new RuntimePreferences(RuntimePreferences.MapMode.SOFTWARE, 1024, 1);
+        settings.savePreferences(selected, true, "enhanced", tempDir);
+        var reopened = new PortableSettings();
+        assertEquals(selected, reopened.loadRuntimePreferences());
+        assertTrue(reopened.usesDarkTheme());
+        assertEquals("enhanced", reopened.loadViewerPerformanceProfile().orElseThrow());
+        assertEquals(tempDir, reopened.loadCustomSavesPath().orElseThrow());
+        assertEquals(client, reopened.loadClientResourcePath(world, "1.21.5").orElseThrow());
+        assertTrue(Files.readString(config).contains("other=keep"));
+    }
+
+    @Test
+    void selectingAModelReplacesLegacySoftwareAndSurvivesReopening() throws IOException {
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, tempDir.toString());
+        Path config = Files.createDirectories(tempDir.resolve("config")).resolve("settings.properties");
+        Files.writeString(config, "map_pipeline=sw\nother=keep\n");
+        var store = new PortableSettings();
+        assertTrue(store.loadRuntimePreferences().softwareMap());
+        var selection = new RuntimePreferences(RuntimePreferences.MapMode.AUTO, 2048, 1, "8086&A788&802F17AA");
+        store.savePreferences(selection, false, "basic", null);
+        assertEquals(selection, new PortableSettings().loadRuntimePreferences());
+        assertTrue(selection.requestsGpu());
+        assertTrue(Files.readString(config).contains("other=keep"));
+        store.savePreferences(new RuntimePreferences(false, 2048, 1), false, "basic", null);
+        assertFalse(store.gpuResetPending("MCWE.exe"));
+        assertEquals("", store.loadRuntimePreferences().mapAdapter());
+    }
+
+    @Test
+    void oldGpuSettingsMigrateOnceAndPendingClearsStayBoundToTheirExecutable() throws IOException {
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, tempDir.toString());
+        var config = Files.createDirectories(tempDir.resolve("config")).resolve("settings.properties");
+        Files.writeString(config, "map_adapter=8086&A788&802F17AA\nother=keep\n");
+        var store = new PortableSettings();
+        var original = store.loadRuntimePreferences();
+        assertTrue(store.hasLegacyGpuPreference());
+        store.markGpuSessionPreference(original);
+        assertFalse(store.hasLegacyGpuPreference());
+        assertEquals(original, store.loadRuntimePreferences());
+        assertTrue(Files.readString(config).contains("other=keep"));
+        Files.writeString(config, "map_gpu_reset=D:/original/MCWE.exe\nother=keep\n");
+        store.finishGpuReset("D:/another/MCWE.exe");
+        assertTrue(store.gpuResetPending("D:/original/MCWE.exe"));
+        store.finishGpuReset("D:/original/MCWE.exe");
+        assertFalse(store.gpuResetPending("D:/original/MCWE.exe"));
+        assertTrue(Files.readString(config).contains("other=keep"));
+    }
+
+    @Test
+    void unknownAppearanceDefaultsToLightAndSavingPreservesOtherPreferences() throws IOException {
+        System.setProperty(PortablePaths.APPLICATION_HOME_PROPERTY, tempDir.toString());
+        Path config = Files.createDirectories(tempDir.resolve("config")).resolve("settings.properties");
+        Files.writeString(config, "appearance=future\nother.preference=keep\n");
+        var settings = new PortableSettings();
+        org.junit.jupiter.api.Assertions.assertFalse(settings.usesDarkTheme());
+        settings.saveDarkTheme(true);
+        assertTrue(new PortableSettings().usesDarkTheme());
+        var stored = new java.util.Properties();
+        try (var input = Files.newInputStream(config)) {
+            stored.load(input);
+        }
+        assertEquals("keep", stored.getProperty("other.preference"));
+    }
 
     private final String originalHome = System.getProperty(PortablePaths.APPLICATION_HOME_PROPERTY);
 

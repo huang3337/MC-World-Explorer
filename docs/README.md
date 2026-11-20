@@ -20,31 +20,33 @@
 
 | 文档 | 用途 |
 |---|---|
-| [插件开发说明](PLUGIN_DEVELOPMENT.md) | 当前 core.1 接口、独立编译示例、安装启停及清理边界 |
+| [插件开发说明](PLUGIN_DEVELOPMENT.md) | [可直接发给 Agent 的扩展构建提示词](PLUGIN_DEVELOPMENT.md#agent-prompt)、core.1 接口、编译示例和安装验证 |
 | [界面设计规范](UI_DESIGN_GUIDE.md) | 主界面与资源、诊断、插件分区约定 |
 | [构建与发布准备](RELEASING.md) | 可复用的 Windows 打包方式与发布前核对 |
 | [项目上下文](../PROJECT_CONTEXT.md) | 接手时核对项目架构、状态与约束 |
-| [项目路线](../PROJECT_ROADMAP.md) | 阶段目标与后续方向；当前执行以版本计划为准 |
+| [项目路线](../PROJECT_ROADMAP.md) | 产品方向与功能范围 |
 | [项目结构](../PROJECT_STRUCTURE.md) | 正式源码、资源、测试与工具的目录说明 |
 
 从源码运行需要 JDK 21。在项目根目录执行：
 
 ```powershell
-.\gradlew.bat run
+.\run-app.bat
 ```
 
-Windows 下也可双击根目录的 `run-app.bat`。首次构建需要下载 Gradle 和依赖。构建输出暂沿用 `build/core-0.7.4/` 目录名，应用版本以构建元数据为准；本体不会构建或预装专用 Mod 插件，也不提供旧探索版本的 SDK 分发包。插件编译与接口限制请按上方开发说明操作。
+Windows 下也可双击根目录的 `run-app.bat`。启动器默认使用本机已有的 Gradle 依赖。首次使用需要下载 Gradle，缺少项目依赖时可在提示处按 Y 联网重试，或直接运行 `.\run-app.bat --online`。批处理在 `build/windows-client/` 准备独立客户端，让 Windows 的显卡偏好只关联本项目。配置和缓存仍位于项目根目录。[渲染与重启设置](FAQ.md#render-settings)
+
+JAR 与 Gradle 测试结果位于 `build/core-0.7.5/`，应用版本以构建元数据为准。本体不会构建或预装专用 Mod 插件，也不提供旧探索版本的 SDK 分发包。插件编译与接口限制请按上方开发说明操作。
 
 </details>
 
 <details>
 <summary><strong>版本进度 · 由新到旧</strong></summary>
 
-[当前进度](progress/CURRENT.md)记录接续位置；[版本进度目录](progress/README.md)汇总各阶段。[0.7.4 版本说明](releases/V0.7.4.md)记录该版本交付内容与限制。开发版本不一定对应已发布软件包。
+[当前进度](progress/CURRENT.md)记录接续位置，[版本进度目录](progress/README.md)汇总各阶段。各版功能与限制见 [0.7.5 版本说明](releases/V0.7.5.md)与 [0.7.4 版本说明](releases/V0.7.4.md)。
 
 | 版本 | 记录 |
 |---|---|
-| [V0.7.5](progress/V0.7.5.md) | 二维浏览、缓存与交付边界记录 |
+| [V0.7.5](progress/V0.7.5.md) | 地图工具、模型解析、统一设置与三维遮挡的分期验证 |
 | [V0.7.4](progress/V0.7.4.md) | 纯本体通用解析、三维交互与本期收尾 |
 | [V0.7.3](progress/V0.7.3.md) | 实例资源接入与通用模型解析 |
 | [V0.7.2](progress/V0.7.2.md) | 资源驱动的完整与非完整方块 |

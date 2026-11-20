@@ -53,7 +53,7 @@ class SurfaceSamplerIntegrationTest {
             int chunkZ = Math.floorDiv(center.z(), 16);
             int regionX = Math.floorDiv(chunkX, 32);
             int regionZ = Math.floorDiv(chunkZ, 32);
-            Path region = world.getFolderPath().resolve("region")
+            Path region = WorldDimension.overworld(world.getFolderPath()).regionDirectory()
                     .resolve("r." + regionX + "." + regionZ + ".mca");
             if (Files.isRegularFile(region)) {
                 targets.put(region, new ChunkTarget(Math.floorMod(chunkX, 32), Math.floorMod(chunkZ, 32)));

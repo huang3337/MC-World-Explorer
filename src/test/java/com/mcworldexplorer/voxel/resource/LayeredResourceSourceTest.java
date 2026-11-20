@@ -35,4 +35,12 @@ class LayeredResourceSourceTest {
         var failure=assertThrows(ResourceAccessException.class,()->bounded.read(ResourceLocation.Kind.MODEL,id));
         assertEquals(ResourceAccessException.Reason.LIMIT_EXCEEDED,failure.reason());
     }
+    @Test void packOverridesTextureContentsWithoutChangingBaseLayout()throws Exception {
+        var id=ResourceLocation.parse("entity/banner/banner_base");
+        var pack=source("pack",Map.of(id.entryName(ResourceLocation.Kind.TEXTURE),new byte[]{1}));
+        var client=source("client",Map.of());
+        var resources=new LayeredResourceSource(List.of(pack,client));
+        assertTrue(resources.read(ResourceLocation.Kind.TEXTURE,id).isPresent());
+        assertFalse(resources.hasBaseTexture(id));
+    }
 }

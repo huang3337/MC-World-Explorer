@@ -1,10 +1,13 @@
 # Issue 编号登记与记录索引
 
-更新：2026-11-05。按源文件名排序；同一前缀内编号递增，0.7.4新增条目已归入对应位置。
+更新于 2026-11-19。按源文件名排序，同一前缀内编号递增。
 
 ## 对齐结果
 
-- 141个前缀，224个已登记编号；133个有现存问题正文或最终审查条目，91个正文缺失，单列在下方登记区。
+- 2026-11-19，二维渲染排查的 2 项问题已修复归档，1 项高、1 项中。现有 145 个前缀、234 个已用编号，其中 143 个有正文或最终条目，91 个历史缺失编号继续占用。
+- 2026-11-19，文档收尾审查归档 4 项低严重程度的代码精简。登记 143 个前缀、232 个编号，141 个有正文或最终条目，91 个缺失编号继续占用。
+- 2026-11-19，0.7.5 工作区已修复[世界出生点](resolved/V0.7.5/LevelDatReader.java.md)、[玩家目录](resolved/V0.7.5/PlayerDataReader.java.md)及[紧凑方块状态](resolved/V0.7.5/ChunkNbtDecoder.java.md)。[新版客户端颜色绑定](resolved/V0.7.5/ClientBlockColors.java.md)已通过两个真实选区的像素回归。该轮登记 142 个前缀、228 个编号，其中 137 个有正文或最终审查条目，91 个正文缺失。
+- 2026-11-05 的核对结果为 141 个前缀、224 个已登记编号，其中 133 个有现存正文或最终审查条目，91 个正文缺失，单列在下方登记区。
 - 恢复当前工作区索引漏掉的11项V0.5登记。这11项在Java主线已提交的索引和正文中都存在，并非历史提交没有登记；原问题及历史文档未改写。
 - 全部前缀的已登记序列连续，无重复分配；最后使用与下一编号按最大已用编号核对。未使用的前缀仍从001开始。
 - **编号连续不等于记录完整。**缺失编号仍占用，不删除、不重排、不回退最大值，也不补写推断性修复结论。
@@ -45,8 +48,8 @@
 | `BuiltinResourcePacksCacheTest.java` | `BIPACKTEST` | — | — | `ISSUE-BIPACKTEST-001` | 尚未登记问题 |
 | `ChunkMeshSnapshot.java` | `CHUNKSNAP` | — | — | `ISSUE-CHUNKSNAP-001` | 尚未登记问题 |
 | `ChunkMesher.java` | `V05-MESH` | 001 | `ISSUE-V05-MESH-001` | `ISSUE-V05-MESH-002` | [V0.5：001](resolved/V0.5/ChunkMesher.java.md) |
-| `ChunkNbtDecoder.java` | `CHUNKDEC` | 001 | `ISSUE-CHUNKDEC-001` | `ISSUE-CHUNKDEC-002` | [正文缺失登记](#缺失正文登记) |
-| `ClientBlockColors.java` | `CLRCOL` | 001 | `ISSUE-CLRCOL-001` | `ISSUE-CLRCOL-002` | [正文缺失登记](#缺失正文登记) |
+| `ChunkNbtDecoder.java` | `CHUNKDEC` | 001,002 | `ISSUE-CHUNKDEC-002` | `ISSUE-CHUNKDEC-003` | [V0.7.5：002](resolved/V0.7.5/ChunkNbtDecoder.java.md)、[正文缺失登记](#缺失正文登记) |
+| `ClientBlockColors.java` | `CLRCOL` | 001,002 | `ISSUE-CLRCOL-002` | `ISSUE-CLRCOL-003` | [已解决 002](resolved/V0.7.5/ClientBlockColors.java.md)、[正文缺失登记](#缺失正文登记) |
 | `ClientBlockRegistration.java` | `CBLKREG` | 001,002,003 | `ISSUE-CBLKREG-003` | `ISSUE-CBLKREG-004` | [正文缺失登记](#缺失正文登记) |
 | `ClientResourceArchive.java` | `CLIENTRES` | 001 | `ISSUE-CLIENTRES-001` | `ISSUE-CLIENTRES-002` | [正文缺失登记](#缺失正文登记) |
 | `ClientResourceArchiveTest.java` | `CLIENTRESOURCEARCHIVETEST` | — | — | `ISSUE-CLIENTRESOURCEARCHIVETEST-001` | 尚未登记问题 |
@@ -67,15 +70,18 @@
 | `JavaFxCameraTransform.java` | `JFXCAM` | 001 | `ISSUE-JFXCAM-001` | `ISSUE-JFXCAM-002` | [V0.4：001](resolved/V0.4/JavaFxCameraTransform.java.md) |
 | `JavaFxOrbitController.java` | `JFXORBIT` | 001 | `ISSUE-JFXORBIT-001` | `ISSUE-JFXORBIT-002` | [V0.4：001](resolved/V0.4/JavaFxOrbitController.java.md) |
 | `LauncherResourceLibraries.java` | `LAUNCHLIB` | 001,002 | `ISSUE-LAUNCHLIB-002` | `ISSUE-LAUNCHLIB-003` | [正文缺失登记](#缺失正文登记) |
-| `LevelDatReader.java` | `LEVELDAT` | 001,002,003,004,005,006 | `ISSUE-LEVELDAT-006` | `ISSUE-LEVELDAT-007` | [V0.1.1：001–006](resolved/V0.1.1/LevelDatReader.java.md) |
+| `LevelDatReader.java` | `LEVELDAT` | 001,002,003,004,005,006,007,008 | `ISSUE-LEVELDAT-008` | `ISSUE-LEVELDAT-009` | [V0.7.5：007–008](resolved/V0.7.5/LevelDatReader.java.md)、[V0.1.1：001–006](resolved/V0.1.1/LevelDatReader.java.md) |
 | `LwjglV04Renderer.java` | `LWJGLRENDER` | 001 | `ISSUE-LWJGLRENDER-001` | `ISSUE-LWJGLRENDER-002` | [V0.4：001](resolved/V0.4/LwjglV04Renderer.java.md) |
 | `LwjglV05Launcher.java` | `V05-MEM` | 001 | `ISSUE-V05-MEM-001` | `ISSUE-V05-MEM-002` | [V0.5：001](resolved/V0.5/LwjglV05Launcher.java.md) |
 | `LwjglViewerWindow.java` | `LWJWIN` | — | — | `ISSUE-LWJWIN-001` | 尚未登记问题 |
 | `MainController.java` | `CONTROLLER` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016 | `ISSUE-CONTROLLER-016` | `ISSUE-CONTROLLER-017` | [V0.1.1：001–009](resolved/V0.1.1/MainController.java.md)；[V0.2：010–011](resolved/V0.2/MainController.java.md)；[V0.2.1：012–014](resolved/V0.2.1/MainController.java.md)；[V0.7：015–016](resolved/V0.7/MainController.java.md) |
+| `MapCacheStorage.java` | `MAPCACHESTORAGE` | 001 | `ISSUE-MAPCACHESTORAGE-001` | `ISSUE-MAPCACHESTORAGE-002` | [V0.7.5：001](resolved/V0.7.5/MapCacheStorage.java.md) |
+| `MapRenderDevice.java` | `MAPRENDERDEVICE` | 001 | `ISSUE-MAPRENDERDEVICE-001` | `ISSUE-MAPRENDERDEVICE-002` | [V0.7.5：001](resolved/V0.7.5/MapRenderDevice.java.md) |
 | `MapTileGenerator.java` | `MAPGEN` | 001 | `ISSUE-MAPGEN-001` | `ISSUE-MAPGEN-002` | [V0.3：001](resolved/V0.3/MapTileGenerator.java.md) |
+| `MapTileRenderer.java` | `MAPTILERENDER` | 001 | `ISSUE-MAPTILERENDER-001` | `ISSUE-MAPTILERENDER-002` | [V0.7.5：001](resolved/V0.7.5/MapTileRenderer.java.md) |
 | `MapTileScheduler.java` | `MAPSCHED` | 001,002 | `ISSUE-MAPSCHED-002` | `ISSUE-MAPSCHED-003` | [V0.3：001–002](resolved/V0.3/MapTileScheduler.java.md) |
 | `MapTileService.java` | `MAPSERVICE` | 001 | `ISSUE-MAPSERVICE-001` | `ISSUE-MAPSERVICE-002` | [V0.3：001](resolved/V0.3/MapTileService.java.md) |
-| `MapViewerController.java` | `MAPVIEW` | 001,002,003,004,005,006,007,008 | `ISSUE-MAPVIEW-008` | `ISSUE-MAPVIEW-009` | [V0.3：001–002](resolved/V0.3/MapViewerController.java.md)；[V0.3.1：003](resolved/V0.3.1/MapViewerController.java.md)；[V0.7.1：004](resolved/V0.7.1/MapViewerController.java.md)；[V0.7.3：005](resolved/V0.7.3/MapViewerController.java.md)；[V0.7.4：008](resolved/V0.7.4/REVIEW_SUMMARY.md)；[正文缺失登记](#缺失正文登记) |
+| `MapViewerController.java` | `MAPVIEW` | 001,002,003,004,005,006,007,008,009 | `ISSUE-MAPVIEW-009` | `ISSUE-MAPVIEW-010` | [V0.7.5：009](resolved/V0.7.5/MapViewerController.java.md)； [V0.3：001–002](resolved/V0.3/MapViewerController.java.md)；[V0.3.1：003](resolved/V0.3.1/MapViewerController.java.md)；[V0.7.1：004](resolved/V0.7.1/MapViewerController.java.md)；[V0.7.3：005](resolved/V0.7.3/MapViewerController.java.md)；[V0.7.4：008](resolved/V0.7.4/REVIEW_SUMMARY.md)；[正文缺失登记](#缺失正文登记) |
 | `MapViewport.java` | `VIEWPORT` | 001,002,003 | `ISSUE-VIEWPORT-003` | `ISSUE-VIEWPORT-004` | [V0.3：001–002](resolved/V0.3/MapViewport.java.md)；[V0.7.4：003](resolved/V0.7.4/REVIEW_SUMMARY.md) |
 | `MeshBatch.java` | `V05-BATCH` | 001 | `ISSUE-V05-BATCH-001` | `ISSUE-V05-BATCH-002` | [V0.5：001](resolved/V0.5/MeshBatch.java.md) |
 | `MeshWarning.java` | `MESHWARNING` | — | — | `ISSUE-MESHWARNING-001` | 尚未登记问题 |
@@ -98,7 +104,8 @@
 | `NestedResourcePacks.java` | `NESTPACK` | 001,002 | `ISSUE-NESTPACK-002` | `ISSUE-NESTPACK-003` | [正文缺失登记](#缺失正文登记) |
 | `ObjModelReader.java` | `OBJREAD` | 001,002 | `ISSUE-OBJREAD-002` | `ISSUE-OBJREAD-003` | [V0.7.4：002](resolved/V0.7.4/REVIEW_SUMMARY.md)；[正文缺失登记](#缺失正文登记) |
 | `ObjUvLockProtocolTest.java` | `OBJUVLOCKPROTOCOLTEST` | — | — | `ISSUE-OBJUVLOCKPROTOCOLTEST-001` | 尚未登记问题 |
-| `OpenGlMeshResources.java` | `GLMESH` | 001 | `ISSUE-GLMESH-001` | `ISSUE-GLMESH-002` | [V0.4：001](resolved/V0.4/OpenGlMeshResources.java.md) |
+| `OpenGlMeshResources.java` | `GLMESH` | 001,002 | `ISSUE-GLMESH-002` | `ISSUE-GLMESH-003` | [V0.7.5：002](resolved/V0.7.5/OpenGlMeshResources.java.md)； [V0.4：001](resolved/V0.4/OpenGlMeshResources.java.md) |
+| `PlayerDataReader.java` | `PLYDATA` | 001 | `ISSUE-PLYDATA-001` | `ISSUE-PLYDATA-002` | [V0.7.5：001](resolved/V0.7.5/PlayerDataReader.java.md) |
 | `PluginGuideDialog.java` | `PLUGINGUIDEDIALOG` | — | — | `ISSUE-PLUGINGUIDEDIALOG-001` | 尚未登记问题 |
 | `PortablePaths.java` | `PORTABLE` | 001 | `ISSUE-PORTABLE-001` | `ISSUE-PORTABLE-002` | [V0.2.1：001](resolved/V0.2.1/PortablePaths.java.md) |
 | `PortableSettings.java` | `PORTABLESETTINGS` | — | — | `ISSUE-PORTABLESETTINGS-001` | 尚未登记问题 |

@@ -115,6 +115,31 @@ class VoxelPreviewCoordinatorTest {
     }
 
     @Test
+    void verifiedListRechecksOtherAreasAndCancelledInspectionKeepsTheCache() throws Exception {
+        var invalid = new java.util.concurrent.atomic.AtomicBoolean();
+        var cache = new ViewerSceneCache(ViewerPerformanceProfile.BASIC);
+        var previous = request(0).areaKey(VoxelPreviewCoordinator.RENDER_VERSION);
+        coordinator = new VoxelPreviewCoordinator(new FakeWindow(), cache,
+                (input, cancel, monitor) -> area(input.target()), (area, cancel, monitor) -> scene(area.target()),
+                key -> {
+                    if (invalid.get() && key.equals(previous)) throw new java.io.IOException("changed");
+                    return SIGNATURE;
+                }, singleExecutor());
+        RecordingListener first = new RecordingListener();
+        coordinator.start(request(0), first);
+        assertEquals(List.of(previous), first.success.get(3, TimeUnit.SECONDS).verifiedPreviews().stream()
+                .map(ViewerCachedArea::key).toList());
+        assertThrows(java.util.concurrent.CancellationException.class, () ->
+                coordinator.validateCachedPreviews(previous.world(), previous.dimensionId(), () -> true));
+        assertEquals(List.of(previous), coordinator.cachedAreas());
+        invalid.set(true);
+        RecordingListener second = new RecordingListener();
+        coordinator.start(request(1), second);
+        assertEquals(List.of(request(1).areaKey(VoxelPreviewCoordinator.RENDER_VERSION)),
+                second.success.get(3, TimeUnit.SECONDS).verifiedPreviews().stream().map(ViewerCachedArea::key).toList());
+    }
+
+    @Test
     void deletingAreaRemovesItsSceneAndThumbnailAndNextOpenRebuilds() throws Exception {
         AtomicInteger loads = new AtomicInteger();
         coordinator = coordinator(new FakeWindow(), (request, cancellation, monitor) -> {

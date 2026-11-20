@@ -10,14 +10,36 @@ import static com.mcworldexplorer.voxel.resource.ClientBlockSymbols.unsupported;
 
 /** Bounded vanilla registration protocol. Reads inert class data; never links or invokes game code. */
 final class ClientBlockColors {
-    enum Kind { DOUBLE_GRASS, GRASS, GRASS_NONZERO, SPRUCE, BIRCH, FOLIAGE, WATER, REDSTONE, ATTACHED_STEM, STEM, LILY_PAD }
+    enum Kind {
+        WHITE, DOUBLE_GRASS(ModelRule.BiomeColor.GRASS), GRASS(ModelRule.BiomeColor.GRASS),
+        GRASS_NONZERO(ModelRule.BiomeColor.GRASS), SPRUCE, BIRCH, FOLIAGE(ModelRule.BiomeColor.FOLIAGE),
+        WATER(ModelRule.BiomeColor.WATER), REDSTONE, ATTACHED_STEM, STEM, LILY_PAD,
+        DRY_FOLIAGE(ModelRule.BiomeColor.DRY_FOLIAGE);
+
+        final ModelRule.BiomeColor biomeColor;
+        Kind() { this(null); }
+        Kind(ModelRule.BiomeColor biomeColor) { this.biomeColor = biomeColor; }
+    }
     private final Map<ResourceLocation,Kind> bindings;
+    private final Set<ResourceLocation> baseTextures;
     private final String provenance;
+    private final VanillaTintLayers layers;
     private final Map<Member,Kind> unresolvedBindings;
 
+    static boolean hasLegacyRegistry(String version) {
+        return version.equals("1.20.1") || version.equals("1.21.1");
+    }
     ClientBlockColors(BlockResourceSource source) throws IOException, ModelRule.Failure {
         String version=source.baseClientVersion().orElse("");
-        if(!Set.of("1.20.1","1.21.1").contains(version))throw unsupported("标准颜色协议尚未核对此客户端："+version);
+        layers = VanillaTintLayers.find(source, version).orElse(null);
+        if (layers != null) {
+            bindings = Map.of();
+            baseTextures = VanillaTintLayers.verifiedBaseTextures();
+            unresolvedBindings = Map.of();
+            provenance = layers.provenance();
+            return;
+        }
+        if(!hasLegacyRegistry(version))throw unsupported("标准颜色协议尚未核对此客户端："+version);
         JsonObject profile;
         try(var input=getClass().getResourceAsStream("/model-protocols/client-block-colors-"+version+".json")) {
             if(input==null)throw unsupported("缺少标准颜色协议证明");
@@ -40,6 +62,8 @@ final class ClientBlockColors {
         }
         if(handlers.size()!=12)throw unsupported("颜色处理器证明数量不符");
         var registry=new ClientBlockRegistration(source,ClientBlockSymbols.read(source));
+        baseTextures=VanillaTintLayers.verifiedBaseTextures().stream().filter(registry::containsBlock)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
         String owner=colors.name();
         var factories=colors.methods().stream().filter(m->m.descriptor().equals("()L"+owner+";")&&(m.access()&8)!=0).toList();
         if(factories.size()!=1)throw unsupported("颜色注册入口不唯一");
@@ -71,9 +95,16 @@ final class ClientBlockColors {
         unresolvedBindings=Map.copyOf(unresolved);
         provenance="标准颜色绑定："+version+"；已选客户端静态注册及5类指纹核对；"+String.join("；",receipts);
     }
-    Optional<Kind> kind(ResourceLocation block){return Optional.ofNullable(bindings.get(block));}
+    Optional<Kind> kind(ResourceLocation block){return bindings.containsKey(block)?Optional.of(bindings.get(block)):layer(block,0);}
+    Optional<Kind> layer(ResourceLocation block,int index) {
+        Kind result = layers == null ? bindings.get(block) : layers.at(block,index).orElse(null);
+        if (result == Kind.GRASS_NONZERO) result = index == 0 ? Kind.WHITE : Kind.GRASS;
+        if (result == null && index==0 && baseTextures.contains(block)) result = Kind.WHITE;
+        return Optional.ofNullable(result);
+    }
     Map<ResourceLocation,Kind> bindings(){return bindings;}
     Map<Member,Kind> unresolvedBindings(){return unresolvedBindings;}
+    boolean floatSwampNoise(){return layers!=null && layers.floatSwampNoise();}
     String provenance(){return provenance;}
     static String digest(byte[] bytes){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));}catch(NoSuchAlgorithmException impossible){throw new AssertionError(impossible);}}
 }

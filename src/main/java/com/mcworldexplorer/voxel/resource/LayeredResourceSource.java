@@ -18,7 +18,20 @@ public final class LayeredResourceSource implements BlockResourceSource {
             fingerprint=new ClientResourceArchive.Fingerprint(this.sources.getFirst().fingerprint().path(),size,modified,HexFormat.of().formatHex(digest.digest()));
         }catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
     }
+    @Override public int baseResourceFormat(){
+        int format=-1;
+        for(var source:sources) {
+            int candidate=source.baseResourceFormat();
+            if(candidate<0)continue;
+            if(format>=0 && format!=candidate)return -1;
+            format=candidate;
+        }
+        return format;
+    }
     @Override public void validate() throws IOException {for(var source:sources)source.validate();}
+    @Override public boolean hasBaseTexture(ResourceLocation id)throws IOException {
+        return sources.getLast().hasBaseTexture(id);
+    }
     @Override public ClientResourceArchive.Fingerprint fingerprint(){return fingerprint;}
     @Override public synchronized Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id)throws IOException {
         Objects.requireNonNull(kind);Objects.requireNonNull(id);
@@ -30,6 +43,18 @@ public final class LayeredResourceSource implements BlockResourceSource {
                 throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"资源源叠加读取超过预算");
             bytesRead+=data.length;return Optional.of(data);
         }}return Optional.empty();
+    }
+    @Override public synchronized List<String> dataLayers(ResourceLocation id)throws IOException {
+        var layers=new ArrayList<String>();
+        for(var source:sources.reversed())for(String layer:source.dataLayers(id)){
+            int bytes=layer.getBytes(StandardCharsets.UTF_8).length;
+            if(bytes>ResourceLocation.Kind.RAW_DATA.maxBytes())
+                throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"单个数据包资源超过读取预算",ResourceAccessException.Scope.RESOURCE);
+            if(bytesRead+bytes>ClientResourceArchive.MAX_SESSION_READ_BYTES)
+                throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"资源源叠加读取超过预算");
+            bytesRead+=bytes;layers.add(layer);
+        }
+        return List.copyOf(layers);
     }
     @Override public Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id)throws IOException {
         if(kind==ResourceLocation.Kind.TEXTURE)throw new IllegalArgumentException("PNG 不能按 JSON 读取");

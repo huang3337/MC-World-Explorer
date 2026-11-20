@@ -74,4 +74,8 @@ public record MeshBatch(
     public int faceCount() {
         return indices.length / 6;
     }
+
+    public int indexCount() {
+        return indices.length;
+    }
 }

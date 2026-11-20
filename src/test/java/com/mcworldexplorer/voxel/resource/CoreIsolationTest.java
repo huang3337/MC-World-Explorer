@@ -8,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CoreIsolationTest {
     @Test void unadmittedLoadersKeepTheirIdentityAndFailExplicitly() throws Exception {
-        assertEquals(List.of(ResourceLocation.parse("mcwe:obj")),
+        assertEquals(List.of(ResourceLocation.parse("mcwe:composite"), ResourceLocation.parse("mcwe:forge_composite"), ResourceLocation.parse("mcwe:obj")),
                 ModelRuleRegistry.defaults().rules().stream().map(ModelRule::id).toList());
-        for (String loader : List.of("forge:composite", "neoforge:elements", "forge:empty",
+        for (String loader : List.of("other:composite", "neoforge:elements", "forge:empty",
                 "forge:separate_transforms", "twilightforest:patch", "framework:open_model",
                 "supplementaries:jar", "athena:ctm", "future:unknown")) {
             var source = new BlockResourceSource() {

@@ -10,6 +10,29 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class WorldDataPacksTest {
     @TempDir Path root;
+
+    @Test void splitWorldSettingsSupplySeedAndHeightAndParticipateInInvalidation() throws Exception {
+        Path world=setup();data(world,CompoundBinaryTag.empty());
+        Path settings=world.resolve(WorldDataPacks.SEPARATE_SETTINGS);
+        Files.createDirectories(settings.getParent());
+        var type=CompoundBinaryTag.builder().putInt("min_y",-32).putInt("height",256).build();
+        var payload=dimensionData(type).getCompound("WorldGenSettings");
+        try(var source=open(world)) {
+            BinaryTagIO.writer().write(CompoundBinaryTag.builder().put("data",payload).build(),settings,BinaryTagIO.Compression.GZIP);
+            assertThrows(ResourceAccessException.class,source::validateAll);
+        }
+        try(var source=open(world)) {
+            assertEquals(Optional.of(0L),source.worldSeed());
+            assertEquals(Optional.of(new BlockResourceSource.DimensionHeight(-32,256)),source.dimensionHeight(ResourceLocation.parse("foreign:dimension")));
+            Files.writeString(settings,"broken");
+            assertThrows(ResourceAccessException.class,source::validateAll);
+        }
+        try(var source=open(world)) {
+            assertThrows(ResourceAccessException.class,source::worldSeed);
+            assertTrue(source.readJson(ResourceLocation.Kind.RAW_DATA,ID).isEmpty());
+        }
+    }
+
     private static void data(Path world,CompoundBinaryTag data)throws Exception {
         try(var out=Files.newOutputStream(world.resolve("level.dat"))){BinaryTagIO.writer().write(CompoundBinaryTag.builder().put("Data",data).build(),out,BinaryTagIO.Compression.GZIP);}
     }

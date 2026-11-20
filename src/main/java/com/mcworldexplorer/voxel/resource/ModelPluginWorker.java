@@ -31,9 +31,10 @@ public final class ModelPluginWorker {
                 plugin=(ModelPlugin)entry.getConstructor().newInstance();
                 try {
                 if(!archive.manifest().plugin().equals(plugin.descriptor()))throw new IOException("插件入口描述与包清单不一致");
-                var registry=new ModelRuleRegistry(plugin.rules());
+                var tints=List.copyOf(plugin.tintLayers());
+                var registry=new ModelRuleRegistry(plugin.rules(),"",tints);
                 var worker=new ModelPluginWorker(input,output);for(var rule:registry.rules())worker.rules.put(rule.id(),rule);
-                var ready=message("ready");ready.add("rules",JSON.toJsonTree(registry.rules().stream().map(ModelPluginRuleInfo::of).toList()));
+                var ready=message("ready");ready.add("tints",JSON.toJsonTree(tints));ready.add("rules",JSON.toJsonTree(registry.rules().stream().map(ModelPluginRuleInfo::of).toList()));
                 write(output,ready);
                 while(true){var request=read(input);if("close".equals(request.get("kind").getAsString()))break;worker.execute(request);}
                 }finally{ModelPlugin closing=plugin;plugin=null;if(closing instanceof AutoCloseable closeable)closeable.close();}
@@ -111,12 +112,12 @@ public final class ModelPluginWorker {
                             case "ModelBlockContext" -> Set.of("Position","Offset","Sample").contains(parts[1]);
                             case "ModelRule" -> Set.of("Context","Failure","RootTransformMode","BiomeColor").contains(parts[1]);
                             case "BlockResourceSource" -> parts[1].equals("DimensionHeight");
-                            case "ModelPlugin" -> Set.of("Descriptor","Capability").contains(parts[1]);
+                            case "ModelPlugin" -> Set.of("Descriptor","Capability","TintLayer").contains(parts[1]);
                             case "ResourceLocation" -> parts[1].equals("Kind");
                             default -> false;
                         };
                     }
-                    if(Set.of("com.mcworldexplorer.voxel.data.BlockState","com.mcworldexplorer.voxel.data.BlockEntityData","com.mcworldexplorer.voxel.data.BlockEntityData$ModelData","com.mcworldexplorer.voxel.io.ChunkLoadStatus").contains(name))shared=true;
+                    if(Set.of("com.mcworldexplorer.voxel.data.BlockState","com.mcworldexplorer.voxel.data.BlockState$SavedForm","com.mcworldexplorer.voxel.data.BlockEntityData","com.mcworldexplorer.voxel.data.BlockEntityData$ModelData","com.mcworldexplorer.voxel.io.ChunkLoadStatus").contains(name))shared=true;
                     if(shared)type=getParent().loadClass(name);
                     else if(name.startsWith("com.mcworldexplorer."))throw new ClassNotFoundException("插件不可访问宿主内部类："+name);
                     else type=findClass(name);

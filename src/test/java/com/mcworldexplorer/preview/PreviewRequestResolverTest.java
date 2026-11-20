@@ -12,6 +12,15 @@ class PreviewRequestResolverTest {
     private static final DimensionHeightRange NETHER_RANGE = new DimensionHeightRange(0, 255);
 
     @Test
+    void usesWorldSpawnOnlyInItsSavedDimension() {
+        WorldInfo world = new WorldInfo(Path.of("world"));
+        world.setSpawnPosition(-17, 64, 112, WorldDimension.NETHER_ID);
+        var nether = PreviewRequestResolver.resolve(world, WorldDimension.nether(world.getFolderPath()), NETHER_RANGE, null);
+        assertEquals(new PreviewCenter(-17,112,PreviewCenterSource.WORLD_SPAWN), nether.center());
+        assertEquals(PreviewCenterSource.ORIGIN_FALLBACK, PreviewCenterResolver.resolve(world).source());
+    }
+
+    @Test
     void preservesOverworldRespawnCenterAndUsesPlayerHeightBand() {
         WorldInfo world = new WorldInfo(Path.of("world"));
         world.setPlayerRespawnPosition(120, 70, -80, WorldDimension.OVERWORLD_ID);

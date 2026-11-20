@@ -5,6 +5,7 @@ import com.mcworldexplorer.voxel.resource.BlockTextureSet;
 import com.mcworldexplorer.voxel.resource.BlockResourceDiagnostic;
 import com.mcworldexplorer.voxel.resource.ModelOcclusion;
 import com.mcworldexplorer.voxel.data.BlockState;
+import com.mcworldexplorer.voxel.data.SavedFluid;
 import com.mcworldexplorer.voxel.data.ChunkCoordinate;
 import com.mcworldexplorer.voxel.data.ChunkSection;
 import com.mcworldexplorer.voxel.data.VoxelChunk;
@@ -41,18 +42,31 @@ public final class ChunkMesher {
         }
 
         VoxelChunk chunk = targetResult.chunk();
-        BlockNeighborhood neighborhood = new BlockNeighborhood(area);
+        var neighborhood = new BlockNeighborhood(area).cursor();
         Map<MaterialKey, BatchBuilder> builders = new HashMap<>();
         Map<Object, WarningAccumulator> warnings = new LinkedHashMap<>();
         BoundsBuilder bounds = new BoundsBuilder();
         int blockCount = 0;
         var targets = new VoxelTargetIndex.Builder(targetBudget);
         Map<BlockState,List<ModelOcclusion.Box>> occlusion = new HashMap<>();
+        Map<BlockState,Boolean> solids=new HashMap<>();
+        java.util.function.Predicate<BlockState> solid=s->solids.computeIfAbsent(s,key->{
+            var surfaces=textures.surfaces(key);
+            if(surfaces==null)return BlockClassifier.classify(key).kind()==BlockRenderClass.Kind.OPAQUE;
+            return ModelOcclusion.solidEnvelope(surfaces);
+        });
+        java.util.function.Predicate<BlockState> blocksFlow=textures!=null && textures.fluidBarriers().isPresent()
+                ? s->textures.fluidBarriers().orElseThrow().contains(s.name()) : solid;
+        var texturedBuilders=new BatchBuilder[RenderLayer.values().length][2];
+        var ownCulled=new java.util.IdentityHashMap<BlockTextureSet.Surface,Boolean>();
+        var neighborCulled=new java.util.IdentityHashMap<BlockTextureSet.Surface,java.util.IdentityHashMap<List<ModelOcclusion.Box>,Boolean>>();
+        int cachedCoverage=0;
         long originX = Math.multiplyExact((long) target.x(), 16L);
         long originZ = Math.multiplyExact((long) target.z(), 16L);
 
         for (ChunkSection section : chunk.sections()) {
             int sectionBaseY = Math.multiplyExact(section.sectionY(), 16);
+            Map<String, BlockRenderClass> classifications = new HashMap<>();
             Map<BlockState, List<BlockTextureSet.Surface>> sectionTextures = new HashMap<>();
             Map<BlockState, String> sectionFallbacks = new HashMap<>();
             Map<DiagnosticStateKey,List<WarningAccumulator>> sectionDiagnosticWarnings=new HashMap<>();
@@ -65,13 +79,15 @@ public final class ChunkMesher {
                     for (int localX = 0; localX < 16; localX++) {
                         BlockState state = section.blockState(localX, localY, localZ);
                         BlockState originalState = state;
+                        var classification=classifications.get(state.name());
+                        if (classification==null) {
+                            classification=BlockClassifier.classify(state);
+                            classifications.put(state.name(),classification);
+                        }
+                        if (classification.isAir()) continue;
                         if(textures!=null)state=BlockTextureSet.visualState(state,chunk.blockEntity(originX+localX,y,originZ+localZ).orElse(null));
                         if(textures!=null)state=textures.renderState(state,originX+localX,y,originZ+localZ);
                         final BlockState renderState=state;
-                        BlockRenderClass classification = BlockClassifier.classify(state);
-                        if (classification.isAir()) {
-                            continue;
-                        }
                         blockCount++;
                         if (textures != null && !sectionTextures.containsKey(state)) {
                             var faces = textures.surfaces(state);
@@ -102,24 +118,50 @@ public final class ChunkMesher {
                         if(texturedFaces!=null) {
                             List<ModelOcclusion.Box> own=occlusion.computeIfAbsent(state,ignored->ModelOcclusion.boxes(texturedFaces));
                             BatchBuilder primary=null;
-                            boolean fluid=FluidGeometry.liquid(state);
-                            boolean column=fluid&&FluidGeometry.same(state,neighborhood.query(worldX,Math.addExact(y,1),worldZ).state());
+                            FluidGeometry fluidGeometry=null;
                             for(var originalSurface:texturedFaces) {
-                                boolean liquidSurface=originalSurface.layer()==RenderLayer.FLUID;
-                                var surface=column&&liquidSurface?FluidGeometry.continuousColumn(originalSurface):originalSurface;
-                                MaterialKey key=new MaterialKey(surface.layer(),0xFFFFFF,1,true,surface.shade());
-                                BatchBuilder builder=builders.computeIfAbsent(key,BatchBuilder::new);
+                                var surface=originalSurface;
+                                var layerBuilders=texturedBuilders[surface.layer().ordinal()];
+                                int shade=surface.shade()?1:0;
+                                var builder=layerBuilders[shade];
+                                if(builder==null){
+                                    var key=new MaterialKey(surface.layer(),0xFFFFFF,1,true,surface.shade());
+                                    layerBuilders[shade]=builder=builders.computeIfAbsent(key,BatchBuilder::new);
+                                }
                                 if(primary==null){primary=builder;builder.addBlock();}
-                                if(ModelOcclusion.covers(surface,own,0,0,0))continue;
+                                if(!surface.fluid() && !own.isEmpty() && ownCulled.computeIfAbsent(originalSurface,
+                                        face->ModelOcclusion.covers(face,own,0,0,0)))continue;
                                 Direction cull=surface.cullFace();
                                 if(cull!=null) {
                                     Face side=Face.valueOf(cull.name());
                                     var neighbor=neighborhood.query(worldX+side.deltaX,Math.addExact(y,side.deltaY),worldZ+side.deltaZ);
-                                    if(fluid&&liquidSurface&&FluidGeometry.hidden(state,neighbor.state(),cull,column))continue;
+                                    if(surface.fluid()) {
+                                        var family=SavedFluid.of(originalState);
+                                        if(family!=SavedFluid.NONE && family==SavedFluid.of(neighbor.state()))continue;
+                                        if(cull!=Direction.DOWN){
+                                            if(fluidGeometry==null)fluidGeometry=new FluidGeometry(originalState,
+                                                    (dx,dy,dz)->neighborhood.query(worldX+dx,Math.addExact(y,dy),worldZ+dz).state(),
+                                                    solid,blocksFlow);
+                                            surface=fluidGeometry.surface(originalSurface,texturedFaces);
+                                        }
+                                        if(ModelOcclusion.covers(surface,own,0,0,0))continue;
+                                    }
                                     var neighborState=textures.renderState(neighbor.state(),worldX+side.deltaX,Math.addExact(y,side.deltaY),worldZ+side.deltaZ);
                                     var neighborFaces=textures.surfaces(neighborState);
                                     var boxes=occlusion.computeIfAbsent(neighborState,ignored->ModelOcclusion.boxes(neighborFaces));
-                                    if(ModelOcclusion.covers(surface,boxes,side.deltaX,side.deltaY,side.deltaZ))continue;
+                                    if(!boxes.isEmpty()){
+                                        if(surface.fluid()){
+                                            if(ModelOcclusion.covers(surface,boxes,side.deltaX,side.deltaY,side.deltaZ))continue;
+                                        }else{
+                                            var byShape=neighborCulled.computeIfAbsent(surface,ignored->new java.util.IdentityHashMap<>());
+                                            Boolean covered=byShape.get(boxes);
+                                            if(covered==null){
+                                                covered=ModelOcclusion.covers(surface,boxes,side.deltaX,side.deltaY,side.deltaZ);
+                                                if(cachedCoverage<4096){byShape.put(boxes,covered);cachedCoverage++;}
+                                            }
+                                            if(covered)continue;
+                                        }
+                                    }
                                 }
                                 builder.addTexturedFace(surface,localX,y,localZ);
                                 bounds.include(surface,localX,y,localZ);
@@ -164,7 +206,7 @@ public final class ChunkMesher {
         List<MeshBatch> batches = builders.values().stream().map(BatchBuilder::build).toList();
         int faceCount = batches.stream().mapToInt(MeshBatch::faceCount).sum();
         int vertexCount = batches.stream().mapToInt(MeshBatch::vertexCount).sum();
-        int indexCount = batches.stream().mapToInt(batch -> batch.indices().length).sum();
+        int indexCount = batches.stream().mapToInt(MeshBatch::indexCount).sum();
         MeshBounds meshBounds = bounds.empty()
                 ? new MeshBounds(0, 0, 0, 0, 0, 0)
                 : bounds.build();

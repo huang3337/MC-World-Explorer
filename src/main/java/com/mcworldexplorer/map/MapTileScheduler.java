@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 public final class MapTileScheduler implements AutoCloseable {
-    private static final int WORKER_COUNT = 2;
+    public static final String WORKER_PROPERTY = "mcworldexplorer.map.scanWorkers";
     public static final int MAX_QUEUED = 256;
     private boolean closed;
 
@@ -22,10 +22,11 @@ public final class MapTileScheduler implements AutoCloseable {
     private final Set<ScheduledTile> running = new java.util.HashSet<>();
 
     public MapTileScheduler() {
+        int workers = "1".equals(System.getProperty(WORKER_PROPERTY)) ? 1 : 2;
         AtomicLong workerSequence = new AtomicLong();
         executor = new ThreadPoolExecutor(
-                WORKER_COUNT,
-                WORKER_COUNT,
+                workers,
+                workers,
                 0,
                 TimeUnit.MILLISECONDS,
                 new PriorityBlockingQueue<>(),
@@ -37,6 +38,17 @@ public final class MapTileScheduler implements AutoCloseable {
                     return thread;
                 });
     }
+
+    public synchronized void setScanWorkers(int preferred) {
+        if (preferred != 1 && preferred != 2) throw new IllegalArgumentException("扫描并发只能为 1 或 2");
+        String override = System.getProperty(WORKER_PROPERTY);
+        int workers = "1".equals(override) ? 1 : "2".equals(override) ? 2 : preferred;
+        if (workers > executor.getMaximumPoolSize()) executor.setMaximumPoolSize(workers);
+        executor.setCorePoolSize(workers);
+        executor.setMaximumPoolSize(workers);
+    }
+
+    public int scanWorkers() { return executor.getCorePoolSize(); }
 
     public synchronized long beginRequest(Set<MapTileKey> retainedKeys) {
         requestId++;
@@ -121,7 +133,7 @@ public final class MapTileScheduler implements AutoCloseable {
         return false;
     }
 
-    // One header-only overview shares the two existing workers; null is its internal task key.
+    // 范围概览和范围导出互斥，共用两个现有工作线程中的一个后台任务位置。
     public synchronized boolean submitIndex(IndexLoader loader, Consumer<Throwable> onFailure) {
         cancelIndex();
         if (closed || executor.getQueue().size() >= MAX_QUEUED) return false;

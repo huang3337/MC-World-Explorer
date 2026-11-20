@@ -30,7 +30,8 @@ final class NestedResourcePacks {
             }catch(IOException|RuntimeException invalid){if(invalid instanceof java.util.concurrent.CancellationException)throw invalid;note(notes,"嵌套声明不可读："+path.getFileName()+"（"+invalid.getMessage()+"）");}
         }
         List<Found> found=new ArrayList<>();Set<Archive> seen=new HashSet<>();Set<Archive> fabricArchives=new HashSet<>();
-        try(var access=new NestedZipAccess(cancel)) {
+        // Discovery visits each archive chain once; only its current filesystem is needed.
+        try(var access=new NestedZipAccess(cancel,1)) {
             for(int i=0;i<queue.size();i++) {
                 check(cancel);if(queue.size()>2048)throw new IOException("实例嵌套依赖超过2048项");var node=queue.get(i);var archive=new Archive(node.outer(),node.chain());if(!seen.add(archive))continue;if(node.identity().equals("fabric"))fabricArchives.add(archive);
                 try {
@@ -78,8 +79,21 @@ final class NestedResourcePacks {
     private static String text(Path root,String name)throws IOException {Path path=root.resolve(name);if(!Files.isRegularFile(path))return null;if(Files.size(path)>1024*1024)throw new IOException("嵌套元信息超过1MiB");try(var input=Files.newInputStream(path)){byte[] bytes=input.readNBytes(1024*1024+1);if(bytes.length>1024*1024)throw new IOException("嵌套元信息解压超限");return new String(bytes,StandardCharsets.UTF_8);}}
     private static String resources(Path root,CancellationSignal cancel)throws IOException {
         try {
-            var digest=MessageDigest.getInstance("SHA-256");List<Path> entries;try(var walk=Files.walk(root,48)){entries=walk.limit(100001).toList();}if(entries.size()>100000)throw new IOException("嵌套文件索引超限");var files=entries.stream().filter(Files::isRegularFile).toList();
-            List<Path> resources=files.stream().filter(path->{String name=root.relativize(path).toString();return name.startsWith("assets/")||name.startsWith("data/")||name.contains("/assets/")||name.endsWith("pack.mcmeta");}).sorted(Comparator.comparing(Path::toString)).toList();if(resources.isEmpty())return "empty";
+            var digest=MessageDigest.getInstance("SHA-256");
+            List<Path> resources=new ArrayList<>();
+            try(var walk=Files.walk(root,48)){
+                var iterator=walk.iterator();
+                int count=0;
+                while(iterator.hasNext()){
+                    if((count&127)==0)check(cancel);
+                    Path path=iterator.next();
+                    if(++count>100000)throw new IOException("嵌套文件索引超限");
+                    String name=root.relativize(path).toString();
+                    if((name.startsWith("assets/")||name.startsWith("data/")||name.contains("/assets/")||name.endsWith("pack.mcmeta"))&&Files.isRegularFile(path))resources.add(path);
+                }
+            }
+            if(resources.isEmpty())return "empty";
+            resources.sort(Comparator.comparing(Path::toString));
             long bytes=0;byte[] buffer=new byte[65536];for(var file:resources){check(cancel);byte[] name=root.relativize(file).toString().getBytes(StandardCharsets.UTF_8);digest.update(java.nio.ByteBuffer.allocate(4).putInt(name.length).array());digest.update(name);long size=Files.size(file);if(size<0||size>8*1024*1024||bytes+size>64L*1024*1024)throw new IOException("嵌套资源身份计算超过预算");bytes+=size;digest.update(java.nio.ByteBuffer.allocate(8).putLong(size).array());try(var input=Files.newInputStream(file)){int n;long actual=0;while((n=input.read(buffer))!=-1){check(cancel);actual+=n;if(actual>size)throw new IOException("嵌套资源长度不符");digest.update(buffer,0,n);}if(actual!=size)throw new IOException("嵌套资源长度不符");}}
             return HexFormat.of().formatHex(digest.digest());
         }catch(NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}

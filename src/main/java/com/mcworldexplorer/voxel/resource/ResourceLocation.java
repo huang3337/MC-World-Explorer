@@ -11,8 +11,7 @@ public record ResourceLocation(String namespace, String path) {
     public ResourceLocation {
         Objects.requireNonNull(namespace, "namespace");
         Objects.requireNonNull(path, "path");
-        if (namespace.length() > 64 || path.length() > 512
-                || !NAMESPACE.matcher(namespace).matches() || namespace.equals(".") || namespace.equals("..")
+        if (!validNamespace(namespace) || path.length() > 512
                 || !PATH.matcher(path).matches()) {
             throw new IllegalArgumentException("资源 ID 格式无效");
         }
@@ -20,6 +19,10 @@ public record ResourceLocation(String namespace, String path) {
             if (segment.isEmpty() || segment.equals(".") || segment.equals(".."))
                 throw new IllegalArgumentException("资源 ID 不能包含空路径或相对路径段");
         }
+    }
+
+    static boolean validNamespace(String value) {
+        return value.length() <= 64 && !value.equals(".") && !value.equals("..") && NAMESPACE.matcher(value).matches();
     }
 
     public static ResourceLocation parse(String value) {

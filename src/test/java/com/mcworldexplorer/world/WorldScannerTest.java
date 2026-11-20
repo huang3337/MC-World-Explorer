@@ -38,6 +38,36 @@ public class WorldScannerTest {
     }
 
     @Test
+    void unavailableDirectoryKeepsPreviousWorldsUntilACompleteEmptyScan() throws IOException {
+        Path saves = Files.createDirectory(tempDir.resolve("saves"));
+        createWorld(saves, "base");
+        var previous = WorldScanner.scanLibrary(saves).groups();
+        Files.move(saves, tempDir.resolve("disconnected"));
+        var unavailable = WorldScanner.scanLibrary(saves);
+        assertTrue(unavailable.failedPaths().contains(saves));
+        assertEquals(previous, unavailable.withLastReadable(previous));
+        Files.createDirectory(saves);
+        var empty = WorldScanner.scanLibrary(saves);
+        assertTrue(empty.failedPaths().isEmpty());
+        assertTrue(empty.withLastReadable(previous).isEmpty());
+    }
+
+    @Test
+    void missingMetadataInsideAKnownFolderIsNotAConfirmedRemoval() throws IOException {
+        Path saves = Files.createDirectory(tempDir.resolve("saves"));
+        Path base = createWorld(saves, "base");
+        var previous = WorldScanner.scanLibrary(saves).groups();
+        Files.move(base.resolve("level.dat"), base.resolve("level.dat_old"));
+        var partial = WorldScanner.scanLibrary(saves, previous);
+        assertEquals(previous, partial.withLastReadable(previous));
+        assertTrue(partial.failedPaths().contains(base));
+        Files.move(base, tempDir.resolve("elsewhere"));
+        var complete = WorldScanner.scanLibrary(saves, previous);
+        assertTrue(complete.failedPaths().isEmpty());
+        assertTrue(complete.withLastReadable(previous).isEmpty());
+    }
+
+    @Test
     void scansDirectSavesDirectory() throws IOException {
         Path saves = Files.createDirectory(tempDir.resolve("saves"));
         createWorld(saves, "direct-world");

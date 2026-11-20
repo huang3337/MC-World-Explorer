@@ -1,0 +1,304 @@
+{
+  "verifiedBaseTextureAtIndexZero": [
+    "bamboo", "bamboo_sapling", "cherry_leaves", "lava_cauldron",
+    "pale_oak_leaves", "powder_snow_cauldron", "stonecutter"
+  ],
+  "groups": {
+    "doubleGrass": {
+      "blocks": [
+        "large_fern",
+        "tall_grass"
+      ],
+      "layers": [
+        "DOUBLE_GRASS"
+      ]
+    },
+    "worldGrass": {
+      "blocks": [
+        "grass_block",
+        "fern",
+        "short_grass",
+        "potted_fern",
+        "bush",
+        "sugar_cane"
+      ],
+      "layers": [
+        "GRASS"
+      ]
+    },
+    "flowerStem": {
+      "blocks": [
+        "pink_petals",
+        "wildflowers"
+      ],
+      "layers": [
+        "WHITE",
+        "GRASS"
+      ]
+    },
+    "uncoloredLeaves": {
+      "blocks": [
+        "cherry_leaves"
+      ],
+      "layers": [
+        "WHITE"
+      ]
+    },
+    "biomeFoliage": {
+      "blocks": [
+        "oak_leaves",
+        "jungle_leaves",
+        "acacia_leaves",
+        "dark_oak_leaves",
+        "vine",
+        "mangrove_leaves"
+      ],
+      "layers": [
+        "FOLIAGE"
+      ]
+    },
+    "spruceFoliage": {
+      "blocks": [
+        "spruce_leaves"
+      ],
+      "layers": [
+        "SPRUCE"
+      ]
+    },
+    "birchFoliage": {
+      "blocks": [
+        "birch_leaves"
+      ],
+      "layers": [
+        "BIRCH"
+      ]
+    },
+    "dryFoliage": {
+      "blocks": [
+        "leaf_litter"
+      ],
+      "layers": [
+        "DRY_FOLIAGE"
+      ]
+    },
+    "cauldronWater": {
+      "blocks": [
+        "water_cauldron"
+      ],
+      "layers": [
+        "WATER"
+      ]
+    },
+    "wire": {
+      "blocks": [
+        "redstone_wire"
+      ],
+      "layers": [
+        "REDSTONE"
+      ]
+    },
+    "attachedStem": {
+      "blocks": [
+        "attached_melon_stem",
+        "attached_pumpkin_stem"
+      ],
+      "layers": [
+        "ATTACHED_STEM"
+      ]
+    },
+    "growingStem": {
+      "blocks": [
+        "melon_stem",
+        "pumpkin_stem"
+      ],
+      "layers": [
+        "STEM"
+      ]
+    },
+    "waterLily": {
+      "blocks": [
+        "lily_pad"
+      ],
+      "layers": [
+        "LILY_PAD"
+      ]
+    },
+    "waterBlocks": {
+      "blocks": [
+        "water",
+        "bubble_column"
+      ],
+      "layers": [
+        "WATER"
+      ]
+    },
+    "particleWater": {
+      "blocks": [
+        "water",
+        "bubble_column"
+      ],
+      "layers": [
+        "WHITE"
+      ]
+    }
+  },
+  "profiles": {
+    "1.21.5": {
+      "clientSha256": "522672ad20b460c02c2e39b6c5035ef6a849af28eb11ab2ac7eb293d395a8c11",
+      "classes": {
+        "frs": "aed4cbdba3eb5011c42a9fa0d326858e927339ae40b78f4e641783f0058e0d3e",
+        "dnq": "6d1b63a2359b4bdc83ad2f108c9318c2ae0c7c6371b3bd34201fbfceea810f23",
+        "gqw": "191800c0672cd48492f66cdb2b8febcb2ac17348dd0b86500e9aa2b810b5809f",
+        "glo": "83b591ba17f54f63fba1a581a8ef822ba7fe548fca682e73e8851d12b1d91a00",
+        "dlo": "df30b98e6468592a20475e7af3efd270405d6fd898ccf3aef5088419f5666d74",
+        "dlm": "d8d0fd75bf0edd412fa4bcac172357c63c0ab06ab874b3b4ae86c32d6161d135",
+        "dkh": "387ca16555ba42ef7e649974307d058f1abd8b1f401475b4e797734875fed068",
+        "dls$b": "e40f8a5d6d867178bb94f2f3d214f9677eb467a70c41ea30e6f4482804b55ee2",
+        "djs": "28c2afdd361758df2b596fd7d3b20477a9503904436286490dd51d8f63595a5f",
+        "dls": "a9b7896c51203ee144327947a6ee87f1664435f57d13d20c476ac13358cb9d81",
+        "dls$b$1": "740d074964025b0656e36af847c8ffe37e946a5ad2546762c40731f12c2f3e49",
+        "dls$b$2": "782df0228e9756e30565e12c30765a1e0b4cc85e9cbab5892c58d7d974c829b2",
+        "dls$b$3": "7ec0bc23092ba55794fffc7e15d62172280fe7c04daf8a44c58370cbc64f6515",
+        "azu": "4c907e6018625b7d4ee92a3c572eef7d51311e9198fc9e63a47a922b2601ff6e",
+        "azz": "96e18913efc7c4fdf26bdb14527a3373d1d167ec771f06320866efbc30d0beb4",
+        "dke": "ccade6e99f47dc0e7b55a19ca03ca6c2e5f1b2ab93a3168a981b412df8332405",
+        "hlk": "3b56f6e523baf465f1e81064d9db9f93fcff1dc01fe5950c893144755a3a7773",
+        "djx": "5f92fc7a50b1ce666e342296fabc3b61ab61831693293dcc033f6ede579c54ec",
+        "hlj": "0910626c2a911a2cf42c17b7e7065849b045edc826e1ddb348fa5af44f576aee",
+        "dtx": "0961826b5b82cd6c0bdb28bddbe66034813cfd0500bd9452f4ac58e1c1f43e7b",
+        "dvu": "8908d037904ade605625bf5b7579c94848cf1353190bd9d5193c6098ec5c60bf",
+        "ayh": "555efc98dcb780a507c50eba56660e6003c0e685bc57efcb4a2617b964efb231"
+      },
+      "groups": [
+        "doubleGrass",
+        "worldGrass",
+        "flowerStem",
+        "uncoloredLeaves",
+        "biomeFoliage",
+        "spruceFoliage",
+        "birchFoliage",
+        "dryFoliage",
+        "cauldronWater",
+        "wire",
+        "attachedStem",
+        "growingStem",
+        "waterLily",
+        "waterBlocks"
+      ],
+      "repeatLast": true
+    },
+    "26.3": {
+      "clientSha256": "4508d006323f24fa02876310c192d739af56516eb259000ac50f0909a68c9a2d",
+      "classes": {
+        "net/minecraft/client/color/block/BlockColors": "725aa19ec6bd83332426a5beb3fe042d8cb2dff739bd5a6ca6ed44200259e732",
+        "net/minecraft/world/level/block/Blocks": "2208668d8b07b2de44870cd557bb0e01625d451f55cac20c6b299f54f20638b7",
+        "net/minecraft/client/renderer/BiomeColors": "14756d7d3060894e67d88562b3410b1c453225dddea16dd613aef062a0ead991",
+        "net/minecraft/client/multiplayer/ClientLevel": "7d69f81d39e64a679b51f745211619204073167d59b149d9de683e10eb2d97ba",
+        "net/minecraft/world/level/biome/BiomeManager": "4f024bcc37eb8f989e0e80501c3d42bca72fda640783b24cfa6991101530223e",
+        "net/minecraft/world/level/biome/Biome": "68d9c99842bc8c704b94e54d31c176b3d1263420387e5c08ec6c0ff9d6c72ec0",
+        "net/minecraft/world/level/GrassColor": "e74fd9ce1cbe80749193a78ad3754fde3aa4553a600b590040fcece448892641",
+        "net/minecraft/world/level/biome/BiomeSpecialEffects$GrassColorModifier": "ea553d698437fcfaaf4efa9174afc43fc3724de39750df653eefec07345a6a4d",
+        "net/minecraft/client/color/block/BlockTintSources": "7dbb80e5708c58eb310276a61f2e2d45f73db8075d0ce7aa61eeb6e1a2c8b992",
+        "net/minecraft/client/color/block/BlockTintSources$1": "ad7715d2479172a82326f7c04ba464972a086ec64cd11e97849f8096773bd2a1",
+        "net/minecraft/client/color/block/BlockTintSources$2": "aecb54464f7270d757ac32fd953afbb6b23dd4f457d78e52b6d2a19fdf7f4afd",
+        "net/minecraft/client/color/block/BlockTintSources$3": "1a955f277b8119d68d5027995bf87a47f9ce887acdbdbd7d515031095f6d9014",
+        "net/minecraft/client/color/block/BlockTintSources$4": "cee8615d600573f28e619d46f7aabfd1d53b6160c161b645fd49c3664f5d29b0",
+        "net/minecraft/world/level/ColorMapColorUtil": "aada9e9b4d3e455f64f6d6fd0366ec7155013477f4ba07cbda5ba694b962e9f6",
+        "net/minecraft/world/level/biome/BiomeSpecialEffects": "a549742be4d6bf465f0920ffd2ad4f9766d95ad582b4237344e43830f6c64d8a",
+        "net/minecraft/world/level/biome/BiomeSpecialEffects$GrassColorModifier$1": "50b2c9864d042401c71844a5b77bb1299077f3ce28f7a36203b03453fc4bd85c",
+        "net/minecraft/world/level/biome/BiomeSpecialEffects$GrassColorModifier$2": "0632526ec6b4ca0cd27fa8f52b2e174cca94023314683247f1036b39f9dfa432",
+        "net/minecraft/world/level/biome/BiomeSpecialEffects$GrassColorModifier$3": "c2d00824e5985d2b6d5e3dfe2d1cc791a8cb6d9fff1460a9d9a4a226716f8199",
+        "net/minecraft/util/LinearCongruentialGenerator": "386a17aa657839e303b76af93034d6f9053468b9303ce88511d4ce23a7ba8a12",
+        "net/minecraft/util/Mth": "38d9b35bc973da00a3d550173370c62c88ed62f2890b17d760e65173469e272d",
+        "net/minecraft/client/color/block/BlockTintSources$6": "c4ecf9dfda1eed161684a7b6eb0f42e8f352e0505b09e22e43853cdf48c4986a",
+        "net/minecraft/world/level/FoliageColor": "537337826910cfd38c9e8ee899444842d95306a40d1b96e8b323a73c226d8271",
+        "net/minecraft/client/resources/FoliageColorReloadListener": "d1892bcf41c48f1f751ce183306d3c3747bbddb36449a2529cd809d6baf1ed1c",
+        "net/minecraft/client/color/block/BlockTintSources$5": "9122c8e418b741feded2bccf01c3afd699db93848f62e6a738f11d0c72baf6ae",
+        "net/minecraft/client/color/block/BlockTintSources$7": "ac7862c48cd2eba38f94505ef61cd4542b49dde4917dcd0b79b72f5fe88ab63d",
+        "net/minecraft/client/color/block/BlockTintSources$8": "9d969951bd045421106373d35ee937c6cb3d5dece60b1fc1bfb42ba4dc96c1e9",
+        "net/minecraft/client/color/block/BlockTintSources$9": "d9036e7672c073d56289af6e500f8eaeded90a20819476467918cf2eac41561f",
+        "net/minecraft/client/color/block/BlockTintSources$10": "686d350502419c12fd21a4e683b585052fb99b7f640f9cc97f125767460a0113",
+        "net/minecraft/client/color/block/BlockTintSources$11": "7c001eb5179adce42d0893f1c8924c229f4d81575982a64d35325c94f7f79496",
+        "net/minecraft/client/color/block/BlockTintSource": "1f1bdd534f06900f763b3b1979ce7145e9c18dff827bd251fab3c5065832ba40",
+        "net/minecraft/world/level/DryFoliageColor": "5e399f9fce2d40f78396196c3762965af5e6d0ec607066ef26ff99d10830ee8f",
+        "net/minecraft/client/resources/DryFoliageColorReloadListener": "7f925a6d2859d7028bd1452e0137f73abb896395e189a027ddc01fb2f5bb652c",
+        "net/minecraft/world/level/block/RedstoneWireBlock": "2b0d8320ea23d4178731c60738eab169ae07ec4de5023852870d24ad3c198e01",
+        "net/minecraft/world/level/block/StemBlock": "539e001879930bd2cd80ef680490251b431050f633f9e903a86d0c1db27d3ec0",
+        "net/minecraft/util/ARGB": "03cc9d35c6482408a96fdec73db7ab71ffb1b52e39b3b6fa7cb6e23fed126fee",
+        "net/minecraft/world/level/levelgen/synth/SimplexNoise": "43bce6d60f9c61b7d6bb6043ac42045a711d79cf4fbfb4a3dfc35c36f2db9291",
+        "net/minecraft/world/level/levelgen/synth/GradientNoise": "b58e246ec5325384666ed2897e36c74229e990d6c9cb65c629cc540ad2cc3d27"
+      },
+      "groups": [
+        "doubleGrass",
+        "worldGrass",
+        "flowerStem",
+        "biomeFoliage",
+        "spruceFoliage",
+        "birchFoliage",
+        "dryFoliage",
+        "cauldronWater",
+        "wire",
+        "attachedStem",
+        "growingStem",
+        "waterLily",
+        "particleWater"
+      ],
+      "compatibleBuilds": [
+        {
+          "clientSha256": "bc6194c61566b587f196090d730698f2191170f7580adb143e4ff839939d3840",
+          "changedClasses": {
+            "net/minecraft/world/level/block/Blocks": {
+              "name": "net/minecraft/world/level/block/Blocks",
+              "sha256": "ec58891200ea81cb6ac19e11b84abbabab84a91122e80a0d0a8d11b8ab384571"
+            },
+            "net/minecraft/client/multiplayer/ClientLevel": {
+              "name": "net/minecraft/client/multiplayer/ClientLevel",
+              "sha256": "02764cdc492d961c85e52c3aba651e864ab1567ad8a334f7f17e6b9350a0b7ba"
+            },
+            "net/minecraft/world/level/biome/BiomeManager": {
+              "name": "net/minecraft/world/level/biome/BiomeManager",
+              "sha256": "c913670c9e8a398a0ca92521c38cf4646cdec235dcd207ee89b2c4456962e876"
+            },
+            "net/minecraft/world/level/biome/Biome": {
+              "name": "net/minecraft/world/level/biome/Biome",
+              "sha256": "960456eea9cd762c5d353a990ce049f52c800b74fd9ae5fa45e202504fc6fdc5"
+            },
+            "net/minecraft/world/level/biome/BiomeSpecialEffects$GrassColorModifier$3": {
+              "name": "net/minecraft/world/level/biome/BiomeSpecialEffects$GrassColorModifier$3",
+              "sha256": "bf9fe11d5503560ce7bfe34880bd07ea79e00af5d9d20c369a74911124122224"
+            },
+            "net/minecraft/util/Mth": {
+              "name": "net/minecraft/util/Mth",
+              "sha256": "fa211e0958590e1500a2a9409a3f0ade42478b285f5b81c619c23fae2d1cb9ff"
+            },
+            "net/minecraft/client/color/block/BlockTintSources$10": {
+              "name": "net/minecraft/client/color/block/BlockTintSources$10",
+              "sha256": "896f0fab23abcac73751c68a903de0942f59f6f7a04b62ea56ba08715b620cd3"
+            },
+            "net/minecraft/world/level/block/RedstoneWireBlock": {
+              "name": "net/minecraft/world/level/block/RedStoneWireBlock",
+              "sha256": "b0418574f6708739bb57ee307d23d3d566286b680ace3399f196ec28048ee725"
+            },
+            "net/minecraft/world/level/block/StemBlock": {
+              "name": "net/minecraft/world/level/block/StemBlock",
+              "sha256": "1f4b5f379f584dba4ae5d65027f28e1eff47ffc1fc6421cc110ade9b1e12ccf3"
+            },
+            "net/minecraft/util/ARGB": {
+              "name": "net/minecraft/util/ARGB",
+              "sha256": "c550f802c8febd1592b3fbdb88896a9e0d2bc807c757a2eb08647d37916865cd"
+            },
+            "net/minecraft/world/level/levelgen/synth/SimplexNoise": {
+              "name": "net/minecraft/world/level/levelgen/synth/SimplexNoise",
+              "sha256": "5eea658b196290304fa29148c02581c056e75eda855b501c03bdba5afa732d56"
+            },
+            "net/minecraft/world/level/levelgen/synth/GradientNoise": {
+              "name": "net/minecraft/world/level/levelgen/synth/PerlinSimplexNoise",
+              "sha256": "f71d604416518176593247ef5aa8a5a03f5d0a0771524ac64364bdaba3954302"
+            }
+          }
+        }
+      ],
+      "floatSwampNoise": true
+    }
+  }
+}

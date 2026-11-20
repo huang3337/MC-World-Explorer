@@ -3,178 +3,197 @@ package com.mcworldexplorer.world;
 import com.mcworldexplorer.nbt.LevelDatReader;
 
 import java.io.IOException;
+import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class WorldScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(WorldScanner.class);
 
-    /**
-     * Scans the specified directory for Minecraft worlds.
-     * A valid world must contain a level.dat file.
-     *
-     * @param savesDir The path to the saves directory (e.g., .minecraft/saves)
-     * @return A list of WorldInfo objects for successfully parsed worlds.
-     */
+    public record ScanResult(Map<String, List<WorldInfo>> groups, Set<Path> failedPaths) {
+        /** Retain old entries only where this scan could not establish the contents. */
+        public Map<String, List<WorldInfo>> withLastReadable(Map<String, List<WorldInfo>> previous) {
+            if (failedPaths.isEmpty() || previous.isEmpty()) return groups;
+            Map<String, List<WorldInfo>> merged = new LinkedHashMap<>();
+            Set<Path> present = new HashSet<>();
+            groups.forEach((group, worlds) -> {
+                merged.put(group, new ArrayList<>(worlds));
+                worlds.forEach(world -> present.add(world.getFolderPath().toAbsolutePath().normalize()));
+            });
+            previous.forEach((group, worlds) -> {
+                for (WorldInfo world : worlds) {
+                    Path path = world.getFolderPath().toAbsolutePath().normalize();
+                    if (!present.contains(path) && isWithinFailure(path)) {
+                        merged.computeIfAbsent(group, key -> new ArrayList<>()).add(world);
+                    }
+                }
+            });
+            return merged;
+        }
+
+        private boolean isWithinFailure(Path path) {
+            for (Path at = path; at != null; at = at.getParent()) {
+                if (failedPaths.contains(at)) return true;
+            }
+            return false;
+        }
+    }
+
+    private final Map<String, List<WorldInfo>> groups = new LinkedHashMap<>();
+    private final Set<Path> failedPaths = new LinkedHashSet<>();
+    private final Set<Path> knownWorlds = new HashSet<>();
+
     public static List<WorldInfo> scanWorlds(Path savesDir) {
-        List<WorldInfo> worlds = new ArrayList<>();
-
-        if (savesDir == null || !Files.exists(savesDir) || !Files.isDirectory(savesDir)) {
-            return worlds;
-        }
-
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(savesDir)) {
-            for (Path entry : stream) {
-                if (Files.isDirectory(entry)) {
-                    // Check if level.dat exists in this folder
-                    Path levelDat = entry.resolve("level.dat");
-                    if (Files.exists(levelDat)) {
-                        try {
-                            WorldInfo info = LevelDatReader.readLevelDat(entry);
-                            if (info.isParsed()) {
-                                worlds.add(info);
-                            }
-                        } catch (IOException e) {
-                            LOGGER.warn("Failed to read world at {}", entry, e);
-                        }
-                    }
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.error("Error while scanning directory {}", savesDir, e);
-        }
-
-        return worlds;
+        if (savesDir == null) return List.of();
+        WorldScanner scanner = new WorldScanner();
+        String group = groupName(savesDir, "Selected Saves");
+        scanner.readSaves(savesDir, group);
+        return scanner.groups.getOrDefault(group, List.of());
     }
 
-    /**
-     * Scans a given game root directory for both default saves and version-isolated saves.
-     */
     public static Map<String, List<WorldInfo>> scanGameRoot(Path rootDir) {
-        Map<String, List<WorldInfo>> resultMap = new LinkedHashMap<>();
-
-        if (!isDirectory(rootDir)) {
-            return resultMap;
-        }
-        
-        // 1. Check default saves in the root
-        Path directSaves = rootDir.resolve("saves");
-        if (Files.exists(directSaves) && Files.isDirectory(directSaves)) {
-            List<WorldInfo> defaultWorlds = scanWorlds(directSaves);
-            if (!defaultWorlds.isEmpty()) {
-                resultMap.put("默认存档 (Default)", defaultWorlds);
-            }
-        }
-
-        // 2. Check isolated versions
-        Path versionsDir = rootDir.resolve("versions");
-        if (isDirectory(versionsDir)) {
-            resultMap.putAll(scanVersionsDirectory(versionsDir));
-        }
-
-        return resultMap;
+        WorldScanner scanner = new WorldScanner();
+        if (rootDir != null) scanner.readGameRoot(rootDir);
+        return scanner.groups;
     }
 
-    /**
-     * Scans a user-selected Minecraft path without requiring the caller to know
-     * whether it is a world, saves directory, game root, versions directory, or instance root.
-     */
     public static Map<String, List<WorldInfo>> scanSelectedPath(Path selectedPath) {
-        Map<String, List<WorldInfo>> resultMap = new LinkedHashMap<>();
-        if (!isDirectory(selectedPath)) {
-            return resultMap;
-        }
-
-        if (Files.isRegularFile(selectedPath.resolve("level.dat"))) {
-            try {
-                WorldInfo world = LevelDatReader.readLevelDat(selectedPath);
-                if (world.isParsed()) {
-                    resultMap.put(groupName(selectedPath, "Selected World"), List.of(world));
-                }
-            } catch (IOException e) {
-                LOGGER.warn("Failed to read selected world at {}", selectedPath, e);
-            }
-            return resultMap;
-        }
-
-        if (isSavesDirectory(selectedPath)) {
-            List<WorldInfo> worlds = scanWorlds(selectedPath);
-            if (!worlds.isEmpty()) {
-                resultMap.put(groupName(selectedPath, "Selected Saves"), worlds);
-            }
-            return resultMap;
-        }
-
-        if (isDirectory(selectedPath.resolve("saves")) || isDirectory(selectedPath.resolve("versions"))) {
-            return scanGameRoot(selectedPath);
-        }
-
-        if (containsVersionDirectories(selectedPath)) {
-            return scanVersionsDirectory(selectedPath);
-        }
-
-        return resultMap;
+        return scanLibrary(selectedPath).groups();
     }
 
-    private static Map<String, List<WorldInfo>> scanVersionsDirectory(Path versionsDir) {
-        Map<String, List<WorldInfo>> resultMap = new LinkedHashMap<>();
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(versionsDir)) {
-            for (Path versionFolder : stream) {
-                Path versionSaves = versionFolder.resolve("saves");
-                if (isDirectory(versionFolder) && isDirectory(versionSaves)) {
-                    List<WorldInfo> versionWorlds = scanWorlds(versionSaves);
-                    if (!versionWorlds.isEmpty()) {
-                        resultMap.put(groupName(versionFolder, "Minecraft Instance"), versionWorlds);
-                    }
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.error("Failed to scan versions directory {}", versionsDir, e);
-        }
-        return resultMap;
+    public static ScanResult scanLibrary(Path selectedPath) {
+        return scanLibrary(selectedPath, Map.of());
     }
 
-    private static boolean isSavesDirectory(Path directory) {
-        Path fileName = directory.getFileName();
-        if (fileName != null && fileName.toString().equalsIgnoreCase("saves")) {
-            return true;
-        }
+    public static ScanResult scanLibrary(Path selectedPath, Map<String, List<WorldInfo>> previous) {
+        WorldScanner scanner = new WorldScanner();
+        previous.values().forEach(worlds -> worlds.forEach(world ->
+                scanner.knownWorlds.add(world.getFolderPath().toAbsolutePath().normalize())));
+        if (selectedPath != null) scanner.readSelected(selectedPath);
+        return new ScanResult(scanner.groups, scanner.failedPaths);
+    }
 
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
-            for (Path child : stream) {
-                if (isDirectory(child) && Files.isRegularFile(child.resolve("level.dat"))) {
-                    return true;
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.debug("Failed to inspect selected directory {}", directory, e);
+    private void readSelected(Path root) {
+        if (!isDirectory(root)) {
+            failedPaths.add(root.toAbsolutePath().normalize());
+            return;
         }
+        if (hasLevelDat(root)) {
+            readWorld(root, groupName(root, "Selected World"));
+            return;
+        }
+        if (failedPaths.contains(root.toAbsolutePath().normalize())) return;
+        String group = groupName(root, "Selected Saves");
+        if (group.equalsIgnoreCase("saves")) {
+            readSaves(root, group);
+            return;
+        }
+        List<Path> children = directories(root);
+        boolean containsWorlds = false;
+        for (Path child : children) {
+            if (hasLevelDat(child)) {
+                containsWorlds = true;
+                readWorld(child, group);
+            }
+        }
+        if (containsWorlds) return;
+        if (isDirectory(root.resolve("saves")) || isDirectory(root.resolve("versions"))) {
+            readGameRoot(root);
+        } else {
+            readInstances(children);
+        }
+    }
+
+    private void readGameRoot(Path root) {
+        Path saves = root.resolve("saves");
+        if (isDirectory(saves)) readSaves(saves, "默认存档 (Default)");
+        Path versions = root.resolve("versions");
+        if (isDirectory(versions)) readInstances(directories(versions));
+    }
+
+    private void readInstances(List<Path> instances) {
+        for (Path instance : instances) {
+            Path saves = instance.resolve("saves");
+            if (isDirectory(saves)) readSaves(saves, groupName(instance, "Minecraft Instance"));
+        }
+    }
+
+    private void readSaves(Path saves, String group) {
+        for (Path child : directories(saves)) {
+            if (hasLevelDat(child)) readWorld(child, group);
+        }
+    }
+
+    private void readWorld(Path path, String group) {
+        try {
+            WorldInfo info = LevelDatReader.readLevelDat(path);
+            if (info.isParsed()) {
+                groups.computeIfAbsent(group, key -> new ArrayList<>()).add(info);
+            } else {
+                failedPaths.add(path.toAbsolutePath().normalize());
+            }
+        } catch (IOException | SecurityException failure) {
+            recordFailure(path, failure);
+        }
+    }
+
+    private List<Path> directories(Path parent) {
+        List<Path> children = new ArrayList<>();
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(parent)) {
+            for (Path entry : entries) {
+                if (isDirectory(entry)) children.add(entry);
+            }
+        } catch (IOException | DirectoryIteratorException | SecurityException failure) {
+            recordFailure(parent, failure);
+        }
+        return children;
+    }
+
+    private boolean isDirectory(Path path) {
+        BasicFileAttributes attributes = attributes(path, path);
+        return attributes != null && attributes.isDirectory();
+    }
+
+    private boolean hasLevelDat(Path world) {
+        BasicFileAttributes attributes = attributes(world.resolve("level.dat"), world);
+        if (attributes == null) {
+            // A known world folder can temporarily lack level.dat during a save.
+            Path path = world.toAbsolutePath().normalize();
+            if (knownWorlds.contains(path)) failedPaths.add(path);
+            return false;
+        }
+        if (attributes.isRegularFile()) return true;
+        failedPaths.add(world.toAbsolutePath().normalize());
         return false;
     }
 
-    private static boolean containsVersionDirectories(Path directory) {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
-            for (Path child : stream) {
-                if (isDirectory(child) && isDirectory(child.resolve("saves"))) {
-                    return true;
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.debug("Failed to inspect versions directory {}", directory, e);
+    private BasicFileAttributes attributes(Path path, Path affectedDirectory) {
+        try {
+            return Files.readAttributes(path, BasicFileAttributes.class);
+        } catch (NoSuchFileException missing) {
+            return null;
+        } catch (IOException | SecurityException failure) {
+            recordFailure(affectedDirectory, failure);
+            return null;
         }
-        return false;
     }
 
-    private static boolean isDirectory(Path path) {
-        return path != null && Files.isDirectory(path);
+    private void recordFailure(Path path, Exception failure) {
+        failedPaths.add(path.toAbsolutePath().normalize());
+        LOGGER.warn("Failed to scan {}", path, failure);
     }
 
     private static String groupName(Path path, String fallback) {

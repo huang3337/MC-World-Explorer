@@ -1,91 +1,90 @@
-<p align="center">
-  <img src="docs/assets/mc-world-explorer.png" alt="MC World Explorer：放大镜与草方块" width="144">
-</p>
+<p align="center"><img src="docs/assets/mc-world-explorer.png" width="96" alt="MC World Explorer 图标"></p>
 
 <h1 align="center">MC World Explorer</h1>
 
-<p align="center">无需启动 Minecraft，浏览你的 Java 版存档、地图和三维场景。</p>
+<p align="center">在游戏外打开 Minecraft Java 版存档，沿着二维地图找路，再走进选中的三维场景。</p>
+<p align="center"><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><strong>下载 Windows x64 便携版</strong></a> · <a href="docs/README.md">使用文档</a> · <a href="docs/PLUGIN_DEVELOPMENT.md#agent-prompt">AI 扩展构建提示词</a> · <a href="docs/releases/V0.7.5.md">0.7.5 版本说明</a></p>
 
-<p align="center">
-  <a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><img src="https://img.shields.io/github/v/release/huang3337/MC-World-Explorer?label=Release&amp;color=2f81f7" alt="最新发布版本"></a>
-  <img src="https://img.shields.io/badge/Windows-x64-0078D4?logo=windows" alt="Windows x64">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-2da44e" alt="GPL-3.0 许可证"></a>
-</p>
+## 从河湾找到村庄
 
-<p align="center">
-  <strong><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest">下载 Windows 便携版</a></strong>
-  ·
-  <strong><a href="docs/README.md">使用与开发文档</a></strong>
-</p>
+在二维地图上，沿着河岸就能找到村庄的道路和农田。打开「三维选区」，沿地图拖出一个方框，再点「生成三维预览」，就能从高处看清同一条路通向哪栋房子。
 
-## 可以做什么
+![0.7.5 实机演示：从河湾村庄的二维地图框选 16×16 个区块，随后在三维窗口环绕村庄和樱花林](docs/assets/0.7.5/village-tour.webp)
 
-- **整理存档**：扫描游戏目录、整合包实例或单个世界，查看版本、种子、游玩时间和保存位置。
-- **浏览地图**：在主世界、下界、末地及可识别的 Mod 维度间切换，拖动缩放地图，查看地表或洞穴高度带。
-- **找回位置**：按 X/Z 坐标跳转，查看玩家、出生点和已加载地图内的下界传送门。
-- **查看三维场景**：从二维地图选择有限区块范围，在独立窗口里查看建筑和地形。
-- **保存地图图片**：将当前二维视口导出为 PNG，方便记录或分享。
+这段画面取自 Java 版 1.21.5 的真实存档「玩一辈子」。增强档加载了所选的全部 **16 × 16 个区块**。在 MCWE 的三维窗口里，点击画面后可用 WASD 和鼠标自由移动，空格上升，Shift 下降，按 O 切换环绕视角。三维移动范围限于本次加载的选区。
 
-浏览过程只读存档。程序配置、缓存、日志和导出文件与 Minecraft 世界数据分开保存。
+## 在几个实例里找回一个世界
 
-## 实际效果
+只记得存档名里有个「山」也够用。存档库会按实例列出匹配项，这次搜到了「山隅闲庭」和「雪山」。点开前者，就能看到河岸边的建筑群。
 
-以下为 **0.7.4 的实际界面**，使用 Minecraft **1.21.1** 的 `test001` 存档。
+![左侧在存档库搜索「山」，结果分属两个实例；右侧是选中「山隅闲庭」后打开的地图](docs/assets/0.7.5/world-library.webp)
 
-**二维地图**：拖动、缩放，连续浏览存档中已生成的区域，地图内容随视野按需加载。
+想知道一个老存档保存了多大范围，可以打开「定位 → 查看已保存范围」。在「玩一辈子」的主世界里，MCWE 从 68 个 Region 文件的头表里找到了 23,731 个非空区块位置。蓝色标出已保存范围，彩色部分是当前视口读过的地形。点总览中的位置就能跳回详细地图。
 
-![二维地图：浏览 test001 存档中的湖泊、森林与地形](docs/assets/map-overview.png)
+![左侧是整个主世界的已保存范围，上方有一小片已加载的彩色地形；右侧放大展示这片地形里的河湾村庄](docs/assets/0.7.5/saved-range.webp)
 
-**三维预览**：查看选区内的地表与洞穴，在已加载选区内自由移动、转向和升降。
+## 看看村庄脚下有什么
 
-![三维预览：已加载选区的地表与地下洞穴](docs/assets/viewer-overview.png)
+打开「图层与标记」，拖动洞穴高度滑块。下图保留了相同的中心和比例尺，左边是村道和农田，右边是滑块放在 Y 20 时显示的 **Y 0–31 高度带**。两个标记点的位置可以用来对照地上和地下。
 
-<details>
-<summary>查看三维近景与方块信息</summary>
+![同一村庄、同一比例尺，左边显示地表，右边显示 Y 0–31 高度带里的地下洞道，两个标记的位置一致](docs/assets/0.7.5/village-layers.webp)
 
-准星与线框帮助确认目标方块，并显示原始 ID、归属、坐标和显示状态。
+在同一个存档里把「维度」切到下界，地表总览几乎只看得到顶层和传送门标记。把滑块拖到 Y 45，就能看到 **Y 32–63** 之间的地形。下图两幅都围绕同一处下界坐标取景。
 
-![三维近景：准星目标、方块线框与信息显示](docs/assets/viewer-target.png)
+![下界的地表总览只显出平坦的顶层和紫色传送门标记，右侧高度带显出下方起伏的地形](docs/assets/0.7.5/nether-layers.webp)
 
-</details>
+## 标出两个地点，下次还能找到
 
-## 下载
+可以给常去的位置起名，再从一个图标向另一个拖线。松手前，线上方会显示两个方向各差多少格。下图从村庄广场量到北侧农田，X 相差 19 格，Z 相差 34 格。地点和连线保存在便携配置中，重新打开存档仍可回访。
 
-从 [最新正式 Release](https://github.com/huang3337/MC-World-Explorer/releases/latest) 下载 Windows 便携版及校验文件。开发源码与正式软件包可能处于不同阶段；版本与状态入口统一见上方“使用与开发文档”。
+![村庄地形全貌与测距局部，连线从广场指向农田，标注 X 19、Z 34 格](docs/assets/0.7.5/village-measure.png)
 
-### 浏览与诊断
+下次只要在「自定义标记点」里搜「农田」，选中结果并按回车，地图就会回到北侧农田的 **X −852、Z −1823**。
 
-- **资源与纹理**：使用所选游戏目录和资源包中的常见模型与纹理，显示地形与建筑的原有外观。
-- **自由视角**：在已加载场景内使用 WASD 和鼠标浏览，升降、释放鼠标及恢复视角；准星与选中线框帮助确认目标方块。
-- **方块信息与解析诊断**：查看方块 ID、归属、坐标及显示状态；按 Mod 查看本次选区的问题、资源来源，并导出报告。
-- **清楚的功能分区**：“资源与插件”分为资源、解析诊断和插件三页。可以安装、启停和卸载可信的第三方解析插件，应用不附带任何插件。
+![左侧按名称查到北侧农田及坐标，右侧是回车后以农田标记为中心的村庄地图](docs/assets/0.7.5/village-return.webp)
 
-目前无法完整显示所有 Mod 的模型和颜色。遇到不支持的内容，程序会保留方块身份并说明原因。三维移动限于已加载选区，不会随着相机移动自动加载新区块。诊断只代表本次实际生成的区域。
+## 把一片地形导出为 PNG
 
-## 快速开始
+打开「工具 → 导出地图 PNG → 导出指定范围地表」，填写两个对角，就能决定要分享多大的地图。下面从 **(−1060, −1960)** 取到 **(−677, −1641)**，两端都算在内，得到一张每像素对应一个方块的村庄地图。[查看程序直接导出的 PNG 原图](docs/assets/0.7.5/village-export.png)
 
-1. 从本仓库的 [Releases 页面](https://github.com/huang3337/MC-World-Explorer/releases) 下载 Windows x64 便携版 ZIP。
-2. **完整解压**到普通文件夹，双击 `MC World Explorer.exe`。便携版无需另装 Java。
-3. 点击选择目录按钮，选择 Minecraft 游戏目录、实例、存档目录或单个世界。
-4. 在左侧选择世界，通过地图上的维度、定位和图层工具浏览。
-5. 打开三维选区，选择范围并生成预览。第一次使用建议从较小范围开始。
+![左边是填好两角坐标的导出窗口，右边是实际写出的 384 × 320 村庄地图，包含河流、农田和樱花林](docs/assets/0.7.5/area-export.webp)
 
-保留 EXE、`app` 和 `runtime` 的相对位置，不要直接在压缩包内运行。配置、缓存、日志和导出文件位于程序目录中的 `config/`、`cache/`、`logs/` 和 `exports/`。
+## 用实例自己的资源看建筑
 
-### 三维操作
+「山隅闲庭」使用另一套实例资源。左边是建筑群在二维地图上的位置，右边是同一片河岸的三维近景。准星指向方块时，可以查看它的 ID、归属和坐标。
 
-在二维地图中锁定选区后，方框保持在所选区块：加载时为蓝色，成功后为绿色。点击“取消生成”或“取消选区”可重新选择位置，地图仍可拖动和缩放。
+![山隅闲庭的实机对照：二维地图上的河岸建筑群，以及增强档 256 区块预览中的木屋、石桥和田地](docs/assets/0.7.5/riverside.jpg)
 
-**V0.6.0 历史版**：左键拖动旋转，右键拖动平移旋转中心，滚轮缩放；`R` 复位，`Esc` 关闭三维窗口。
+如果模组方块和游戏里看起来不同，打开「资源与插件」可以先核对客户端，再进「解析诊断」按 Mod 查看原因。这次选区里，`chang_sheng_jue:sorghum_block` 的记录是 `UNSUPPORTED_MODEL`，`wenge_leaves` 的记录是 `UNBOUND_TINT`。反馈时可以直接导出这次选区的报告。[资源解析范围](docs/MODEL_PROTOCOL_CAPABILITIES.md)
 
-**V0.7.4**：点击画面捕获鼠标，`W/A/S/D` 移动，鼠标转向，`Space` 上升、`Shift` 下降；`Alt` 切换捕获与释放，`Esc` 释放鼠标，已释放时再按 `Esc` 关闭三维窗口；`O` 切换环绕模式，`R` 复位。切走窗口后释放输入，回来点击画面继续。
+![左侧显示山隅闲庭匹配到的客户端 AFoP.jar；右侧是 chang_sheng_jue 分组的方块 ID、解析状态和原因码](docs/assets/0.7.5/resource-diagnostics.webp)
 
-主界面右上角“关于”可查看版本、作者和项目主页，并复制工具信息。
+## 用 AI 给自己的整合包补解析规则
 
-## 反馈问题
+你可以请 **DSH、Claude Code 或 Codex** 为三维预览制作独立的解析插件。比如，某种作物使用了 MCWE 尚未识别的模型格式，或者某种树叶缺少有据可查的群系叶色绑定，都可以从一个具体方块开始。
 
-可在仓库的 [Issues](https://github.com/huang3337/MC-World-Explorer/issues) 描述问题。请注明应用版本、Minecraft 版本、复现步骤，以及实际与预期表现；0.7.4 的资源问题可以附上相关诊断条目。分享前检查报告中的本机路径，不必上传完整存档或 Mod 文件。
+1. 在包含该方块的三维选区打开「资源与插件 → 解析诊断」，导出 JSON，记下想修的方块 ID。
+2. 把提示词直接发给能读本地文件、运行 JDK 21 的 Agent，附上诊断 JSON，告诉它便携版和游戏实例的位置。它可以在独立目录里核对资源、编译并交付插件 JAR。程序内也可点「插件开发说明 → 复制全文」获取提示词和接口说明。[复制扩展构建提示词](docs/PLUGIN_DEVELOPMENT.md#agent-prompt)
+3. 拿到 JAR 后，在「资源与插件 → 插件 → 安装插件…」安装，勾选后点「应用启停更改」。重新生成**同一选区**，对比目标方块的外观和诊断。缺少的纹理需要先补齐资源，依赖游戏运行时的效果则受当前接口限制。
 
-## 技术与许可
+## 查看显卡，调整内存
 
-使用 Java 21、JavaFX、LWJGL/OpenGL 和 Gradle，主界面与三维窗口独立运行。项目采用 [GNU GPL v3.0](LICENSE) 许可证。
+「设置 → 渲染」会分别显示当前二维地图和最近一次三维预览使用的设备。拍摄用的电脑列出了 Intel UHD 和 RTX 5060 Laptop 两个二维选项，保存后重启 MCWE 即可应用。三维预览由系统 OpenGL 驱动选卡，这次实际使用的是 RTX 5060 Laptop。
+
+![左边是实机二维与三维设备读数、二维显卡型号列表，右边是 JVM 最大堆、二维扫描并发和三维缓存档位](docs/assets/0.7.5/device-and-memory.webp)
+
+「内存」页可以分别调整 JVM 最大堆、同时扫描的二维瓦片数，以及三维选区与缓存档位。图中的 **4 GiB** 是 JVM 堆上限，整个进程还会使用原生内存。增强档显示的 **512 MiB** 是场景缓存的估算预算。[设备、内存与便携说明](docs/FAQ.md#render-settings)
+
+## 打开自己的存档
+
+1. 下载 Windows x64 便携版 ZIP，完整解压到可写文件夹。双击 `MC World Explorer.exe` 即可启动，包内已带 Java。保留 `app`、`runtime` 与 EXE 的相对位置。[正式发布下载](https://github.com/huang3337/MC-World-Explorer/releases/latest)
+2. 点击「选择目录」，选游戏目录、整合包实例、存档目录或单个世界。选择世界后，可切换维度，定位出生点、玩家或已保存的地点。
+3. 在「图层与标记」查看地表或指定高度带。需要分享地图时，可导出当前视口，也可以按坐标指定范围导出 PNG。
+
+MCWE 只读浏览已保存的区块。配置、缓存、日志和导出位于便携目录。主界面支持浅色和深色主题。
+
+## 反馈与许可
+
+反馈问题时，请附应用版本、Minecraft 版本、复现步骤及实际画面。资源问题可以附相关诊断条目，分享前请检查本机路径。[提交 Issue](https://github.com/huang3337/MC-World-Explorer/issues)
+
+项目使用 Java 21、JavaFX 和 LWJGL/OpenGL，采用 GNU GPL v3.0 许可证。[许可证](LICENSE)

@@ -1,0 +1,19 @@
+.root {
+    -mcwe-window: #161b22;
+    -mcwe-panel: #202731;
+    -mcwe-ink: #e6edf3;
+    -mcwe-muted: #a9b6c4;
+    -mcwe-edge: #455362;
+    -mcwe-hover: #2b3541;
+    -mcwe-accent: #88b9ff;
+    -mcwe-on-accent: #132235;
+    -mcwe-selected: #283f5a;
+    -mcwe-selected-text: #c4dfff;
+    -mcwe-error: #ffaaaa;
+    -mcwe-player-bg: #213a30;
+    -mcwe-spawn-bg: #3b3525;
+    -mcwe-portal-bg: #382c45;
+    -mcwe-player-text: #98e4a8;
+    -mcwe-spawn-text: #f6dc83;
+    -mcwe-portal-text: #e4b0ff;
+}

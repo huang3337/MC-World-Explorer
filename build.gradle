@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.mcworldexplorer'
-version = '0.7.5-SNAPSHOT'
+version = '0.7.5'
 
 repositories {
     maven { url 'https://maven.aliyun.com/repository/public/' }
@@ -26,6 +26,58 @@ javafx {
 application {
     mainClass = 'com.mcworldexplorer.Launcher'
 }
+tasks.named('run', JavaExec) {
+    jvmArgs(
+        '--add-exports=javafx.graphics/com.sun.prism=ALL-UNNAMED',
+        '--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED',
+        '--add-opens=javafx.graphics/com.sun.prism.d3d=ALL-UNNAMED'
+    )
+}
+
+// Windows assigns GPU preferences to an executable path. Keep the project client independent of the shared JDK.
+tasks.register('prepareWindowsClient', Sync) {
+    dependsOn tasks.named('jar')
+    into layout.projectDirectory.dir('build/windows-client')
+    def jdk = javaToolchains.launcherFor(java.toolchain).map { it.metadata.installationPath }
+    from(jdk) {
+        include 'bin/java.exe', 'bin/*.dll', 'bin/server/**', 'conf/**', 'lib/**', 'legal/**', 'release'
+        exclude 'lib/src.zip', 'lib/ct.sym', '**/*.pdb'
+        into 'runtime'
+    }
+    // Windows GPU preferences belong to MCWE.exe; isolated plugins launch runtime/bin/java.exe.
+    from(jdk.map { it.file('bin/java.exe') }) {
+        into 'runtime/bin'
+        rename { 'MCWE.exe' }
+    }
+    from(tasks.named('jar')) { into 'app' }
+    from(configurations.runtimeClasspath) {
+        eachFile { f -> f.path = (f.name.startsWith('javafx-') ? 'fx/' : 'app/') + f.name }
+    }
+    doLast {
+        for (launcher in ['MCWE.exe', 'java.exe']) {
+            if (!new File(destinationDir, "runtime/bin/$launcher").isFile()) {
+                throw new GradleException("Windows client is missing runtime/bin/$launcher")
+            }
+        }
+    }
+}
+
+// The development launcher can apply the portable heap choice before it creates the client JVM.
+tasks.named('run', JavaExec) {
+    doFirst {
+        def config = layout.projectDirectory.file('config/settings.properties').asFile
+        if (config.isFile()) {
+            def preferences = new Properties()
+            try {
+                config.withInputStream { preferences.load(it) }
+                def mib = preferences.getProperty('heap_mib')
+                if (mib in ['1024', '2048', '4096']) maxHeapSize = mib + 'm'
+            } catch (IOException | IllegalArgumentException invalid) {
+                logger.warn('无法读取客户端堆设置，将使用启动器默认值。')
+            }
+        }
+    }
+}
 
 tasks.register('runV04JavaFx', JavaExec) {
     group = 'application'
@@ -35,6 +87,8 @@ tasks.register('runV04JavaFx', JavaExec) {
 }
 
 dependencies {
+    implementation 'org.kordamp.ikonli:ikonli-javafx:12.4.0'
+    implementation 'org.kordamp.ikonli:ikonli-feather-pack:12.4.0'
     implementation 'net.kyori:adventure-nbt:4.17.0'
     implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'org.slf4j:slf4j-api:2.0.13'
@@ -73,7 +127,7 @@ test {
 }
 
 // Use a fresh output tree so postponed classes cannot survive incremental compilation.
-layout.buildDirectory = layout.projectDirectory.dir('build/core-0.7.4')
+layout.buildDirectory = layout.projectDirectory.dir('build/core-0.7.5')
 
 // Both repository sources and the actual host archive must remain independent of deferred work.
 tasks.register('verifyCoreIsolation') {
@@ -82,7 +136,7 @@ tasks.register('verifyCoreIsolation') {
     doLast {
         def forbiddenRoots = ['model-plugins', 'sdk-template', 'src/sdkTools', 'src/modelTestKit']
         if (forbiddenRoots.any { file(it).exists() })
-            throw new GradleException('Deferred plugin/SDK sources are not part of 0.7.4')
+            throw new GradleException('Deferred plugin/SDK sources are not part of the core application')
         if (sourceSets.names.toSet() != ['main', 'test'].toSet())
             throw new GradleException('Only core main/test source sets are allowed')
         def deferredNames = ['ApiSurfaceGenerator', 'AthenaConnectedRule', 'AthenaPaneRule', 'AthenaPatternRule', 'BlockRegistrationInfo', 'BlockRegistrationProvider', 'BlockRegistrationRegistry', 'BookPileDefinitions', 'BookPileRule', 'BuiltinModelPlugins', 'ClientBlockConstants', 'ClientBlockProperties', 'ClientBlockStates', 'ClientCanonicalItems', 'ClientEntityAppearance', 'ClientEntityMesh', 'ClientEntityModelTemplate', 'ClientEntityModels', 'ClientEntityRegistration', 'ClientEntityRequest', 'ClientModelSymbols', 'DiagonalBlocksRule', 'ExtraRotationRule', 'FabricLootrModels', 'FlowerBoxPlacement', 'FlowerBoxPlants', 'FrameBlockRule', 'FrameworkPlugin', 'GeneratedResourcePlan', 'GobletModelRule', 'IeMirrorRule', 'IeMultiblockRegistration', 'IeObjRule', 'IeSplitRule', 'ItemModelGeometry', 'ItemModelRequest', 'ItemModelTemplate', 'JarModelRule', 'LoaderBlockItemProtocol', 'LootrModelRule', 'MigrationModelRules', 'ModelPluginTestKit', 'MoonlightFluidRegistry', 'OfflineModelContext', 'PaintingRule', 'PatchModelRule', 'QuarkHedges', 'QuarkRegistrationPlugin', 'QuarkRegistrations', 'RandomRotationRule', 'RopeKnotRule', 'SavedEntityModel', 'SavedModelState', 'SoftFluidAppearance', 'SoftFluidMaterial', 'SoftFluidRequest', 'SplitModelGeometry', 'SupplementariesJarRegistration', 'SupplementariesPlugin', 'SupplementariesRegistrations', 'TwilightForestPlugin', 'VerifyFramework', 'VerifyGiant', 'WallLanternRule'].toSet()

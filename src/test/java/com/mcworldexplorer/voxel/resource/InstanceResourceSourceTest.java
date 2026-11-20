@@ -81,12 +81,14 @@ class InstanceResourceSourceTest {
         var cancelled=new java.util.concurrent.atomic.AtomicBoolean();
         try(var source=InstanceResourceSource.open(world,base,"1.21.1",null,cancelled::get,m->{})){
             assertEquals(expectedEntries,entries.getInt(source));assertEquals(expectedChars,chars.getInt(source));
-            var index=InstanceResourceSource.class.getDeclaredMethod("index",Path.class,String.class,List.class);index.setAccessible(true);
+            var index=InstanceResourceSource.class.getDeclaredMethod("index",InstanceResourceSource.Stamp.class,String.class,List.class,byte[].class);index.setAccessible(true);
+            var stamp=InstanceResourceSource.Stamp.capture(archive);
+            byte[] hashBuffer=new byte[64*1024];
             entries.setInt(source,2_000_000);
-            var entryFailure=assertThrows(java.lang.reflect.InvocationTargetException.class,()->index.invoke(source,archive,"",List.of()));
+            var entryFailure=assertThrows(java.lang.reflect.InvocationTargetException.class,()->index.invoke(source,stamp,"",List.of(),hashBuffer));
             assertEquals(ResourceAccessException.Reason.LIMIT_EXCEEDED,assertInstanceOf(ResourceAccessException.class,entryFailure.getCause()).reason());
             entries.setInt(source,expectedEntries);chars.setInt(source,64*1024*1024);
-            var charFailure=assertThrows(java.lang.reflect.InvocationTargetException.class,()->index.invoke(source,archive,"",List.of()));
+            var charFailure=assertThrows(java.lang.reflect.InvocationTargetException.class,()->index.invoke(source,stamp,"",List.of(),hashBuffer));
             assertEquals(ResourceAccessException.Reason.LIMIT_EXCEEDED,assertInstanceOf(ResourceAccessException.class,charFailure.getCause()).reason());
             chars.setInt(source,expectedChars);cancelled.set(true);
             assertThrows(java.util.concurrent.CancellationException.class,source::validateAll);
@@ -152,6 +154,22 @@ class InstanceResourceSourceTest {
         zip(world.resolve("resources.zip"),Map.of(ENTRY,"world"));
         try(var source=InstanceResourceSource.open(world,client(),"1.21.1",null,CancellationSignal.NONE,message->{})) {
             assertEquals("world",source.readJson(ResourceLocation.Kind.MODEL,ID).orElseThrow());
+        }
+    }
+    @Test void modelBatchDetectsChangesToPreviouslyReadDirectoryAssetsAtItsBoundary()throws Exception {
+        Path instance=root.resolve("pack"),world=Files.createDirectories(instance.resolve("saves/world"));
+        Path folder=Files.createDirectories(instance.resolve("resourcepacks/local/assets/example/models/block"));
+        Path model=folder.resolve("shape.json");
+        Files.writeString(model,"initial");
+        Files.writeString(instance.resolve("options.txt"),"resourcePacks:[\"file/local\"]");
+        try(var source=InstanceResourceSource.open(world,client(),"1.21.1",null,CancellationSignal.NONE,message->{})){
+            var changed=assertThrows(ResourceAccessException.class,()->{
+                try(var batch=source.modelBatch()){
+                    assertEquals("initial",source.readJson(ResourceLocation.Kind.MODEL,ID).orElseThrow());
+                    Files.writeString(model,"different content");
+                }
+            });
+            assertEquals(ResourceAccessException.Reason.SOURCE_CHANGED,changed.reason());
         }
     }
     @Test void directoryPackChangesAndNewNestedFilesInvalidateAndClosingReleasesJars() throws Exception {

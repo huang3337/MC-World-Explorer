@@ -15,7 +15,10 @@ final class BiomeGrassNoise {
         for(int i=0;i<256;i++){int j=i+random.nextInt(256-i),old=values[i];values[i]=values[j];values[j]=old;}
         return values;
     }
-    static int color(int x,int z){return sample(x*.0225,z*.0225)<-.1?5011004:6975545;}
+    static int color(int x,int z,boolean floatResult){
+        double noise=sample(x*.0225,z*.0225);
+        return (floatResult?(double)(float)noise:noise)<-.1?5011004:6975545;
+    }
     static double sample(double x,double z){
         double skew=(x+z)*SKEW;int cellX=(int)Math.floor(x+skew),cellZ=(int)Math.floor(z+skew);
         double unskew=(cellX+cellZ)*UNSKEW,dx=x-(cellX-unskew),dz=z-(cellZ-unskew);

@@ -29,6 +29,20 @@ class PlayerDataReaderTest {
     Path tempDirectory;
 
     @Test
+    void prefersCurrentPlayerDirectoryWhenLegacyFilesSurviveMigration() throws IOException {
+        Path world = tempDirectory.resolve("world");
+        writePlayer(world, FIRST, "minecraft:overworld", 16, 65, -32);
+        Path modern = Files.createDirectories(world.resolve("players/data"));
+        Files.copy(world.resolve("playerdata").resolve(FIRST + ".dat"), modern.resolve(FIRST + ".dat"));
+        writePlayer(world, FIRST, "minecraft:overworld", 0, 64, 0);
+        writePlayer(world, SECOND, "minecraft:overworld", 0, 64, 0);
+        var players = new PlayerDataReader().read(world);
+        assertEquals(1, players.size());
+        assertEquals(FIRST, players.getFirst().uuid());
+        assertEquals(16, players.getFirst().x());
+    }
+
+    @Test
     void readsPlayersAndNamesFromBoundedInstanceCaches() throws IOException {
         Path instance = tempDirectory.resolve("instance");
         Path world = instance.resolve("saves").resolve("world");

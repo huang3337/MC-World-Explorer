@@ -9,16 +9,13 @@ import com.mcworldexplorer.voxel.io.DecodedChunk;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 public final class ParsedChunkSections {
     private final ChunkSurfaceLayout layout;
     private final VoxelChunk chunk;
     private final List<ChunkSectionView> sections;
-    private final Map<Integer, ChunkSectionView> sectionsByY;
 
     private ParsedChunkSections(
             ChunkSurfaceLayout layout,
@@ -26,11 +23,6 @@ public final class ParsedChunkSections {
         this.layout = layout;
         this.chunk = chunk;
         this.sections = chunk.sections().stream().map(ChunkSectionView::new).toList();
-        Map<Integer, ChunkSectionView> byY = new HashMap<>();
-        for (ChunkSectionView section : sections) {
-            byY.put(section.sectionY(), section);
-        }
-        sectionsByY = Map.copyOf(byY);
     }
 
     public static ParsedChunkSections read(RegionChunkData chunkData)
@@ -39,7 +31,7 @@ public final class ParsedChunkSections {
             throw new IllegalArgumentException("chunkData must not be null");
         }
         try (InputStream input = chunkData.openNbtStream()) {
-            return fromDecoded(ChunkNbtDecoder.read(input));
+            return fromDecoded(ChunkNbtDecoder.readSurface(input));
         } catch (ChunkDecodeException e) {
             throw translate(e);
         } catch (SurfaceSamplingException e) {
@@ -57,7 +49,7 @@ public final class ParsedChunkSections {
             throw new IllegalArgumentException("input must not be null");
         }
         try {
-            return fromDecoded(ChunkNbtDecoder.read(input));
+            return fromDecoded(ChunkNbtDecoder.readSurface(input));
         } catch (ChunkDecodeException e) {
             throw translate(e);
         }

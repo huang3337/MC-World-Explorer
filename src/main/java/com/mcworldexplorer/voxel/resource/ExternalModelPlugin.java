@@ -22,6 +22,8 @@ public final class ExternalModelPlugin implements ModelPlugin,AutoCloseable {
     private final BlockingQueue<Object> replies=new ArrayBlockingQueue<>(2);
     private final AtomicBoolean closed=new AtomicBoolean();
     private final List<ModelRule> rules;
+    private final List<TintLayer> layers;
+    public Collection<TintLayer> tintLayers(){return layers;}
     private final long timeoutNanos;
     private final StringBuilder diagnostics=new StringBuilder();
     private long sequence;
@@ -30,8 +32,12 @@ public final class ExternalModelPlugin implements ModelPlugin,AutoCloseable {
         this.archive=Objects.requireNonNull(archive);archive.validate();
         if(timeout.isNegative()||timeout.isZero()||timeout.compareTo(Duration.ofMinutes(2))>0)throw new IllegalArgumentException("插件调用预算必须在0至120秒之间");timeoutNanos=timeout.toNanos();
         String classpath=System.getProperty("mcwe.plugin.workerClasspath",System.getProperty("java.class.path"));
-        process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin","java").toString(),"-Xmx256m","-XX:MaxMetaspaceSize=128m","-cp",classpath,
-            ModelPluginWorker.class.getName(),archive.file().toString(),archive.sha256(),hostVersion).start();
+        try {
+            process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin","java").toString(),"-Xmx256m","-XX:MaxMetaspaceSize=128m","-cp",classpath,
+                ModelPluginWorker.class.getName(),archive.file().toString(),archive.sha256(),hostVersion).start();
+        } catch (IOException failure) {
+            throw new IOException("插件进程启动失败，请检查 MCWE 的 Java 运行时。", failure);
+        }
         output=new DataOutputStream(new BufferedOutputStream(process.getOutputStream()));
         replyReader=Thread.ofPlatform().daemon().name("mcwe-plugin-replies").start(()->{
             try(var input=new DataInputStream(new BufferedInputStream(process.getInputStream()))){while(!closed.get())replies.put(read(input));}
@@ -46,7 +52,8 @@ public final class ExternalModelPlugin implements ModelPlugin,AutoCloseable {
             if(!"ready".equals(ready.get("kind").getAsString()))throw new IOException("插件进程启动协议无效");
             List<ModelPluginRuleInfo> metadata=JSON.fromJson(ready.get("rules"),new TypeToken<List<ModelPluginRuleInfo>>(){}.getType());
             // Revalidate all metadata in the parent before exposing rules to the resolver.
-            new ModelRuleRegistry(metadata);
+            layers=List.copyOf(JSON.fromJson(ready.get("tints"),new TypeToken<List<TintLayer>>(){}.getType()));
+            new ModelRuleRegistry(metadata,"",layers);
             this.rules=metadata.stream().map(info->(ModelRule)new RemoteRule(info)).toList();
         }catch(Exception failure){close();throw failure instanceof IOException io?io:new IOException("模型插件启动失败："+failure.getMessage(),failure);}
     }

@@ -8,6 +8,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MapTileRendererTest {
     @Test
+    void rollingRowsKeepBorderHeightsAndIgnoreGapsInBothImages() {
+        var renderer = new MapTileRenderer();
+        var zoom = MapZoomLevel.BLOCKS_1;
+        var bounds = MapTileBounds.of(0, 0, zoom);
+        renderer.accept(bounds, zoom, -1, 0, 0, -3);
+        renderer.accept(bounds, zoom, 0, -1, 0, -6);
+        renderer.accept(bounds, zoom, 0, 0, 0x646464, -3);
+        renderer.accept(bounds, zoom, 1, 1, 0x646464, -15);
+        renderer.accept(bounds, zoom, 0, 2, 0x646464, 10);
+        for (var image : java.util.List.of(renderer.renderPartial(), renderer.render())) {
+            assertEquals(0xFF6B6B6B, image.getRGB(0, 0));
+            assertEquals(0xFF646464, image.getRGB(1, 1));
+            assertEquals(0xFF646464, image.getRGB(0, 2));
+        }
+    }
+
+    @Test
     void averagesOnlyPopulatedColumnsAtConfirmedScale() {
         MapTileRenderer renderer = new MapTileRenderer();
         MapTileBounds bounds = MapTileBounds.of(0, 0, MapZoomLevel.BLOCKS_2);

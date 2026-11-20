@@ -7,7 +7,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.*;
 import java.util.*;
-import java.util.regex.*;
 import java.util.zip.*;
 
 /** Locates explicitly enabled embedded packs by their registered ID and archive path. */
@@ -16,7 +15,6 @@ final class BuiltinResourcePacks {
     private record Stamp(Path path,long size,FileTime modified,Object key) { }
     private record Catalog(List<Stamp> stamps,List<Pack> packs) { }
     private static final Map<Path,Catalog> CACHE=new LinkedHashMap<>(8,.75f,true);
-    private static final Pattern MOD_ID=Pattern.compile("^modId\\s*=\\s*[\"']([^\"']+)[\"'].*$");
 
     static Optional<InstanceResourceLocator.Layer> locate(String id,Path instance,List<Path> jars,CancellationSignal cancel,List<String> warnings)throws IOException {
         try(var lookup=new Lookup(instance,jars,cancel)){return lookup.locate(id,warnings);}
@@ -97,11 +95,8 @@ final class BuiltinResourcePacks {
             if(json.has("id"))addId(ids,json.get("id").getAsString());
             if(json.has("provides"))for(var value:json.getAsJsonArray("provides"))addId(ids,value.getAsString());
         }catch(RuntimeException invalid){/* An ownerless pack can only be selected by an unambiguous builtin path. */}
-        for(String toml:java.util.Arrays.asList(neo,forge)) {
-            if(toml==null)continue;boolean mod=false;
-            for(String raw:toml.lines().toList()){String line=raw.strip();if(line.startsWith("["))mod=line.equals("[[mods]]");
-                if(mod){var matcher=MOD_ID.matcher(line);if(matcher.matches())addId(ids,matcher.group(1));}}
-        }
+        ForgeModMetadata.collect(neo,ids);
+        ForgeModMetadata.collect(forge,ids);
         return Set.copyOf(ids);
     }
     static String text(ZipFile zip,String name)throws IOException {var entry=zip.getEntry(name);if(entry==null||entry.isDirectory()||entry.getSize()<0||entry.getSize()>1024*1024)return null;try(var input=zip.getInputStream(entry)){byte[] bytes=input.readNBytes(1024*1024+1);if(bytes.length>1024*1024)throw new IOException("Mod元信息超限");return new String(bytes,StandardCharsets.UTF_8);}}

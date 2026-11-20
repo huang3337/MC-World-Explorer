@@ -34,6 +34,7 @@ public final class PreviewExporter {
             Path worldDirectory) throws ExportException {
         validateSource(sourceImage);
         Path exportDirectory = PortablePaths.exportsDirectory().toAbsolutePath().normalize();
+        requireOutsideWorld(exportDirectory, worldDirectory);
         try {
             Files.createDirectories(exportDirectory);
             if (!Files.isDirectory(exportDirectory)) {
@@ -85,11 +86,7 @@ public final class PreviewExporter {
                     FailureReason.TARGET_DIRECTORY_UNAVAILABLE,
                     "导出目录不存在：" + parent);
         }
-        if (isInsideWorld(target, worldDirectory)) {
-            throw new ExportException(
-                    FailureReason.TARGET_INSIDE_WORLD,
-                    "不能把导出文件写入 Minecraft 存档目录：" + target);
-        }
+        requireOutsideWorld(target, worldDirectory);
         if (Files.exists(target)) {
             throw new ExportException(
                     FailureReason.TARGET_EXISTS,
@@ -147,20 +144,24 @@ public final class PreviewExporter {
         }
     }
 
-    private static boolean isInsideWorld(Path target, Path worldDirectory) {
-        Path normalizedWorld = worldDirectory.toAbsolutePath().normalize();
-        if (target.startsWith(normalizedWorld)) {
-            return true;
-        }
-
+    /** 创建输出目录或临时文件前，沿现存父目录核对实际写入位置。 */
+    public static void requireOutsideWorld(Path destination, Path worldDirectory) throws ExportException {
+        Path target = destination.toAbsolutePath().normalize();
+        Path existing = target;
         try {
-            Path realWorld = normalizedWorld.toRealPath();
-            Path realParent = target.getParent().toRealPath();
-            Path effectiveTarget = realParent.resolve(target.getFileName()).normalize();
-            return effectiveTarget.startsWith(realWorld);
+            while (existing != null && Files.notExists(existing, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                existing = existing.getParent();
+            }
+            if (existing == null) throw new IOException("找不到可访问的父目录");
+            Path resolved = existing.toRealPath().resolve(existing.relativize(target));
+            if (!target.startsWith(worldDirectory.toAbsolutePath().normalize())
+                    && !resolved.startsWith(worldDirectory.toRealPath())) return;
         } catch (IOException | SecurityException e) {
-            return false;
+            throw new ExportException(FailureReason.TARGET_DIRECTORY_UNAVAILABLE,
+                    "无法核实导出位置：" + target, e);
         }
+        throw new ExportException(FailureReason.TARGET_INSIDE_WORLD,
+                "不能把导出文件写入 Minecraft 存档目录：" + target);
     }
 
     private static String safeWorldName(String worldName) {

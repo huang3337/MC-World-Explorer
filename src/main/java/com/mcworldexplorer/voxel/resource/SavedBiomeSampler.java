@@ -3,7 +3,7 @@ package com.mcworldexplorer.voxel.resource;
 import java.nio.*;
 import java.security.*;
 
-/** Inspected 1.20.1/1.21.1 BiomeManager seeded nearest-quart selection; no game classes loaded. */
+/** Seeded nearest-quart selection shared by the verified world colour protocols. */
 final class SavedBiomeSampler {
     record Quart(int x,int y,int z) { }
     static long obfuscateSeed(long seed){

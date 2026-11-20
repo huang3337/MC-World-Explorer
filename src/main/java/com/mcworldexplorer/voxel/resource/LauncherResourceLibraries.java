@@ -11,8 +11,8 @@ import java.util.zip.ZipFile;
 /** Assets from the selected launch profile's declared local dependencies, never class loading or downloads. */
 final class LauncherResourceLibraries {
     private static final int MAX_PROFILES=16,MAX_LIBRARIES=2048;
-    record Selection(List<InstanceResourceLocator.Layer> resources,List<Path> inputs,Optional<String> gameVersion,String problem) {
-        Selection {resources=List.copyOf(resources);inputs=List.copyOf(inputs);Objects.requireNonNull(gameVersion);Objects.requireNonNull(problem);}
+    record Selection(List<InstanceResourceLocator.Layer> resources,List<Path> inputs,Optional<String> gameVersion,Optional<String> platform,String problem) {
+        Selection {resources=List.copyOf(resources);inputs=List.copyOf(inputs);Objects.requireNonNull(gameVersion);Objects.requireNonNull(platform);Objects.requireNonNull(problem);}
     }
     static List<InstanceResourceLocator.Layer> locate(Path instance,CancellationSignal cancel,List<String> warnings)throws IOException {
         return select(instance,cancel,warnings).resources();
@@ -20,8 +20,8 @@ final class LauncherResourceLibraries {
     static Selection select(Path instance,CancellationSignal cancel,List<String> warnings)throws IOException {
         Path parent=instance.getParent();boolean versionFolder=parent!=null&&parent.getFileName()!=null&&parent.getFileName().toString().equalsIgnoreCase("versions");
         Path game=versionFolder?parent.getParent():instance;
-        if(game==null)return new Selection(List.of(),List.of(),Optional.empty(),"");Path root=game.resolve("libraries");
-        Path profile=instance.resolve(instance.getFileName()+".json");if(!Files.isRegularFile(profile))return new Selection(List.of(),List.of(profile),Optional.empty(),"");
+        if(game==null)return new Selection(List.of(),List.of(),Optional.empty(),Optional.empty(),"");Path root=game.resolve("libraries");
+        Path profile=instance.resolve(instance.getFileName()+".json");if(!Files.isRegularFile(profile))return new Selection(List.of(),List.of(profile),Optional.empty(),Optional.empty(),"");
         var inputs=new ArrayList<Path>();var problems=new ArrayList<String>();
         List<JsonObject> profiles=new ArrayList<>();Set<Path> seen=new HashSet<>();
         for(int depth=0;profile!=null;depth++) {
@@ -77,7 +77,10 @@ final class LauncherResourceLibraries {
                 if(assets)layers.add(new InstanceResourceLocator.Layer(real,"","library:"+candidate.getKey()));
             }catch(IOException invalid){note(warnings,"启动依赖资源不可读："+relative+"（"+invalid.getMessage()+"）");}
         }
-        return new Selection(new ArrayList<>(new LinkedHashSet<>(layers)),new ArrayList<>(new LinkedHashSet<>(inputs)),Optional.ofNullable(mc),String.join("；",problems));
+        Optional<String> platform = Optional.empty();
+        if (problems.isEmpty() && mc != null && (forge != null) != (neo != null))
+            platform = Optional.of(forge != null ? "forge" : "neoforge");
+        return new Selection(new ArrayList<>(new LinkedHashSet<>(layers)),new ArrayList<>(new LinkedHashSet<>(inputs)),Optional.ofNullable(mc),platform,String.join("；",problems));
     }
 
     private static boolean unconditional(JsonArray rules) {

@@ -15,6 +15,7 @@ final class BuiltinModelRules {
         public List<Part> resolve(Context context)throws IOException,Failure{return reader.read(context);}
     }
     static final ModelRuleRegistry REGISTRY=new ModelRuleRegistry(List.of(
+        CompositeModelRule.FORGE, CompositeModelRule.NEOFORGE,
         rule("obj",Set.of("model","flip_v","mtl_override","automatic_culling","shade_quads","emissive_ambient","visibility"),BuiltinModelRules::obj)
     ));
     private static ModelRule rule(String type,Set<String> fields,Reader reader) {
@@ -24,7 +25,7 @@ final class BuiltinModelRules {
     private static List<Part> obj(ModelRule.Context c)throws IOException,ModelRule.Failure {
         if(c.uvLock()){
             String loader=c.definition().has("loader")?c.definition().get("loader").getAsString():"";
-            if(!ModelDefinitionProtocol.objKeepsExplicitUv(loader,c.resources().platform(c.model().namespace()).orElse(""),c.resources().baseClientVersion().orElse("")))
+            if(!ModelLoaderProtocol.objKeepsExplicitUv(loader,c.resources().platform(c.model().namespace()).orElse(""),c.resources().baseClientVersion().orElse("")))
                 throw failure(Reason.UNSUPPORTED_MODEL,"OBJ uvlock 当前仅核对Forge 1.20.1与NeoForge 1.21.1的显式UV语义");
             c.note("OBJ加载器使用文件中的逐顶点UV，不应用blockstate uvlock");
         }

@@ -19,7 +19,7 @@ public final class TextureAtlas {
     private final int[] pixels;
 
     private TextureAtlas(int width, int height, int[] pixels) {
-        this.width = width; this.height = height; this.pixels = pixels.clone();
+        this.width = width; this.height = height; this.pixels = pixels;
     }
     public int width() { return width; }
     public int height() { return height; }
@@ -40,7 +40,7 @@ public final class TextureAtlas {
                 throw new IOException("纹理须为不超过 "+MAX_IMAGE_SIZE+" 像素的方形或有界纵向动画帧条");
             var parameters=reader.getDefaultReadParam();
             parameters.setSourceRegion(new java.awt.Rectangle(0,0,w,animationStrip?w:h));
-            return reader.read(0,parameters); // Static preview uses frame zero, not animation playback.
+            return spritePixels(reader.read(0,parameters)); // Static preview uses frame zero, not animation playback.
         } finally { reader.dispose(); }
     }
 
@@ -76,9 +76,31 @@ public final class TextureAtlas {
                 }
             }
             var parameters=reader.getDefaultReadParam();parameters.setSourceRegion(new java.awt.Rectangle((frame%(width/fw))*fw,(frame/(width/fw))*fh,fw,fh));
-            return reader.read(0,parameters);
+            return spritePixels(reader.read(0,parameters));
         }catch(RuntimeException invalid){throw new IOException("动画元数据无效",invalid);}finally{reader.dispose();}
     }
+    // World sprites use the stored gray byte in each RGB channel. Java's gray ColorSpace
+    // instead performs a linear-to-sRGB conversion when getRGB is called on a gray image.
+    private static BufferedImage spritePixels(BufferedImage image) {
+        var model=image.getColorModel();
+        if (model.getColorSpace().getType()!=java.awt.color.ColorSpace.TYPE_GRAY) return image;
+        var raster=image.getRaster();
+        var output=new BufferedImage(image.getWidth(),image.getHeight(),BufferedImage.TYPE_INT_ARGB);
+        int[] pixels=((java.awt.image.DataBufferInt)output.getRaster().getDataBuffer()).getData();
+        int grayBits=raster.getSampleModel().getSampleSize(0);
+        int alphaBits=model.hasAlpha()?raster.getSampleModel().getSampleSize(1):0;
+        for(int y=0;y<image.getHeight();y++) for(int x=0;x<image.getWidth();x++) {
+            int gray=toByte(raster.getSample(x,y,0),grayBits);
+            int alpha=alphaBits==0?255:toByte(raster.getSample(x,y,1),alphaBits);
+            pixels[y*image.getWidth()+x]=(alpha<<24)|(gray*0x010101);
+        }
+        return output;
+    }
+
+    private static int toByte(int channel,int bits) {
+        return bits>=8 ? channel >>> (bits-8) : channel*255/((1<<bits)-1);
+    }
+
     private static int nonnegative(com.google.gson.JsonElement value)throws IOException {
         try{if(value==null||!value.isJsonPrimitive()||!value.getAsJsonPrimitive().isNumber())throw new IllegalArgumentException();int result=value.getAsBigDecimal().intValueExact();if(result<0)throw new IllegalArgumentException();return result;}
         catch(RuntimeException invalid){throw new IOException("动画索引或尺寸必须为有界整数",invalid);}
@@ -86,7 +108,7 @@ public final class TextureAtlas {
     private static int positive(com.google.gson.JsonElement value)throws IOException {int result=nonnegative(value);if(result==0)throw new IOException("动画尺寸和帧时间须为正数");return result;}
 
     public static final class Builder {
-        private final int[] pixels = new int[MAX_SIZE * MAX_SIZE];
+        private final int[][] rows = new int[MAX_SIZE][];
         private final Map<String, Tile> tiles = new LinkedHashMap<>();
         private int x, y, rowHeight;
 
@@ -99,16 +121,25 @@ public final class TextureAtlas {
             if (x + w + 2 > MAX_SIZE) { x = 0; y += rowHeight; rowHeight = 0; }
             if (y + h + 2 > MAX_SIZE) throw new IOException("纹理图集超过 2048×2048 容量");
             Tile tile = new Tile(x + 1, y + 1, w, h);
-            for (int py = -1; py <= h; py++) for (int px = -1; px <= w; px++)
-                pixels[(y + py + 1) * MAX_SIZE + x + px + 1] = image.getRGB(
-                        Math.max(0, Math.min(w - 1, px)), Math.max(0, Math.min(h - 1, py)));
+            int[] pixels=new int[w];
+            for (int py=-1;py<=h;py++) {
+                int iy=y+py+1;
+                if (rows[iy]==null) rows[iy]=new int[MAX_SIZE];
+                image.getRGB(0,Math.clamp(py,0,h-1),w,1,pixels,0,w);
+                System.arraycopy(pixels,0,rows[iy],x+1,w);
+                rows[iy][x]=pixels[0];
+                rows[iy][x+w+1]=pixels[w-1];
+            }
             tiles.put(key, tile); x += w + 2; rowHeight = Math.max(rowHeight, h + 2);
             return tile;
         }
         public TextureAtlas build() {
             int height = 1;
             while (height < y + rowHeight) height *= 2;
-            return new TextureAtlas(MAX_SIZE, height, Arrays.copyOf(pixels, MAX_SIZE * height));
+            int[] snapshot=new int[MAX_SIZE*height];
+            for(int row=0;row<height;row++)
+                if(rows[row]!=null) System.arraycopy(rows[row],0,snapshot,row*MAX_SIZE,MAX_SIZE);
+            return new TextureAtlas(MAX_SIZE,height,snapshot);
         }
     }
 }

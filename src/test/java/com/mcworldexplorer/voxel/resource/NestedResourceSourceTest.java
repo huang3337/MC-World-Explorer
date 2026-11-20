@@ -84,6 +84,21 @@ class NestedResourceSourceTest {
         Files.write(jar,data);
         try(var source=open(world,client)){assertEquals("valid",source.readJson(ResourceLocation.Kind.MODEL,ID).orElseThrow());assertTrue(source.warnings().stream().noneMatch(s->s.contains("重复素材")));}
     }
+    @Test void discoveryReleasesSiblingMountsAndRecoversFromInvalidChildren()throws Exception {
+        Path archive=write(root.resolve("siblings.jar"),Map.of(
+                "first.jar",inner("first","one"),"second.jar",inner("second","two"),"bad.jar",bytes("bad")));
+        try(var access=new NestedZipAccess(CancellationSignal.NONE,1)) {
+            Path first=access.root(archive,List.of("first.jar"));
+            assertEquals("one",Files.readString(first.resolve(ENTRY)));
+            Path second=access.root(archive,List.of("second.jar"));
+            assertFalse(first.getFileSystem().isOpen());
+            assertEquals("two",Files.readString(second.resolve(ENTRY)));
+            assertThrows(IOException.class,()->access.root(archive,List.of("bad.jar")));
+            assertFalse(second.getFileSystem().isOpen());
+            assertEquals("one",Files.readString(access.root(archive,List.of("first.jar")).resolve(ENTRY)));
+        }
+        Files.move(archive,root.resolve("released.jar"));
+    }
     @Test void lruEvictionAndCancellationReleaseAllArchives()throws Exception {
         var archives=new ArrayList<Path>();try(var access=new NestedZipAccess(CancellationSignal.NONE)) {
             for(int i=0;i<6;i++){Path path=write(root.resolve("archive"+i+".jar"),Map.of("inner.jar",inner("nested","value"+i)));archives.add(path);assertEquals("value"+i,Files.readString(access.root(path,List.of("inner.jar")).resolve(ENTRY)));}

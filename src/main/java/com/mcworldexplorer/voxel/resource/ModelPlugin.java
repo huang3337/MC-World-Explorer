@@ -20,5 +20,14 @@ public interface ModelPlugin {
     Descriptor descriptor();
     /** Supplied by the lifecycle owner for external packages, never inferred from a displayed version. */
     default String contentFingerprint(){return "";}
-    Collection<? extends ModelRule> rules();
+    /** Declarative independent face-index bindings. No geometry loader or per-block plugin call is needed. */
+    record TintLayer(ResourceLocation block,int index,ModelRule.BiomeColor biome,Integer rgb) {
+        public TintLayer {
+            Objects.requireNonNull(block);
+            if(index<0||index>255||(biome==null)==(rgb==null)||rgb!=null&&(rgb<0||rgb>0xffffff))
+                throw new IllegalArgumentException("颜色层需要0..255索引及一种有效颜色来源");
+        }
+    }
+    default Collection<TintLayer> tintLayers(){return List.of();}
+    default Collection<? extends ModelRule> rules(){return List.of();}
 }

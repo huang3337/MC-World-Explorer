@@ -84,20 +84,9 @@ final class PreviewRenderer {
                     int difference = averageHeights[index] - referenceHeight;
                     shade += Math.max(-0.22, Math.min(0.22, difference * 0.035));
                 }
-                image.setRGB(x, z, 0xFF000000 | shade(baseColors[index], shade));
+                image.setRGB(x, z, 0xFF000000 | BlockColorPalette.shade(baseColors[index], shade));
             }
         }
         return image;
-    }
-
-    private static int shade(int color, double factor) {
-        int red = clamp((int) Math.round((color >>> 16 & 0xFF) * factor));
-        int green = clamp((int) Math.round((color >>> 8 & 0xFF) * factor));
-        int blue = clamp((int) Math.round((color & 0xFF) * factor));
-        return red << 16 | green << 8 | blue;
-    }
-
-    private static int clamp(int value) {
-        return Math.max(0, Math.min(255, value));
     }
 }

@@ -28,6 +28,8 @@
     "StringRepresentable": "azk",
     "ResourceLocation": "akr",
     "ResourceKey": "akq",
+    "BlockKeys": "akh",
+    "RegistryKeys": "lu",
     "Registry": "jz",
     "BuiltInRegistries": "lt",
     "CrossCollisionBlock": "dhu",
@@ -40,6 +42,7 @@
     "TypedDataComponent": "ks"
   },
   "methods": [
+    ["BlockKeys", "create", "a", "(Ljava/lang/String;)Lakq;"],
     [
       "Direction",
       "<init>",
@@ -552,6 +555,7 @@
     ]
   ],
   "fields": [
+    ["RegistryKeys", "BLOCK", "f", "Lakq;"],
     [
       "BlockItem",
       "block",

@@ -2,6 +2,7 @@ package com.mcworldexplorer.voxel.render.lwjgl;
 
 import com.mcworldexplorer.voxel.mesh.ChunkMeshSnapshot;
 import com.mcworldexplorer.voxel.mesh.MeshBatch;
+import com.mcworldexplorer.voxel.mesh.RenderLayer;
 import com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot;
 
 import java.util.ArrayList;
@@ -11,10 +12,13 @@ import java.util.List;
 public final class OpenGlSceneResources implements AutoCloseable {
     private final List<OpenGlMeshResources> meshes;
     private final OpenGlTextureResources texture;
+    private final TranslucentFaces translucent;
 
-    private OpenGlSceneResources(List<OpenGlMeshResources> meshes, OpenGlTextureResources texture) {
+    private OpenGlSceneResources(List<OpenGlMeshResources> meshes, OpenGlTextureResources texture,
+                                 TranslucentFaces translucent) {
         this.meshes = List.copyOf(meshes);
         this.texture = texture;
+        this.translucent = translucent;
     }
 
     public static OpenGlSceneResources upload(VoxelSceneSnapshot scene) {
@@ -31,15 +35,22 @@ public final class OpenGlSceneResources implements AutoCloseable {
                 .thenComparingInt(item -> item.batch().rgb()));
 
         List<OpenGlMeshResources> uploaded = new ArrayList<>();
+        List<TranslucentFaces.Part> parts = new ArrayList<>();
+        TranslucentFaces translucent = null;
         OpenGlTextureResources texture = null;
         try {
             if (scene.atlas().isPresent()) texture = new OpenGlTextureResources(scene.atlas().orElseThrow());
             for (UploadItem item : items) {
-                uploaded.add(OpenGlMeshResources.upload(
-                        item.batch(), item.offsetX(), item.offsetZ()));
+                if (item.batch.layer() == RenderLayer.TRANSLUCENT || item.batch.layer() == RenderLayer.FLUID) {
+                    parts.add(new TranslucentFaces.Part(item.batch, item.offsetX, item.offsetZ));
+                } else {
+                    uploaded.add(OpenGlMeshResources.upload(item.batch, item.offsetX, item.offsetZ));
+                }
             }
-            return new OpenGlSceneResources(uploaded, texture);
+            translucent = new TranslucentFaces(parts);
+            return new OpenGlSceneResources(uploaded, texture, translucent);
         } catch (RuntimeException | Error failure) {
+            if (translucent != null) translucent.close();
             closeReverse(uploaded);
             if (texture != null) texture.close();
             throw failure;
@@ -56,8 +67,13 @@ public final class OpenGlSceneResources implements AutoCloseable {
         return meshes;
     }
 
+    void drawTranslucent(org.joml.Matrix4f viewProjection) {
+        translucent.draw(viewProjection);
+    }
+
     @Override
     public void close() {
+        translucent.close();
         closeReverse(meshes);
         if (texture != null) texture.close();
     }

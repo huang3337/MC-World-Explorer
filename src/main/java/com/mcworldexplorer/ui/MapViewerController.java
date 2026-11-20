@@ -59,8 +59,12 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
+import javafx.scene.control.Menu;
+import com.mcworldexplorer.storage.SavedPlaces.Position;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
@@ -68,8 +72,10 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.geometry.Pos;
+import javafx.geometry.Insets;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
@@ -94,7 +100,7 @@ import java.util.Set;
 
 public final class MapViewerController {
     private static final Logger LOGGER = LoggerFactory.getLogger(MapViewerController.class);
-    private static final String RENDER_VERSION = "v075-p3-r1";
+    private static final String RENDER_VERSION = "v075-p3-r2";
     private static final MapZoomLevel DEFAULT_ZOOM = MapZoomLevel.BLOCKS_2;
 
     private final MapTileService tileService = new MapTileService();
@@ -102,6 +108,8 @@ public final class MapViewerController {
     private final ViewportCoordinator coordinator = new ViewportCoordinator();
     private final WorldMapCacheCleaner cacheCleaner = new WorldMapCacheCleaner();
     private final ViewportExporter exporter = new ViewportExporter();
+    private ExportFolders exportFolders = new ExportFolders();
+    private final PauseTransition exportNoticeTimeout = new PauseTransition(Duration.seconds(8));
     private final PlayerDataReader playerDataReader = new PlayerDataReader();
     private final PortableSettings portableSettings = new PortableSettings();
     private javafx.scene.control.Dialog<Void> resourceSettingsDialog;
@@ -113,7 +121,10 @@ public final class MapViewerController {
     private Map<ResourceLocation,String> modelPluginExecutions=Map.of();
     private final MapTileLoadTracker tileLoadTracker = new MapTileLoadTracker();
     private SavedRangeOverview savedOverview;
+    private SurfaceExportDialog surfaceExport;
+    private Task<Path> viewportExport;
     private final MapDisplayQueue displayQueue = new MapDisplayQueue();
+    private WritableImage missingTerrainImage;
     private int clippedTiles;
     private final javafx.animation.AnimationTimer displayPulse = new javafx.animation.AnimationTimer() {
         @Override public void handle(long now) {
@@ -146,7 +157,10 @@ public final class MapViewerController {
     private List<MapTileKey> prefetchKeys = List.of();
     private List<PlayerLocation> playerLocations = List.of();
     private PlayerNavigation pendingPlayerNavigation;
+    private Position pendingPlace;
+    private SavedPlacesMenu savedPlaces;
     private boolean updatingControls;
+    private boolean applyingSavedPreferences;
     private boolean cacheMaintenanceInProgress;
     private long contextId;
     private long playerLoadId;
@@ -162,6 +176,7 @@ public final class MapViewerController {
     private boolean viewerTaskRunning;
     private boolean shuttingDown;
     private long viewerCacheInspectionId;
+    private Task<List<ViewerCachedArea>> viewerCacheInspection;
     private Set<ChunkRectangle> validViewerCachedAreas = Set.of();
     private boolean activeViewerExpectedFromCache;
     private List<ViewerCachedArea> viewerCachedPreviews = List.of();
@@ -197,15 +212,38 @@ public final class MapViewerController {
     @FXML
     private MenuButton locateMenuButton;
     @FXML
+    private Menu myPlacesMenu;
+    @FXML
+    private SavedPlacesPanel savedPlacesPanel;
+    @FXML
     private MenuButton layersMenuButton;
     @FXML
     private MenuButton moreMenuButton;
+    @FXML
+    private MapToolbar mapToolbar;
+    @FXML
+    private Button resourceSettingsButton;
+    @FXML
+    private MenuItem resourceSettingsItem;
+    @FXML
+    private RadioMenuItem lightThemeItem;
+    @FXML
+    private RadioMenuItem darkThemeItem;
+    @FXML
+    private StackPane mapSurface;
+
     @FXML
     private ToggleButton spawnMarkerButton;
     @FXML
     private ToggleButton portalMarkerButton;
     @FXML
-    private Button exportButton;
+    private MenuButton exportButton;
+    @FXML
+    private MenuItem viewportExportItem;
+    @FXML private MenuItem surfaceExportItem;
+    @FXML private HBox exportNotice;
+    @FXML private Label exportNoticeFile;
+    @FXML private Button exportNoticeFolder;
     @FXML
     private Button clearCacheButton;
     @FXML
@@ -271,6 +309,17 @@ public final class MapViewerController {
 
     @FXML
     public void initialize() {
+        try {
+            scheduler.setScanWorkers(portableSettings.loadRuntimePreferences().scanWorkers());
+        } catch (IOException failure) { LOGGER.warn("Could not read map scan concurrency", failure); }
+        mapToolbar.configure(resourceSettingsButton, moreMenuButton, resourceSettingsItem, dimensionComboBox);
+        WorkspaceAppearance.install(mapSurface, lightThemeItem, darkThemeItem, portableSettings);
+        exportNotice.managedProperty().bind(exportNotice.visibleProperty());
+        exportNoticeTimeout.setOnFinished(event -> hideExportNotice());
+        exportNotice.setOnMouseEntered(event -> exportNoticeTimeout.pause());
+        exportNotice.setOnMouseExited(event -> {
+            if (exportNotice.isVisible()) exportNoticeTimeout.play();
+        });
         configureTextureHelp();
         Tooltip statusTooltip = new Tooltip();
         statusTooltip.textProperty().bind(statusLabel.textProperty());
@@ -291,6 +340,9 @@ public final class MapViewerController {
         viewerAreaList.setOnClear(() -> removeViewerAreas(viewerCachedPreviews, true));
         viewerAreasHost.getChildren().setAll(viewerAreaList);
         viewport = new MapViewport();
+        savedPlaces = new SavedPlacesMenu(viewport, myPlacesMenu, savedPlacesPanel, this::findDimension,
+                this::navigateToPlace, statusLabel::setText);
+        layersMenuButton.setOnShowing(event -> savedPlaces.refresh());
         displayPulse.start();
         Label placeholderTitle = new Label("开始浏览你的世界");
         placeholderTitle.getStyleClass().add("map-placeholder-title");
@@ -306,10 +358,13 @@ public final class MapViewerController {
         viewportHost.getChildren().setAll(viewport, mapPlaceholder);
         viewerAreasButton.disableProperty().bind(viewerModeButton.disableProperty());
         locateMenuButton.disableProperty().bind(viewerModeButton.disableProperty());
-        layersMenuButton.disableProperty().bind(surfaceOverviewButton.disableProperty());
+        layersMenuButton.disableProperty().bind(surfaceOverviewButton.disableProperty()
+                .and(layersMenuButton.showingProperty().not()));
         viewport.setOnViewportChanged(() -> {
             updateStatus();
-            viewportDebounce.playFromStart();
+            // A held pointer can pan continuously. Allow the pending tile request to run.
+            if (viewport.placeLines.isDragging()) viewportDebounce.play();
+            else viewportDebounce.playFromStart();
         });
         viewport.setOnVisualChanged(this::updateStatus);
         viewport.setOnZoomTargetChanged(() -> {
@@ -355,6 +410,20 @@ public final class MapViewerController {
         clear();
     }
 
+    void attachDetailsPane(ScrollPane details) {
+        // Draw above the viewport and below its interactive overlays.
+        var overlay = new StackPane(details);
+        overlay.setPickOnBounds(false);
+        overlay.setPrefSize(0, 0);
+        overlay.setMinSize(0, 0);
+        mapSurface.getChildren().add(mapSurface.getChildren().indexOf(viewportHost) + 1, overlay);
+        StackPane.setAlignment(details, Pos.TOP_RIGHT);
+        Runnable position = () -> StackPane.setMargin(details,
+                new Insets(12, 28 + Math.ceil(viewerAreasButton.getWidth()), 12, 0));
+        position.run();
+        viewerAreasButton.widthProperty().addListener((obs, previous, width) -> position.run());
+    }
+
     public void setWorld(WorldInfo world) {
         clear();
         this.world = world;
@@ -371,6 +440,7 @@ public final class MapViewerController {
             updatingControls = true;
             dimensionComboBox.setItems(FXCollections.observableArrayList(dimensions));
             dimensionComboBox.getSelectionModel().selectFirst();
+            savedPlaces.setWorld(world.getFolderPath());
             dimensionComboBox.setDisable(dimensions.isEmpty());
             updatingControls = false;
             if (dimensionComboBox.getValue() == null) {
@@ -387,6 +457,9 @@ public final class MapViewerController {
     }
 
     public void clear() {
+        hideExportNotice();
+        pendingPlace = null;
+        if (savedPlaces != null) savedPlaces.setWorld(null);
         cancelViewerResourceLookup();
         viewerResourcePath = null;
         viewerResourceInstance=null;invalidateResourceDiagnostics("尚未生成三维区域");
@@ -401,10 +474,10 @@ public final class MapViewerController {
         exitViewerMode(false);
         contextId++;
         displayQueue.retain(contextId, Set.of());
-        closeSavedOverview();
+        closeMapToolDialogs();
         playerLoadId++;
         cacheMaintenanceId++;
-        viewerCacheInspectionId++;
+        cancelViewerCacheInspection();
         viewportDebounce.stop();
         playerHighlight.stop();
         scheduler.cancelAll();
@@ -440,7 +513,7 @@ public final class MapViewerController {
             layerHeightSlider.setDisable(true);
             layerRangeLabel.setText("-");
             updatingControls = false;
-            exportButton.setDisable(true);
+            disableMapExports();
             clearCacheButton.setDisable(true);
             viewerModeButton.setDisable(true);
             coordinateErrorLabel.setText("");
@@ -456,16 +529,18 @@ public final class MapViewerController {
             return;
         }
         shuttingDown = true;
+        hideExportNotice();
+        if (savedPlaces != null) savedPlaces.setWorld(null);
         if(resourceSettingsDialog!=null)resourceSettingsDialog.close();
         if(modelPluginLibrary!=null)modelPluginLibrary.close();
         viewerTextureHelp.getTooltip().hide();
         cancelViewerResourceLookup();
         contextId++;
         displayQueue.retain(contextId, Set.of());
-        closeSavedOverview();
+        closeMapToolDialogs();
         playerLoadId++;
         cacheMaintenanceId++;
-        viewerCacheInspectionId++;
+        cancelViewerCacheInspection();
         activeViewerRequestId = -1;
         viewerTaskRunning = false;
         viewportDebounce.stop();
@@ -483,6 +558,8 @@ public final class MapViewerController {
     }
 
     private void selectDimension(WorldDimension selected) {
+        savedPlaces.setDimension(null);
+        if (pendingPlace != null && !pendingPlace.dimension().equals(selected.id())) pendingPlace = null;
         cancelViewerTask(false);
         invalidateResourceDiagnostics("维度已切换，生成三维预览后查看该选区的解析报告。");
         refreshResourceSettings();
@@ -495,13 +572,14 @@ public final class MapViewerController {
         }
         contextId++;
         displayQueue.retain(contextId, Set.of());
-        closeSavedOverview();
+        closeMapToolDialogs();
         scheduler.cancelAll();
         tileLoadTracker.clear();
         readyKeys.clear();
         currentRequestId = -1;
         dimension = selected;
-        viewerCacheInspectionId++;
+        disableMapExports();
+        cancelViewerCacheInspection();
         updateViewerAreaList(List.of());
         clearCacheButton.setDisable(false);
         statusLabel.setText("正在读取维度高度...");
@@ -549,6 +627,10 @@ public final class MapViewerController {
     }
 
     private void activateDimensionState(DimensionState state) {
+        if (pendingPlace != null && pendingPlace.dimension().equals(dimension.id())) {
+            state.viewportState().centerOn(pendingPlace.x() + 0.5, pendingPlace.z() + 0.5);
+            pendingPlace = null;
+        }
         PlayerNavigation navigation = pendingPlayerNavigation;
         if (navigation != null && navigation.dimensionId().equals(dimension.id())) {
             state = state.withLayer(navigation.layer());
@@ -570,6 +652,7 @@ public final class MapViewerController {
         layerRangeLabel.setText(MainController.formatLayerSliderLabel(state.range(), state.sliderY()));
         updatingControls = false;
         viewport.setViewportState(state.viewportState());
+        savedPlaces.setDimension(dimension);
         mapPlaceholder.setVisible(false);
         viewport.setFixedMarkers(fixedMarkers());
         viewport.setViewerCachedAreaContext(dimension.displayName());
@@ -613,6 +696,7 @@ public final class MapViewerController {
                 viewerCoordinator.setProfile(viewerProfile);
                 refreshViewerCachedAreas();
             }
+            if (applyingSavedPreferences) return;
             try {
                 portableSettings.saveViewerPerformanceProfile(viewerProfile.settingValue());
             } catch (IOException e) {
@@ -672,6 +756,20 @@ public final class MapViewerController {
                 .toList();
     }
 
+    ViewerPerformanceProfile currentProfile() { return viewerProfile; }
+    boolean darkTheme() { return darkThemeItem.isSelected(); }
+    boolean profileBusy() { return viewerTaskRunning; }
+    int scanWorkers() { return scheduler.scanWorkers(); }
+
+    void applySavedPreferences(int workers, boolean dark, ViewerPerformanceProfile profile) {
+        scheduler.setScanWorkers(workers);
+        (dark ? darkThemeItem : lightThemeItem).setSelected(true);
+        WorkspaceAppearance.apply(mapSurface.getScene(), dark);
+        applyingSavedPreferences = true;
+        try { viewerProfileComboBox.setValue(profile); }
+        finally { applyingSavedPreferences = false; }
+    }
+
     @FXML
     private void handleViewerMode(ActionEvent event) {
         if (viewerModeButton.isSelected()) {
@@ -691,6 +789,7 @@ public final class MapViewerController {
         boolean wasRunning = viewerTaskRunning;
         cancelViewerTask(false);
         clearViewerSelection((wasRunning ? "已取消生成；" : "") + viewerSelectionHint());
+        if (wasRunning) refreshViewerCachedAreas();
     }
 
     private void enterViewerMode() {
@@ -809,7 +908,7 @@ public final class MapViewerController {
                         && key.dimensionId().equals(dimension.id()))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (keys.isEmpty()) return;
-        viewerCacheInspectionId++;
+        cancelViewerCacheInspection();
         keys.forEach(viewerCoordinator::removeCachedArea);
         updateViewerAreaList(viewerCachedPreviews.stream().filter(candidate -> !keys.contains(candidate.key())).toList());
         if (keys.stream().anyMatch(key -> key.target().equals(viewerLockedSelection))) {
@@ -835,12 +934,22 @@ public final class MapViewerController {
         startViewerTask();
     }
 
+    private void cancelViewerCacheInspection() {
+        viewerCacheInspectionId++;
+        if (viewerCacheInspection != null) {
+            viewerCacheInspection.cancel(true);
+            viewerCacheInspection = null;
+        }
+    }
+
     private void refreshViewerCachedAreas() {
+        cancelViewerCacheInspection();
+        if (viewerTaskRunning) return;
         if (viewerCoordinator == null || world == null || dimension == null) {
             updateViewerAreaList(List.of());
             return;
         }
-        long inspectionId = ++viewerCacheInspectionId;
+        long inspectionId = viewerCacheInspectionId;
         Path worldPath = world.getFolderPath().toAbsolutePath().normalize();
         String dimensionId = dimension.id();
         VoxelPreviewCoordinator currentCoordinator = viewerCoordinator;
@@ -849,10 +958,7 @@ public final class MapViewerController {
         Task<List<ViewerCachedArea>> task = new Task<>() {
             @Override
             protected List<ViewerCachedArea> call() {
-                return currentCoordinator.validateCachedPreviews().stream()
-                        .filter(area -> area.key().world().equals(worldPath)
-                                && area.key().dimensionId().equals(dimensionId))
-                        .toList();
+                return currentCoordinator.validateCachedPreviews(worldPath, dimensionId, this::isCancelled);
             }
         };
         task.setOnSucceeded(event -> {
@@ -861,12 +967,17 @@ public final class MapViewerController {
                     || !dimension.id().equals(dimensionId)) {
                 return;
             }
+            viewerCacheInspection = null;
             updateViewerAreaList(task.getValue());
         });
         task.setOnFailed(event -> {
             LOGGER.debug("Failed to validate viewer cache", task.getException());
-            if (inspectionId == viewerCacheInspectionId) updateViewerAreaList(List.of());
+            if (inspectionId == viewerCacheInspectionId) {
+                viewerCacheInspection = null;
+                updateViewerAreaList(List.of());
+            }
         });
+        viewerCacheInspection = task;
         Thread thread = new Thread(task, "viewer-cache-validator");
         thread.setDaemon(true);
         thread.start();
@@ -937,7 +1048,7 @@ public final class MapViewerController {
         catch(IOException failure){viewerSelectionLabel.setText("游戏目录绑定保存失败："+shortMessage(failure));return;}
         viewerResourceInstance=path;
         if(viewerCoordinator!=null)viewerCoordinator.setResource(viewerResourcePath,world.getVersionName(),path);
-        viewerCacheInspectionId++;updateViewerAreaList(List.of());
+        cancelViewerCacheInspection();updateViewerAreaList(List.of());
         viewport.invalidateViewerLoadedSelection();
         invalidateResourceDiagnostics("游戏目录已改变，重新生成后显示诊断");
         viewerSelectionLabel.setText("已选择游戏目录，可重新生成三维区域");
@@ -951,7 +1062,7 @@ public final class MapViewerController {
 
 
     private javafx.stage.Window resourceSettingsWindow(){return resourceSettingsDialog!=null&&resourceSettingsDialog.isShowing()?resourceSettingsDialog.getDialogPane().getScene().getWindow():viewportHost.getScene().getWindow();}
-    private void openResourceSettings(boolean diagnostics){
+    void openResourceSettings(boolean diagnostics){
         if(shuttingDown)return;
         if(resourceSettingsDialog!=null){if(diagnostics)resourceSettingsPane.showDiagnostics();resourceSettingsDialog.getDialogPane().getScene().getWindow().requestFocus();return;}
         var dialog=new javafx.scene.control.Dialog<Void>();dialog.setTitle("资源与插件");dialog.initOwner(viewportHost.getScene().getWindow());dialog.setResizable(true);
@@ -983,7 +1094,6 @@ public final class MapViewerController {
             public void simpleColors(){handleViewerSimpleColors(new ActionEvent());}
         });
         dialog.getDialogPane().setContent(resourceSettingsPane);dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
         dialog.setOnHidden(e->{resourceSettingsDialog=null;resourceSettingsPane=null;});resourceSettingsDialog=dialog;dialog.show();
         if(diagnostics)resourceSettingsPane.showDiagnostics();
     }
@@ -998,14 +1108,10 @@ public final class MapViewerController {
         if(viewerCoordinator!=null)viewerCoordinator.setModelRules(selection.rules(),executionChanged);
         modelPluginExecutions=snapshot.executions();modelPlugins=snapshot.catalog();modelPluginSelection=selection;
         if(resourceSettingsPane!=null)resourceSettingsPane.replacePlugins(modelPlugins,selection.enabled());
-        if(changed){viewerCacheInspectionId++;updateViewerAreaList(List.of());viewport.invalidateViewerLoadedSelection();invalidateResourceDiagnostics("解析插件已改变，重新生成后显示资源诊断");if(viewerLockedSelection!=null)viewerConfirmButton.setText("生成三维预览");refreshViewerCachedAreas();}
+        if(changed){cancelViewerCacheInspection();updateViewerAreaList(List.of());viewport.invalidateViewerLoadedSelection();invalidateResourceDiagnostics("解析插件已改变，重新生成后显示资源诊断");if(viewerLockedSelection!=null)viewerConfirmButton.setText("生成三维预览");refreshViewerCachedAreas();}
         refreshResourceSettings();
     }
 
-
-    private static String resourceDiagnostics(ViewerTaskResult result) {
-        return ResourceDiagnosticReport.from(result).toText();
-    }
     private void invalidateResourceDiagnostics(String explanation){
         viewerResourceDiagnostic=explanation;viewerDiagnosticReport=ResourceDiagnosticReport.empty(explanation);
     }
@@ -1111,7 +1217,7 @@ public final class MapViewerController {
         viewerResourcePath = path;
         if(changed)invalidateResourceDiagnostics("资源已改变，重新生成后查看解析诊断。");
         if (viewerCoordinator != null) viewerCoordinator.setResource(path, world.getVersionName(),viewerResourceInstance);
-        viewerCacheInspectionId++;
+        cancelViewerCacheInspection();
         if (changed) {
             updateViewerAreaList(List.of());
             viewport.invalidateViewerLoadedSelection();
@@ -1147,6 +1253,7 @@ public final class MapViewerController {
                         mapState.centerX(), mapState.centerZ(),
                         mapState.visualBlocksPerPixel(), layer));
         activeViewerTarget = target;
+        cancelViewerCacheInspection();
         activeViewerExpectedFromCache = isCachedArea(target);
         setViewerTaskUi(true);
         viewerSelectionLabel.setText("正在准备三维预览");
@@ -1234,7 +1341,7 @@ public final class MapViewerController {
         activeViewerTarget = null;
         activeViewerExpectedFromCache = false;
         setViewerTaskUi(false);
-        refreshViewerCachedAreas();
+        updateViewerAreaList(result.verifiedPreviews());
         setViewerAreasVisible(true);
         long fallbackBlocks = result.snapshot().warnings().stream()
                 .filter(w -> w.code() == MeshWarning.Code.TEXTURE_FALLBACK)
@@ -1274,6 +1381,7 @@ public final class MapViewerController {
         restoreActiveViewerTarget();
         viewerSelectionLabel.setText("生成失败：" + shortMessage(failure));
         viewerConfirmButton.setText("重新生成");
+        refreshViewerCachedAreas();
     }
 
     private void acceptViewerCancellation(long requestId) {
@@ -1286,6 +1394,7 @@ public final class MapViewerController {
         setViewerTaskUi(false);
         clearViewerSelection("已取消生成；" + viewerSelectionHint());
         invalidateResourceDiagnostics("本次生成已取消，未取得新的解析报告。");
+        refreshViewerCachedAreas();
         refreshResourceSettings();
     }
 
@@ -1387,7 +1496,7 @@ public final class MapViewerController {
         dimensionStates.put(dimension.id(), state.withLayer(nextLayer));
         contextId++;
         displayQueue.retain(contextId, Set.of());
-        closeSavedOverview();
+        closeMapToolDialogs();
         scheduler.cancelAll();
         tileLoadTracker.clear();
         readyKeys.clear();
@@ -1493,11 +1602,12 @@ public final class MapViewerController {
         long maintenanceId = ++cacheMaintenanceId;
         contextId++;
         displayQueue.retain(contextId, Set.of());
-        closeSavedOverview();
+        closeMapToolDialogs();
         scheduler.cancelAll();
         currentRequestId = -1;
         tileLoadTracker.clear();
         cacheMaintenanceInProgress = true;
+        updateExportState();
         refreshResourceSettings();
         Task<WorldMapCacheCleaner.ClearResult> task = new Task<>() {
             @Override
@@ -1543,13 +1653,19 @@ public final class MapViewerController {
 
     @FXML
     private void handleExport(ActionEvent event) {
+        exportButton.hide();
         moreMenuButton.hide();
-        if (world == null || exportButton.isDisabled()) {
+        if (world == null || viewportExportItem.isDisable()) {
             return;
         }
-        BufferedImage snapshot = viewport.snapshotImage();
+        var visible = coordinator.visibleKeys(com.mcworldexplorer.storage.WorldCachePaths.worldDirectoryName(world),
+                dimension.id(), layer, viewport.viewportState(), viewport.getWidth(), viewport.getHeight(), RENDER_VERSION);
+        if (!Set.copyOf(requestedKeys).equals(Set.copyOf(visible))) {
+            refreshTiles();
+        }
+        if (viewportExportItem.isDisable() || !viewport.hasCompleteTargetCoverage()) return;
+        BufferedImage snapshot = viewport.snapshotTerrain();
         WorldInfo targetWorld = world;
-        exportButton.setDisable(true);
         Task<Path> task = new Task<>() {
             @Override
             protected Path call() throws IOException {
@@ -1559,17 +1675,21 @@ public final class MapViewerController {
                         targetWorld.getFolderPath());
             }
         };
+        viewportExport = task;
+        updateExportState();
         task.setOnSucceeded(done -> {
-            if (world == targetWorld) {
-                statusLabel.setText("已导出当前视口：" + task.getValue());
-                updateExportState();
+            viewportExport = null;
+            updateExportState();
+            if (world == targetWorld && !shuttingDown) {
+                showViewportExportSuccess(task.getValue());
             }
         });
         task.setOnFailed(failed -> {
+            viewportExport = null;
+            updateExportState();
             LOGGER.error("Failed to export map viewport", task.getException());
-            if (world == targetWorld) {
+            if (world == targetWorld && !shuttingDown) {
                 offerAlternateExport(snapshot, task.getException());
-                updateExportState();
             }
         });
         Thread thread = new Thread(task, "map-viewport-exporter");
@@ -1602,21 +1722,60 @@ public final class MapViewerController {
                     snapshot,
                     target.toPath(),
                     world.getFolderPath());
-            statusLabel.setText("已导出当前视口：" + exported);
+            showViewportExportSuccess(exported);
         } catch (IOException e) {
             LOGGER.error("Failed to export map viewport to {}", target, e);
             statusLabel.setText("导出失败：" + shortMessage(e));
         }
     }
 
-    private void closeSavedOverview() {
+    void showViewportExportSuccess(Path file) {
+        statusLabel.setText("已导出当前视口：" + file);
+        exportNoticeFile.setText(file.getFileName().toString());
+        exportNoticeFile.setTooltip(new Tooltip(file.getFileName().toString()));
+        exportNoticeFolder.setOnAction(event -> openExportFolder(file.getParent()));
+        exportNotice.setVisible(true);
+        exportNoticeTimeout.playFromStart();
+        if (exportNotice.isHover()) exportNoticeTimeout.pause();
+    }
+
+    private void hideExportNotice() {
+        exportNoticeTimeout.stop();
+        exportNotice.setVisible(false);
+        exportNoticeFolder.setOnAction(null);
+    }
+
+    @FXML private void handleOpenExportFolder() {
+        exportButton.hide();
+        moreMenuButton.hide();
+        openExportFolder(PortablePaths.exportsDirectory());
+    }
+
+    private void openExportFolder(Path directory) {
+        exportFolders.show(viewportHost.getScene().getWindow(), directory, world == null ? null : world.getFolderPath());
+    }
+
+    private void closeMapToolDialogs() {
         if (savedOverview != null) { savedOverview.close(); savedOverview = null; }
+        if (surfaceExport != null) { surfaceExport.close(); surfaceExport = null; }
+    }
+
+    @FXML private void handleSurfaceExport(ActionEvent event) {
+        exportButton.hide();
+        moreMenuButton.hide();
+        if (surfaceExportItem.isDisable() || world == null || dimension == null || viewport.viewportState() == null) return;
+        if (surfaceExport != null && surfaceExport.focusIfOpen()) return;
+        closeMapToolDialogs();
+        surfaceExport = new SurfaceExportDialog(viewportHost.getScene().getWindow(), world, dimension,
+                viewport.viewportState(), viewport.getWidth(), viewport.getHeight(), scheduler,
+                exporter, exportFolders, statusLabel::setText);
+        surfaceExport.show();
     }
 
     @FXML private void handleSavedRange(ActionEvent event) {
         locateMenuButton.hide();
         if (world == null || dimension == null || cacheMaintenanceInProgress) return;
-        closeSavedOverview();
+        closeMapToolDialogs();
         refreshTiles(); // Retain visible work and cancel speculative prefetch before indexing.
         savedOverview = new SavedRangeOverview(viewportHost.getScene().getWindow(), dimension.regionDirectory(),
                 scheduler, viewport::completeTiles, (x, z) -> {
@@ -1915,7 +2074,7 @@ public final class MapViewerController {
 
     private void updateStatus() {
         if (world == null || viewport == null || viewport.viewportState() == null) {
-            exportButton.setDisable(true);
+            disableMapExports();
             return;
         }
         MapViewportState state = viewport.viewportState();
@@ -1944,9 +2103,17 @@ public final class MapViewerController {
         updateExportState();
     }
 
+    private void disableMapExports() {
+        viewportExportItem.setDisable(true);
+        surfaceExportItem.setDisable(true);
+    }
+
     private void updateExportState() {
         int failedTiles = tileLoadTracker.failedCount(Set.copyOf(requestedKeys));
-        exportButton.setDisable(world == null || clippedTiles > 0
+        var state = dimension == null ? null : dimensionStates.get(dimension.id());
+        surfaceExportItem.setDisable(world == null || state == null || viewport.viewportState() != state.viewportState()
+                || cacheMaintenanceInProgress || shuttingDown);
+        viewportExportItem.setDisable(surfaceExportItem.isDisable() || viewportExport != null || clippedTiles > 0
                 || requestedKeys.isEmpty()
                 || readyKeys.size() != requestedKeys.size()
                 || failedTiles > 0);
@@ -1974,7 +2141,8 @@ public final class MapViewerController {
                         player.z()));
             }
         }
-        if (dimension.isOverworld() && world.isSpawnPositionAvailable()) {
+        if (world.isSpawnPositionAvailable()
+                && dimension.id().equals(WorldDimension.normalizeId(world.getSpawnDimension()))) {
             markers.add(DisplayMapMarker.standard(MapMarker.point(
                     MapMarkerType.WORLD_SPAWN,
                     dimension.id(),
@@ -2085,7 +2253,23 @@ public final class MapViewerController {
         playerListButton.setDisable(players.isEmpty());
     }
 
+    private void navigateToPlace(Position place) {
+        WorldDimension target = findDimension(place.dimension());
+        if (target == null) return;
+        locateMenuButton.hide();
+        pendingPlayerNavigation = null;
+        DimensionState ready = dimensionStates.get(target.id());
+        if (target.equals(dimension) && ready != null && viewport.viewportState() == ready.viewportState()) {
+            viewport.centerOn(place.x() + 0.5, place.z() + 0.5);
+        } else {
+            pendingPlace = place;
+            if (target.equals(dimension)) selectDimension(target);
+            else dimensionComboBox.getSelectionModel().select(target);
+        }
+    }
+
     private void navigateToPlayer(PlayerNavigation navigation) {
+        pendingPlace = null;
         WorldDimension targetDimension = findDimension(navigation.dimensionId());
         if (targetDimension == null) {
             statusLabel.setText(
@@ -2148,11 +2332,21 @@ public final class MapViewerController {
                 MapMarkerStyle.toggleStyleClass(type));
     }
 
-    private static WritableImage toFxImage(int[] pixels) {
+    private WritableImage toFxImage(int[] pixels) {
+        boolean missing = isMissingTerrain(pixels);
+        if (missing && missingTerrainImage != null) return missingTerrainImage;
         WritableImage image = new WritableImage(256, 256);
         image.getPixelWriter().setPixels(0, 0, 256, 256,
                 javafx.scene.image.PixelFormat.getIntArgbInstance(), pixels, 0, 256);
+        if (missing) missingTerrainImage = image;
         return image;
+    }
+
+    private static boolean isMissingTerrain(int[] pixels) {
+        for (int pixel : pixels) {
+            if (pixel != com.mcworldexplorer.map.MapTileRenderer.MISSING_COLOR) return false;
+        }
+        return true;
     }
 
     private static int floorToInt(double value) {

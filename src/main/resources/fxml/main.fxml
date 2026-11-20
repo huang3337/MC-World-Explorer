@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?import javafx.geometry.Insets?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <SplitPane fx:id="workspaceSplitPane" dividerPositions="0.23" styleClass="workspace"
@@ -9,10 +10,28 @@
         <VBox fx:id="worldSidebar" minWidth="180.0" prefWidth="240.0" maxWidth="340.0"
               styleClass="world-sidebar" SplitPane.resizableWithParent="false">
             <children>
-                <VBox spacing="12.0" styleClass="sidebar-header">
-                    <Label text="存档库" styleClass="section-title"/>
-                    <Button fx:id="chooseFolderButton" mnemonicParsing="false"
-                            onAction="#handleChooseFolder" text="选择目录…" maxWidth="Infinity"/>
+                <VBox spacing="8.0" styleClass="sidebar-header">
+                    <fx:define><ToggleGroup fx:id="worldSortGroup"/></fx:define>
+                    <HBox alignment="CENTER_LEFT" spacing="4.0">
+                        <Label text="存档库" styleClass="section-title" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                        <MenuButton fx:id="worldSortMenu" text="排序">
+                            <items>
+                                <RadioMenuItem text="最近游玩优先" selected="true" toggleGroup="$worldSortGroup"/>
+                                <RadioMenuItem fx:id="sortByName" text="名称升序" toggleGroup="$worldSortGroup"/>
+                            </items>
+                        </MenuButton>
+                    </HBox>
+                    <HBox spacing="4.0">
+                        <Button fx:id="chooseFolderButton" mnemonicParsing="false" HBox.hgrow="ALWAYS"
+                                onAction="#handleChooseFolder" text="选择目录…" maxWidth="Infinity">
+                            <graphic><FontIcon iconLiteral="fth-folder" iconSize="16"/></graphic>
+                        </Button>
+                        <Button fx:id="refreshLibraryButton" accessibleText="刷新存档库" onAction="#handleRefreshLibrary">
+                            <graphic><FontIcon iconLiteral="fth-refresh-cw" iconSize="16"/></graphic>
+                            <tooltip><Tooltip text="刷新存档库"/></tooltip>
+                        </Button>
+                    </HBox>
+                    <TextField fx:id="worldSearch" promptText="搜索世界名或文件夹名" accessibleText="搜索世界名或文件夹名"/>
                 </VBox>
                 <TreeView fx:id="worldTreeView" minWidth="0.0" VBox.vgrow="ALWAYS"/>
                 <HBox spacing="8.0" alignment="CENTER_LEFT" styleClass="sidebar-status">
@@ -30,6 +49,7 @@
                 <HBox alignment="CENTER_LEFT" spacing="12.0" styleClass="world-header">
                     <Button fx:id="sidebarToggleButton" text="世界列表" mnemonicParsing="false" minWidth="-Infinity"
                             onAction="#handleToggleSidebar" styleClass="quiet-button">
+                        <graphic><FontIcon iconLiteral="fth-sidebar" iconSize="16"/></graphic>
                         <tooltip><Tooltip text="展开或收起世界列表"/></tooltip>
                     </Button>
                     <VBox spacing="3.0" minWidth="0.0" HBox.hgrow="ALWAYS">
@@ -38,38 +58,79 @@
                         <Label fx:id="worldSummaryLabel" text="无需启动 Minecraft，即可浏览已有世界"
                                minWidth="0.0" maxWidth="Infinity" styleClass="muted-text"/>
                     </VBox>
-                    <ToggleButton fx:id="detailsToggleButton" text="存档详情" mnemonicParsing="false" minWidth="-Infinity" styleClass="quiet-button"/>
+                    <ToggleButton fx:id="detailsToggleButton" text="存档详情" mnemonicParsing="false" minWidth="-Infinity" styleClass="quiet-button">
+                        <graphic><FontIcon iconLiteral="fth-info" iconSize="16"/></graphic>
+                    </ToggleButton>
+                    <Button fx:id="settingsButton" text="设置" mnemonicParsing="false" minWidth="-Infinity"
+                            onAction="#handleSettings" styleClass="quiet-button"/>
                     <Button fx:id="aboutButton" text="关于" mnemonicParsing="false" minWidth="-Infinity"
                             onAction="#handleAbout" styleClass="quiet-button"/>
                 </HBox>
-                <StackPane VBox.vgrow="ALWAYS" minHeight="0.0">
-                    <children>
-                        <fx:include fx:id="mapViewer" source="map-view.fxml"/>
-                        <ScrollPane fx:id="detailsPane" visible="false" managed="false"
-                                    prefWidth="280.0" maxWidth="280.0" minWidth="0.0"
-                                    fitToWidth="true" hbarPolicy="NEVER"
-                                    styleClass="details-panel" StackPane.alignment="TOP_RIGHT">
-                            <content>
-                                <VBox spacing="14.0" fillWidth="true">
-                                    <padding><Insets top="18.0" right="18.0" bottom="18.0" left="18.0"/></padding>
-                                    <HBox alignment="CENTER_LEFT">
-                                        <Label text="存档信息" styleClass="section-title" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-                                        <Button text="收起" mnemonicParsing="false" onAction="#handleCloseDetails" styleClass="quiet-button"/>
+                <fx:include fx:id="mapViewer" source="map-view.fxml" VBox.vgrow="ALWAYS"/>
+                <fx:define>
+                    <ScrollPane fx:id="detailsPane" visible="false" managed="false"
+                                prefWidth="280.0" maxWidth="280.0" minWidth="0.0" minHeight="0" maxHeight="-Infinity"
+                                fitToWidth="true" hbarPolicy="NEVER"
+                                styleClass="details-panel" StackPane.alignment="TOP_RIGHT">
+                        <content>
+                            <VBox spacing="14.0" fillWidth="true">
+                                <padding><Insets top="18.0" right="18.0" bottom="18.0" left="18.0"/></padding>
+                                <HBox alignment="CENTER_LEFT">
+                                    <Label text="存档信息" styleClass="section-title" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                                    <Button text="收起" mnemonicParsing="false" onAction="#handleCloseDetails" styleClass="quiet-button"/>
+                                </HBox>
+                                <VBox spacing="7">
+                                    <Label text="世界信息" styleClass="detail-heading"/>
+                                    <GridPane hgap="8" vgap="5">
+                                        <columnConstraints>
+                                            <ColumnConstraints minWidth="84" prefWidth="84"/>
+                                            <ColumnConstraints minWidth="0" hgrow="ALWAYS"/>
+                                        </columnConstraints>
+                                        <Label text="Minecraft 版本" styleClass="detail-label" GridPane.rowIndex="0"/>
+                                        <Label fx:id="versionLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-value" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                                        <Label text="游戏模式" styleClass="detail-label" GridPane.rowIndex="1"/>
+                                        <Label fx:id="gameModeLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-value" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                                        <Label text="世界种子" styleClass="detail-label" GridPane.rowIndex="2"/>
+                                        <Label fx:id="seedLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-value" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                                    </GridPane>
+                                    <HBox alignment="CENTER_LEFT" spacing="6">
+                                        <Label text="存档路径" minWidth="-Infinity" styleClass="detail-label"/>
+                                        <Label fx:id="folderPathLabel" minWidth="0" maxWidth="Infinity" textOverrun="CENTER_ELLIPSIS" HBox.hgrow="ALWAYS"/>
+                                        <Button fx:id="copyPathButton" text="复制" accessibleText="复制完整存档路径" minWidth="-Infinity" onAction="#handleCopyPath" styleClass="quiet-button"/>
                                     </HBox>
-                                    <Separator/>
-                                    <VBox spacing="4.0"><Label text="Minecraft 版本" styleClass="detail-label"/><Label fx:id="versionLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
-                                    <VBox spacing="4.0"><Label text="游戏模式" styleClass="detail-label"/><Label fx:id="gameModeLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
-                                    <VBox spacing="4.0"><Label text="目录创建时间" styleClass="detail-label"/><Label fx:id="folderCreationTimeLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
-                                    <VBox spacing="4.0"><Label text="最后游玩" styleClass="detail-label"/><Label fx:id="lastPlayedLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
-                                    <VBox spacing="4.0"><Label text="游戏时长" styleClass="detail-label"/><Label fx:id="gameTimeLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
-                                    <VBox spacing="4.0"><Label text="世界种子" styleClass="detail-label"/><Label fx:id="seedLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
-                                    <VBox spacing="4.0"><Label text="世界出生点" styleClass="detail-label"/><Label fx:id="spawnPosLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
-                                    <VBox spacing="4.0"><Label text="玩家位置" styleClass="detail-label"/><Label fx:id="playerPosLabel" text="-" wrapText="true" styleClass="detail-value"/></VBox>
                                 </VBox>
-                            </content>
-                        </ScrollPane>
-                    </children>
-                </StackPane>
+                                <VBox spacing="7">
+                                    <Label text="游玩记录" styleClass="detail-heading"/>
+                                    <GridPane hgap="8" vgap="5">
+                                        <columnConstraints>
+                                            <ColumnConstraints minWidth="84" prefWidth="84"/>
+                                            <ColumnConstraints minWidth="0" hgrow="ALWAYS"/>
+                                        </columnConstraints>
+                                        <Label text="目录创建时间" styleClass="detail-label" GridPane.rowIndex="0"/>
+                                        <Label fx:id="folderCreationTimeLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-value" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                                        <Label text="最后游玩" styleClass="detail-label" GridPane.rowIndex="1"/>
+                                        <Label fx:id="lastPlayedLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-value" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                                        <Label text="游戏时长" styleClass="detail-label" GridPane.rowIndex="2"/>
+                                        <Label fx:id="gameTimeLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-value" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                                    </GridPane>
+                                </VBox>
+                                <VBox spacing="7">
+                                    <Label text="位置" styleClass="detail-heading"/>
+                                    <GridPane hgap="8" vgap="5">
+                                        <columnConstraints>
+                                            <ColumnConstraints minWidth="84" prefWidth="84"/>
+                                            <ColumnConstraints minWidth="0" hgrow="ALWAYS"/>
+                                        </columnConstraints>
+                                        <Label text="世界出生点" styleClass="detail-label" GridPane.rowIndex="0"/>
+                                        <Label fx:id="spawnPosLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-coordinate" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                                        <Label text="玩家位置" styleClass="detail-label" GridPane.rowIndex="1"/>
+                                        <Label fx:id="playerPosLabel" text="-" wrapText="true" minWidth="0" styleClass="detail-coordinate" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                                    </GridPane>
+                                </VBox>
+                            </VBox>
+                        </content>
+                    </ScrollPane>
+                </fx:define>
             </children>
         </VBox>
     </items>

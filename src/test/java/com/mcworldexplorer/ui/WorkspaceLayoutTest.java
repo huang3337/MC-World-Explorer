@@ -1,6 +1,8 @@
 package com.mcworldexplorer.ui;
 
 import com.mcworldexplorer.storage.PortableSettings;
+import com.mcworldexplorer.storage.SavedPlaces;
+import com.mcworldexplorer.preview.WorldDimension;
 import com.mcworldexplorer.nbt.LevelDatReader;
 import com.mcworldexplorer.world.WorldInfo;
 import javafx.application.Platform;
@@ -13,10 +15,16 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.DialogPane;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.CustomMenuItem;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.ToggleButton;
@@ -27,6 +35,8 @@ import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
@@ -47,6 +57,7 @@ import java.security.MessageDigest;
 import java.security.DigestInputStream;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.function.BooleanSupplier;
@@ -76,6 +87,566 @@ class WorkspaceLayoutTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void rightClickPlacesKeepSelectionAndSurviveReopening() throws Exception {
+        Path world = home.resolve("empty-test-world");
+        var position = new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, -29, 55);
+        var nether = new SavedPlaces.Position(WorldDimension.NETHER_ID, -29, 55);
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            Stage owner = new Stage();
+            owner.setScene(root.getScene());
+            owner.setOpacity(0);
+            owner.show();
+            try {
+                MapViewport viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+                var canvas = viewport.lookup("Canvas");
+                var initial = viewport.viewportState();
+                double beforeDrag = initial.centerX();
+                drag(canvas, 96, 80, 120, 80, MouseButton.SECONDARY);
+                assertEquals(beforeDrag - 24 * initial.visualBlocksPerPixel(), initial.centerX());
+                assertTrue(Window.getWindows().stream().noneMatch(ContextMenu.class::isInstance));
+                ((ToggleButton) root.lookup("#viewerModeButton")).fire();
+                var ranges = (ComboBox<com.mcworldexplorer.viewer.ViewerRangeOption>) root.lookup("#viewerRangeComboBox");
+                ranges.setValue(com.mcworldexplorer.viewer.ViewerRangeOption.FREE);
+                root.applyCss();
+                root.layout();
+                var view = viewport.viewportState();
+                view.zoomVisualAt(1.5, 0, 0, viewport.getWidth(), viewport.getHeight());
+                view.centerOn(-25, 50);
+                drag(canvas, 90, 65, 106, 77, MouseButton.PRIMARY);
+                var locked = viewport.viewerLockedSelection().orElseThrow();
+
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_PRESSED, 85, 70, MouseButton.SECONDARY));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, 105, 82, MouseButton.SECONDARY));
+                assertEquals(-55, view.centerX());
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, 85, 70, MouseButton.SECONDARY));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, 85, 70, MouseButton.SECONDARY));
+                assertEquals(-25, view.centerX());
+                assertTrue(Window.getWindows().stream().noneMatch(ContextMenu.class::isInstance));
+                double x = view.screenXFor(-28.75, viewport.getWidth());
+                double y = view.screenYFor(55.25, viewport.getHeight());
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_PRESSED, x, y, MouseButton.SECONDARY));
+                // A small release jitter crosses a block boundary but does not change the pressed block.
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, x + 1, y, MouseButton.SECONDARY));
+                var menu = showingPlaceMenu();
+                assertTrue(menu.getItems().getFirst().getText().contains("X -29 · Z 55"));
+                assertTrue(menu.getItems().stream().anyMatch(i -> i.getText() != null && i.getText().equals("复制坐标")));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_PRESSED, 18, 22, MouseButton.PRIMARY));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, 18, 22, MouseButton.PRIMARY));
+                assertFalse(menu.isShowing(), "左键点地图应关闭地点菜单");
+                assertEquals(locked, viewport.viewerLockedSelection().orElseThrow());
+                drag(canvas, x, y, x, y, MouseButton.SECONDARY);
+                runPlaceDialog(showingPlaceMenu(), "标记此处…", "基地", ButtonType.OK);
+                assertEquals("基地", new SavedPlaces(world).read().get(position));
+
+                double edgeX = view.screenXFor(-28.5, viewport.getWidth()) + 4.5;
+                double edgeY = view.screenYFor(55.5, viewport.getHeight());
+                drag(canvas, edgeX, edgeY, edgeX, edgeY, MouseButton.SECONDARY);
+                runPlaceDialog(showingPlaceMenu(), "重命名…", "主基地", ButtonType.OK);
+                drag(canvas, x, y, x, y, MouseButton.SECONDARY);
+                runPlaceDialog(showingPlaceMenu(), "删除标记…", null, ButtonType.CANCEL);
+                assertEquals("主基地", new SavedPlaces(world).read().get(position));
+                Menu places = myPlaces(root);
+                places.getItems().getFirst().fire();
+                assertEquals(-28.5, view.centerX());
+                assertEquals(55.5, view.centerZ());
+                assertEquals(1.5, view.visualBlocksPerPixel());
+                assertEquals(locked, viewport.viewerLockedSelection().orElseThrow());
+                new SavedPlaces(world).change(nether, null, "下界门");
+            } finally {
+                owner.close();
+            }
+        });
+
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            Menu places = myPlaces(root);
+            var destination = places.getItems().stream().filter(i -> i.getText().startsWith("下界门")).findFirst().orElseThrow();
+            var viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+            ((ToggleButton) root.lookup("#viewerModeButton")).fire();
+            var canvasBeforeSwitch = viewport.lookup("Canvas");
+            Event.fireEvent(canvasBeforeSwitch, pointer(canvasBeforeSwitch, MouseEvent.MOUSE_MOVED, 110, 85, MouseButton.NONE));
+            Event.fireEvent(canvasBeforeSwitch, pointer(canvasBeforeSwitch, MouseEvent.MOUSE_PRESSED, 110, 85, MouseButton.PRIMARY));
+            Event.fireEvent(canvasBeforeSwitch, pointer(canvasBeforeSwitch, MouseEvent.MOUSE_RELEASED, 110, 85, MouseButton.PRIMARY));
+            assertTrue(viewport.viewerLockedSelection().isPresent());
+            destination.fire();
+            awaitFx(() -> viewport.viewportState() != null && viewport.viewportState().centerX() == -28.5);
+            var dimensions = (ComboBox<WorldDimension>) root.lookup("#dimensionComboBox");
+            assertEquals(WorldDimension.NETHER_ID, dimensions.getValue().id());
+            assertEquals(55.5, viewport.viewportState().centerZ());
+            assertTrue(viewport.viewerLockedSelection().isEmpty());
+            Stage owner = new Stage();
+            owner.setOpacity(0);
+            owner.setScene(root.getScene());
+            owner.show();
+            try {
+                root.layout();
+                var canvas = viewport.lookup("Canvas");
+                double edgeX = viewport.getWidth()/2 - 4.5;
+                double edgeY = viewport.getHeight()/2;
+                drag(canvas, edgeX, edgeY, edgeX, edgeY, MouseButton.SECONDARY);
+                runPlaceDialog(showingPlaceMenu(), "删除标记…", null, ButtonType.OK);
+                assertEquals(Map.of(position, "主基地"), new SavedPlaces(world).read());
+            } finally {
+                owner.close();
+            }
+        });
+    }
+
+    @Test
+    void placeMenuHitAreaFollowsTheVisibleCircleAtEachZoom() throws Exception {
+        withWorkspace(root -> {
+            var world = Files.createDirectories(home.resolve("empty-test-world"));
+            var store = new SavedPlaces(world);
+            store.change(new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, -11, -6), null, "西");
+            store.change(new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, -8, -6), null, "东");
+            loadEmptyTestWorld(root);
+            Stage stage = new Stage();
+            stage.setScene(root.getScene());
+            stage.setOpacity(0);
+            try {
+                stage.show();
+                root.layout();
+                MapViewport viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+                var view = viewport.viewportState();
+                for (double scale : new double[]{2, 0.25}) {
+                    view.zoomVisualAt(scale, 0, 0, viewport.getWidth(), viewport.getHeight());
+                    viewport.centerOn(-10.5, -5.5);
+                    double x = view.screenXFor(-10.5, viewport.getWidth());
+                    double y = view.screenYFor(-5.5, viewport.getHeight());
+                    assertHitMenu(viewport, x - 4.7, y, "西 ·", "重命名…");
+                    assertHitMenu(viewport, x - 4.9, y, "主世界", "标记此处…");
+                    assertHitMenu(viewport, x - 4, y + 4, "主世界", "标记此处…");
+                    if (scale == 2) {
+                        assertHitMenu(viewport, x + 0.25, y + 3, "西 ·", "重命名…");
+                        assertHitMenu(viewport, x + 1.25, y + 3, "东 ·", "重命名…");
+                    }
+                    // The same nearby world coordinate becomes available for a new place when zoomed in.
+                    assertHitMenu(viewport, view.screenXFor(-12.5, viewport.getWidth()), y,
+                            scale == 2 ? "西 ·" : "主世界 · X -13", scale == 2 ? "重命名…" : "标记此处…");
+                }
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    @Test
+    void connectsPlacesAfterWheelEdgePanAndSecondaryDrag() throws Exception {
+        withWorkspace(root -> {
+            var world = Files.createDirectories(home.resolve("empty-test-world"));
+            var store = new SavedPlaces(world);
+            var a = new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, 10, 20);
+            var b = new SavedPlaces.Position(a.dimension(), 40, 60);
+            store.change(a, null, "基地");
+            store.change(b, null, "村庄");
+            loadEmptyTestWorld(root);
+            var stage = new Stage();
+            stage.setScene(root.getScene());
+            stage.setOpacity(0);
+            try {
+                stage.show();
+                root.layout();
+                MapViewport map = (MapViewport) root.lookup("#viewportHost").lookup("MapViewport");
+                var canvas = map.lookup("Canvas");
+                var view = map.viewportState();
+                view.zoomVisualAt(1, 0, 0, map.getWidth(), map.getHeight());
+                map.centerOn(10.5, 20.5);
+                double startX = map.placeScreenX(a), startY = map.placeScreenY(a);
+                var measurement = (javafx.scene.text.Text) map.lookup("#lineMeasurement");
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_PRESSED, startX, startY, MouseButton.PRIMARY));
+                assertFalse(measurement.isVisible());
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, startX - 62, startY - 25, MouseButton.PRIMARY));
+                assertTrue(measurement.isVisible());
+                assertTrue(measurement.isMouseTransparent());
+                assertEquals("X 62  ·  Z 25 格", measurement.getText());
+                assertTrue(measurement.getBoundsInParent().getMaxY() < startY - 12.5);
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, startX + 12, startY, MouseButton.PRIMARY));
+                var wheel = new javafx.scene.input.ScrollEvent(javafx.scene.input.ScrollEvent.SCROLL,
+                        startX, startY, startX, startY, false, false, false, false, false, false, 0, 40, 0, 40,
+                        javafx.scene.input.ScrollEvent.HorizontalTextScrollUnits.NONE, 0,
+                        javafx.scene.input.ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0,
+                        new javafx.scene.input.PickResult(canvas, new javafx.geometry.Point3D(startX, startY, 0), 0));
+                Event.fireEvent(canvas, wheel);
+                assertTrue(view.visualBlocksPerPixel() < 1);
+                double oldCenter = view.centerX();
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, map.getWidth() - 2, startY, MouseButton.PRIMARY));
+                awaitFx(() -> view.centerX() > oldCenter + 4);
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, startX, startY, MouseButton.PRIMARY));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_PRESSED, startX, startY, MouseButton.SECONDARY, true));
+                double beforePan = view.centerX();
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, startX + 16, startY, MouseButton.SECONDARY, true));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, startX + 16, startY, MouseButton.SECONDARY, true));
+                assertEquals(beforePan - 16 * view.visualBlocksPerPixel(), view.centerX(), .001);
+                assertTrue(map.placeLines.isDragging());
+                assertTrue(Window.getWindows().stream().noneMatch(ContextMenu.class::isInstance));
+                double endX = map.placeScreenX(b) + 5, endY = map.placeScreenY(b);
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, endX, endY, MouseButton.PRIMARY));
+                assertEquals("X 30  ·  Z 40 格", measurement.getText());
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, endX, endY, MouseButton.PRIMARY));
+                assertFalse(measurement.isVisible());
+                var link = new SavedPlaces.Link(a, b);
+                assertEquals(Map.of(link, SavedPlaces.LineData.DEFAULT), store.snapshot().lines());
+                assertFalse(map.placeLines.isDragging());
+                double midX = (map.placeScreenX(a) + map.placeScreenX(b)) / 2;
+                double midY = (map.placeScreenY(a) + map.placeScreenY(b)) / 2;
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_MOVED, midX, midY, MouseButton.NONE));
+                var tip = Window.getWindows().stream().filter(javafx.scene.control.Tooltip.class::isInstance)
+                        .map(javafx.scene.control.Tooltip.class::cast).filter(Window::isShowing).findFirst().orElseThrow();
+                assertEquals("X 轴相距 30 格\nZ 轴相距 40 格", tip.getText());
+                drag(canvas, midX, midY, midX, midY, MouseButton.SECONDARY);
+                runPlaceDialog(showingPlaceMenu(), "编辑备注…", "铁路", ButtonType.OK);
+                assertEquals("铁路", store.snapshot().lines().get(link).note());
+                drag(canvas, midX, midY, midX, midY, MouseButton.SECONDARY);
+                var colors = showingPlaceMenu();
+                colors.hide();
+                Platform.runLater(() -> {
+                    var pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                            .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                    ((javafx.scene.control.ColorPicker) pane.lookup(".color-picker")).setValue(javafx.scene.paint.Color.RED);
+                    ((Button) pane.lookupButton(ButtonType.OK)).fire();
+                });
+                colors.getItems().stream().filter(item -> "设置颜色…".equals(item.getText())).findFirst().orElseThrow().fire();
+                assertEquals(new SavedPlaces.LineData("#FF0000", "铁路"), store.snapshot().lines().get(link));
+                drag(canvas, midX, midY, midX, midY, MouseButton.SECONDARY);
+                var menu = showingPlaceMenu();
+                menu.hide();
+                menu.getItems().stream().filter(item -> "删除连线".equals(item.getText())).findFirst().orElseThrow().fire();
+                assertTrue(store.snapshot().lines().isEmpty());
+                assertEquals(2, store.read().size());
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_PRESSED, map.placeScreenX(a), map.placeScreenY(a), MouseButton.PRIMARY));
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_DRAGGED, midX, midY, MouseButton.PRIMARY));
+                Event.fireEvent(canvas, new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.ESCAPE, false, false, false, false));
+                assertFalse(measurement.isVisible());
+                Event.fireEvent(canvas, pointer(canvas, MouseEvent.MOUSE_RELEASED, endX, endY, MouseButton.PRIMARY));
+                assertFalse(map.placeLines.isDragging());
+                assertTrue(store.snapshot().lines().isEmpty());
+            } finally { stage.close(); }
+        });
+    }
+
+    @Test
+    void emptyLineEndpointRequiresAConfirmedName() throws Exception {
+        withWorkspace(root -> {
+            var store = new SavedPlaces(Files.createDirectories(home.resolve("empty-test-world")));
+            var start = new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, -30, -40);
+            store.change(start, null, "旧地点");
+            loadEmptyTestWorld(root);
+            var stage = new Stage();
+            stage.setScene(root.getScene());
+            stage.setOpacity(0);
+            try {
+                stage.show();
+                root.layout();
+                var map = (MapViewport) root.lookup("#viewportHost").lookup("MapViewport");
+                var canvas = map.lookup("Canvas");
+                map.centerOn(-29.5, -39.5);
+                double x = map.placeScreenX(start), y = map.placeScreenY(start);
+                for (ButtonType answer : List.of(ButtonType.CANCEL, ButtonType.OK)) {
+                    Platform.runLater(() -> {
+                        var pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                                .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                        ((TextField) pane.lookup(".text-field")).setText("新终点");
+                        ((Button) pane.lookupButton(answer)).fire();
+                    });
+                    drag(canvas, x, y, x + 50, y - 30, MouseButton.PRIMARY);
+                    var snapshot = store.snapshot();
+                    assertEquals(answer == ButtonType.OK ? 2 : 1, snapshot.places().size());
+                    assertEquals(answer == ButtonType.OK ? 1 : 0, snapshot.lines().size());
+                }
+            } finally { stage.close(); }
+        });
+    }
+
+    @Test
+    void builtinIconsCanStartAndFinishLinesWithoutBeingSavedFirst() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            var store = new SavedPlaces(home.resolve("empty-test-world"));
+            var stage = new Stage();
+            stage.setScene(root.getScene());
+            stage.setOpacity(0);
+            try {
+                stage.show();
+                root.layout();
+                var map = (MapViewport) root.lookup("#viewportHost").lookup("MapViewport");
+                var canvas = map.lookup("Canvas");
+                String dim = WorldDimension.OVERWORLD_ID;
+                var spawn = DisplayMapMarker.standard(com.mcworldexplorer.map.MapMarker.point(
+                        com.mcworldexplorer.map.MapMarkerType.WORLD_SPAWN, dim, -61, 68, 8));
+                var player = DisplayMapMarker.player(com.mcworldexplorer.map.MapMarker.point(
+                        com.mcworldexplorer.map.MapMarkerType.PLAYER, dim, 20, 79, -33),
+                        "p1", "小明", "主世界", 20.7, 79.1, -32.4);
+                var portal = com.mcworldexplorer.map.MapMarker.portal(dim, 71, 68, 5, 75, 72, 5);
+                var gate = DisplayMapMarker.standard(portal).position();
+                map.setFixedMarkers(List.of(spawn, player));
+                var view = map.viewportState();
+                view.zoomVisualAt(1, 0, 0, map.getWidth(), map.getHeight());
+                map.centerOn(0, 0);
+                double sx = map.placeScreenX(spawn.position()), sy = map.placeScreenY(spawn.position());
+                double px = map.placeScreenX(player.position()), py = map.placeScreenY(player.position());
+                drag(canvas, sx + 7, sy, sx + 7, sy, MouseButton.SECONDARY);
+                var menu = showingPlaceMenu();
+                assertTrue(menu.getItems().getFirst().getText().startsWith("世界出生点 · 主世界 · X -61 · Z 8"));
+                menu.hide();
+                menu.getItems().stream().filter(i -> "复制坐标".equals(i.getText())).findFirst().orElseThrow().fire();
+                assertEquals("-61, 8", Clipboard.getSystemClipboard().getString());
+                assertTrue(store.read().isEmpty());
+                map.showSpawnProperty().set(false);
+                assertNull(map.placeAt(sx, sy, 0));
+                map.showSpawnProperty().set(true);
+                drag(canvas, sx - 7, sy, px + 6, py, MouseButton.PRIMARY);
+                var link = new SavedPlaces.Link(spawn.position(), player.position());
+                assertEquals("世界出生点 — 小明", store.snapshot().lines().get(link).title(link, store.read()));
+                assertTrue(store.read().isEmpty());
+                var key = new com.mcworldexplorer.map.MapTileKey("test", dim,
+                        com.mcworldexplorer.preview.PreviewLayer.surfaceOverview(),
+                        com.mcworldexplorer.map.MapZoomLevel.BLOCKS_1, 0, 0, "test");
+                map.setTargetTiles(List.of(key));
+                map.showTile(key, new WritableImage(256, 256), List.of(portal));
+                drag(canvas, map.placeScreenX(gate), map.placeScreenY(gate), sx, sy, MouseButton.PRIMARY);
+                assertTrue(store.read().isEmpty());
+                assertTrue(store.snapshot().lines().containsKey(new SavedPlaces.Link(gate, spawn.position())));
+                assertTrue(myPlaces(root).getItems().getFirst().isDisable());
+                assertEquals(0, view.centerX(), .001, "拖动自动图标不能先跳到图标中心");
+                drag(canvas, sx, sy, sx, sy, MouseButton.PRIMARY);
+                assertEquals(-61, view.centerX());
+                sx = map.placeScreenX(spawn.position()); sy = map.placeScreenY(spawn.position());
+                drag(canvas, sx, sy, sx, sy, MouseButton.SECONDARY);
+                var spawnMenu = showingPlaceMenu();
+                assertTrue(spawnMenu.getItems().stream().noneMatch(item -> item.getText() != null && item.getText().contains("删除")));
+                runPlaceDialog(spawnMenu, "在此创建自定义标记…", "世界起点", ButtonType.OK);
+                assertEquals("世界起点", store.read().get(spawn.position()));
+                drag(canvas, sx, sy, sx, sy, MouseButton.SECONDARY);
+                var overlap = showingPlaceMenu();
+                var custom = overlap.getItems().stream().filter(Menu.class::isInstance).map(Menu.class::cast)
+                        .filter(item -> item.getText().contains("世界起点")).findFirst().orElseThrow();
+                var deleteCustom = custom.getItems().stream().filter(i -> "删除标记…".equals(i.getText())).findFirst().orElseThrow();
+                overlap.hide();
+                Platform.runLater(() -> {
+                    var pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                            .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                    ((Button) pane.lookupButton(ButtonType.OK)).fire();
+                });
+                deleteCustom.fire();
+                assertTrue(store.read().isEmpty());
+                assertEquals(2, store.snapshot().lines().size());
+                assertHitMenu(map, sx, sy, "世界出生点 ·", "复制坐标");
+            } finally { stage.close(); }
+        });
+    }
+
+    @Test
+    void builtinAndCustomEndpointsShareCoordinatesWithoutWritingOnCancelledNaming() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            Path world = home.resolve("empty-test-world");
+            var originalFiles = snapshotWorld(world);
+            var store = new SavedPlaces(world);
+            var stage = new Stage();
+            stage.setScene(root.getScene());
+            stage.setOpacity(0);
+            try {
+                stage.show();
+                root.layout();
+                var map = (MapViewport) root.lookup("#viewportHost").lookup("MapViewport");
+                var canvas = map.lookup("Canvas");
+                String dim = WorldDimension.OVERWORLD_ID;
+                var player = DisplayMapMarker.player(com.mcworldexplorer.map.MapMarker.point(
+                        com.mcworldexplorer.map.MapMarkerType.PLAYER, dim, -25, 84, 10),
+                        "p", "老王", "主世界", -24.9, 84, 10.8);
+                map.setFixedMarkers(List.of(player));
+                map.viewportState().zoomVisualAt(1, 0, 0, map.getWidth(), map.getHeight());
+                map.centerOn(0, 0);
+                double x = map.placeScreenX(player.position()), y = map.placeScreenY(player.position());
+                var cabin = new SavedPlaces.Position(dim, -75, 28);
+                for (var answer : List.of(ButtonType.CANCEL, ButtonType.OK)) {
+                    Platform.runLater(() -> {
+                        var pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                                .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                        ((TextField) pane.lookup(".text-field")).setText("小屋");
+                        ((Button) pane.lookupButton(answer)).fire();
+                    });
+                    drag(canvas, x, y, map.placeScreenX(cabin), map.placeScreenY(cabin), MouseButton.PRIMARY);
+                    if (answer == ButtonType.CANCEL) {
+                        assertTrue(store.read().isEmpty());
+                        assertTrue(store.snapshot().lines().isEmpty());
+                    }
+                }
+                // The measurement keeps the old coordinate without leaving a marker there.
+                var moved = DisplayMapMarker.player(com.mcworldexplorer.map.MapMarker.point(
+                        com.mcworldexplorer.map.MapMarkerType.PLAYER, dim, 16, 65, 30),
+                        "p", "老王", "主世界", 16, 65, 30);
+                map.setFixedMarkers(List.of(moved));
+                assertNull(map.placeAt(x, y, 0));
+                drag(canvas, map.placeScreenX(cabin), map.placeScreenY(cabin),
+                        map.placeScreenX(moved.position()), map.placeScreenY(moved.position()), MouseButton.PRIMARY);
+                var saved = store.snapshot();
+                assertEquals(Map.of(cabin, "小屋"), saved.places());
+                assertTrue(saved.lines().containsKey(new SavedPlaces.Link(cabin, player.position())));
+                assertTrue(saved.lines().containsKey(new SavedPlaces.Link(cabin, moved.position())));
+                drag(canvas, map.placeScreenX(cabin), map.placeScreenY(cabin), map.placeScreenX(cabin), map.placeScreenY(cabin), MouseButton.SECONDARY);
+                runPlaceDialog(showingPlaceMenu(), "删除标记…", null, ButtonType.OK);
+                assertTrue(store.snapshot().lines().isEmpty());
+                assertTrue(store.read().isEmpty());
+                assertEquals(moved, map.placeAt(map.placeScreenX(moved.position()), map.placeScreenY(moved.position()), 0).original());
+                assertEquals(originalFiles, snapshotWorld(world));
+            } finally { stage.close(); }
+        });
+    }
+
+    private static void assertHitMenu(MapViewport viewport, double x, double y, String heading, String action) {
+        drag(viewport.lookup("Canvas"), x, y, x, y, MouseButton.SECONDARY);
+        var menu = showingPlaceMenu();
+        try {
+            assertTrue(menu.getItems().getFirst().getText().startsWith(heading), menu.getItems().getFirst().getText());
+            assertTrue(menu.getItems().stream().anyMatch(item -> action.equals(item.getText())));
+        } finally {
+            menu.hide();
+        }
+    }
+
+    private static Menu myPlaces(Parent root) {
+        return ((MenuButton) root.lookup("#locateMenuButton")).getItems().stream()
+                .filter(Menu.class::isInstance).map(Menu.class::cast)
+                .filter(item -> "我的地点".equals(item.getText())).findFirst().orElseThrow();
+    }
+
+    private static ContextMenu showingPlaceMenu() {
+        return Window.getWindows().stream().filter(ContextMenu.class::isInstance)
+                .map(ContextMenu.class::cast).filter(ContextMenu::isShowing).findFirst().orElseThrow();
+    }
+
+    private static void runPlaceDialog(ContextMenu menu, String action, String name, ButtonType answer) {
+        MenuItem item = menu.getItems().stream().filter(i -> action.equals(i.getText())).findFirst().orElseThrow();
+        menu.hide();
+        Platform.runLater(() -> {
+            DialogPane pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                    .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+            if (name != null) ((TextField) pane.lookup(".text-field")).setText(name);
+            ((Button) pane.lookupButton(answer)).fire();
+        });
+        item.fire();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void libraryControlsPreserveOpenMapAndLockedSelectionAcrossRefresh() throws Exception {
+        Path game = home.resolve("game");
+        Path saves = game.resolve("saves");
+        Path base = saves.resolve("Survival_02");
+        Path other = saves.resolve("other");
+        writeLibraryWorld(base, "山间基地", 800);
+        writeLibraryWorld(other, "阿林", 100);
+        writeLibraryWorld(saves.resolve("unknown"), "山间基地", 0);
+        writeLibraryWorld(game.resolve("versions/pack/saves/twin"), "山间基地", 900);
+        withWorkspace(game, root -> {
+            TreeView<WorldTreeNode> tree = (TreeView<WorldTreeNode>) root.lookup("#worldTreeView");
+            Button refresh = (Button) root.lookup("#refreshLibraryButton");
+            Button choose = (Button) root.lookup("#chooseFolderButton");
+            Label status = (Label) root.lookup("#scanStatusLabel");
+            Label title = (Label) root.lookup("#worldNameLabel");
+            TextField search = (TextField) root.lookup("#worldSearch");
+            MenuButton sort = (MenuButton) root.lookup("#worldSortMenu");
+            MapViewport viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+            awaitFx(() -> !refresh.isDisabled());
+            var group = tree.getRoot().getChildren().getFirst();
+            assertEquals(2, tree.getRoot().getChildren().size());
+            assertEquals(List.of("Survival_02", "other", "unknown"), libraryFolders(group));
+            tree.getSelectionModel().select(group.getChildren().getFirst());
+            assertEquals("山间基地", title.getText());
+            ToggleButton selectionMode = (ToggleButton) root.lookup("#viewerModeButton");
+            awaitFx(() -> viewport.viewportState() != null && !selectionMode.isDisabled());
+            selectionMode.fire();
+            var ranges = (ComboBox<com.mcworldexplorer.viewer.ViewerRangeOption>) root.lookup("#viewerRangeComboBox");
+            ranges.setValue(com.mcworldexplorer.viewer.ViewerRangeOption.FREE);
+            root.applyCss();
+            root.layout();
+            var view = viewport.viewportState();
+            view.zoomVisualAt(1, 0, 0, viewport.getWidth(), viewport.getHeight());
+            view.centerOn(-125, 318);
+            drag(viewport.lookup("Canvas"), 100, 80, 124, 96, MouseButton.PRIMARY);
+            var locked = viewport.viewerLockedSelection().orElseThrow();
+            Runnable checkView = () -> {
+                assertSame(view, viewport.viewportState());
+                assertEquals(-125, view.centerX());
+                assertEquals(318, view.centerZ());
+                assertEquals(1, view.visualBlocksPerPixel());
+                assertEquals(locked, viewport.viewerLockedSelection().orElseThrow());
+                assertFalse(((Button) root.lookup("#viewerConfirmButton")).isDisabled());
+            };
+
+            search.setText("无匹配");
+            assertTrue(tree.getRoot().getChildren().isEmpty());
+            assertTrue(status.getText().contains("0 / 4"));
+            assertNull(tree.getSelectionModel().getSelectedItem());
+            checkView.run();
+            search.setText("  sUrViVaL  ");
+            assertEquals(1, tree.getRoot().getChildren().size());
+            assertEquals(base, tree.getSelectionModel().getSelectedItem().getValue().getWorldInfo().getFolderPath());
+            search.setText("基地");
+            assertTrue(status.getText().contains("3 / 4"));
+            search.clear();
+            ((RadioMenuItem) sort.getItems().get(1)).setSelected(true);
+            assertEquals(List.of("other", "Survival_02", "unknown"), libraryFolders(tree.getRoot().getChildren().getFirst()));
+            checkView.run();
+
+            writeLibraryWorld(base, "更新的基地", 1000);
+            refresh.fire();
+            assertTrue(refresh.isDisabled());
+            assertTrue(choose.isDisabled());
+            search.setText("  OTHER "); // Filter can change while the old list is visible.
+            awaitFx(() -> !refresh.isDisabled());
+            assertEquals("更新的基地", title.getText());
+            assertNull(tree.getSelectionModel().getSelectedItem());
+            assertTrue(status.getText().contains("1 / 4"));
+            checkView.run();
+            search.clear();
+            assertEquals(base, tree.getSelectionModel().getSelectedItem().getValue().getWorldInfo().getFolderPath());
+
+            Files.writeString(base.resolve("level.dat"), "invalid NBT");
+            writeLibraryWorld(saves.resolve("new"), "新世界", 500);
+            refresh.fire();
+            awaitFx(() -> !refresh.isDisabled());
+            assertTrue(status.getText().contains("保留 1 个世界"));
+            assertTrue(libraryFolders(tree.getRoot().getChildren().getFirst()).contains("new"));
+            assertEquals("更新的基地", title.getText());
+            checkView.run();
+
+            writeLibraryWorld(base, "恢复的基地", 1100);
+            refresh.fire();
+            awaitFx(() -> !refresh.isDisabled());
+            assertEquals("恢复的基地", title.getText());
+            assertFalse(status.getText().contains("未完成"));
+            checkView.run();
+
+            Files.move(base, home.resolve("moved-world"));
+            refresh.fire();
+            awaitFx(() -> !refresh.isDisabled());
+            assertTrue(status.getText().contains("当前世界已不在此目录"));
+            assertEquals("选择一个世界", title.getText());
+            assertNull(viewport.viewportState());
+            assertTrue(viewport.viewerLockedSelection().isEmpty());
+            assertNull(tree.getSelectionModel().getSelectedItem());
+        });
+    }
+
+    private static List<String> libraryFolders(TreeItem<WorldTreeNode> group) {
+        return group.getChildren().stream()
+                .map(item -> item.getValue().getWorldInfo().getFolderPath().getFileName().toString()).toList();
+    }
+
+    private static void writeLibraryWorld(Path world, String name, long played) throws Exception {
+        Files.createDirectories(world.resolve("region"));
+        var data = net.kyori.adventure.nbt.CompoundBinaryTag.builder()
+                .putString("LevelName", name).putLong("LastPlayed", played).build();
+        var root = net.kyori.adventure.nbt.CompoundBinaryTag.builder().put("Data", data).build();
+        net.kyori.adventure.nbt.BinaryTagIO.writer().write(root, world.resolve("level.dat"),
+                net.kyori.adventure.nbt.BinaryTagIO.Compression.GZIP);
+    }
+
+    @Test
     void loadsMapFirstAndKeepsGroupedActionsReachableAtMinimumSize() throws Exception {
         withWorkspace(root -> {
             assertNull(root.lookup(".tab-pane"), "地图不应藏在标签页中");
@@ -100,12 +671,84 @@ class WorkspaceLayoutTest {
         });
     }
 
+    @Test
+    void appearanceKeepsViewportAndUpdatesOwnedDialogAndToolsPopup() throws Exception {
+        withWorkspace(root -> {
+            var stage = new Stage();
+            stage.setOpacity(0);
+            stage.setScene(root.getScene());
+            stage.show();
+            var about = AboutDialog.create(stage, ignored -> {});
+            try {
+                MenuButton tools = (MenuButton) root.lookup("#moreMenuButton");
+                var appearance = (Menu) tools.getItems().stream()
+                        .filter(item -> "appearanceMenu".equals(item.getId())).findFirst().orElseThrow();
+                var light = (RadioMenuItem) appearance.getItems().get(0);
+                var dark = (RadioMenuItem) appearance.getItems().get(1);
+                assertTrue(light.isSelected());
+                loadEmptyTestWorld(root);
+                var viewport = root.lookup("#viewportHost");
+                root.layout();
+                double width = viewport.getLayoutBounds().getWidth();
+                double height = viewport.getLayoutBounds().getHeight();
+                var refresh = (Button) root.lookup("#refreshLibraryButton");
+                var icon = assertInstanceOf(org.kordamp.ikonli.javafx.FontIcon.class, refresh.getGraphic());
+                assertEquals("fth-refresh-cw", icon.getIconLiteral());
+                assertEquals("刷新存档库", refresh.getAccessibleText());
+                about.initModality(javafx.stage.Modality.NONE);
+                about.show();
+                dark.fire();
+                root.applyCss();
+                root.layout();
+                about.getDialogPane().applyCss();
+                assertTrue(dark.isSelected());
+                assertTrue(new PortableSettings().usesDarkTheme());
+                assertSame(viewport, root.lookup("#viewportHost"));
+                assertEquals(width, viewport.getLayoutBounds().getWidth());
+                assertEquals(height, viewport.getLayoutBounds().getHeight());
+                var version = (Label) about.getDialogPane().lookup("#aboutVersion");
+                assertEquals(javafx.scene.paint.Color.web("#a9b6c4"), version.getTextFill());
+                tools.show();
+                var popup = menuContent(tools).getScene().getRoot();
+                popup.applyCss();
+                var heading = (Label) menuContent(tools).lookup(".section-title");
+                assertEquals(javafx.scene.paint.Color.web("#e6edf3"), heading.getTextFill());
+                tools.hide();
+            } finally {
+                about.close();
+                stage.close();
+            }
+        });
+        withWorkspace(root -> {
+            var tools = (MenuButton) root.lookup("#moreMenuButton");
+            var appearance = (Menu) tools.getItems().stream().filter(item -> "appearanceMenu".equals(item.getId())).findFirst().orElseThrow();
+            assertTrue(((RadioMenuItem) appearance.getItems().get(1)).isSelected());
+            var sidebar = (javafx.scene.layout.Region) root.lookup("#worldSidebar");
+            assertEquals(javafx.scene.paint.Color.web("#161b22"), sidebar.getBackground().getFills().getFirst().getFill());
+            appearance.getItems().getFirst().fire();
+            root.applyCss();
+            assertEquals(javafx.scene.paint.Color.web("#f4f6f8"), sidebar.getBackground().getFills().getFirst().getFill());
+            assertFalse(new PortableSettings().usesDarkTheme());
+        });
+    }
+
 
 
 
 
     private javafx.scene.control.Dialog<?> openResourceDialog(Parent root,MapViewerController controller)throws Exception {
-        var entry=(Button)root.lookup("#resourceSettingsButton");assertNotNull(entry);assertFalse(entry.isDisabled());entry.fire();
+        var entry=(Button)root.lookup("#resourceSettingsButton");
+        if (entry.isVisible()) {
+            assertFalse(entry.isDisabled());
+            entry.fire();
+        } else {
+            var tools = (MenuButton) root.lookup("#moreMenuButton");
+            tools.show();
+            var resource = tools.getItems().stream().filter(item -> "resourceSettingsItem".equals(item.getId())).findFirst().orElseThrow();
+            assertTrue(resource.isVisible() && !resource.isDisable());
+            resource.fire();
+            assertFalse(tools.isShowing());
+        }
         var field=MapViewerController.class.getDeclaredField("resourceSettingsDialog");field.setAccessible(true);var dialog=(javafx.scene.control.Dialog<?>)field.get(controller);
         assertTrue(dialog.isShowing());dialog.getDialogPane().applyCss();dialog.getDialogPane().layout();return dialog;
     }
@@ -143,11 +786,42 @@ class WorkspaceLayoutTest {
                 public String status(){return "已选择资源；生成预览后显示详细诊断。";}public String diagnostics(){return "此页面使用合成路径检查布局。";}public boolean resourceActionsAvailable(){return true;}
                 public void automatic(){}public void chooseClient(){}public void chooseInstance(){}public void simpleColors(){}
             });
-            ((TitledPane)pane.lookup("#resourceManualSection")).setExpanded(true);
             var scene=new Scene(pane,520,440);scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());pane.applyCss();pane.resize(520,440);pane.layout();
+            var manual = (TitledPane) pane.lookup("#resourceManualSection");
+            manual.setAnimated(false);
+            manual.setExpanded(true);
+            pane.applyCss();pane.layout();
             var client=(Label)pane.lookup("#resourceClientValue");assertEquals(longPath,client.getTooltip().getText());assertTrue(client.getHeight()>30);
             var scroll=(ScrollPane)pane.lookup(".settings-scroll");assertTrue(scroll.getContent().getBoundsInParent().getWidth()<=scroll.getViewportBounds().getWidth()+1);
             scroll.setVvalue(1);pane.layout();snapshotIfRequested(pane,"resource-settings-long-path-520x440.png");
+        });
+    }
+
+    @Test void pluginFeedbackStaysReadableAfterOpeningThePluginTab() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            Stage stage = new Stage();
+            stage.setScene(root.getScene());
+            stage.show();
+            try {
+                var controller = (MapViewerController) root.getProperties().get("mapViewerController");
+                var dialog = openResourceDialog(root, controller);
+                try {
+                    var pane = dialog.getDialogPane();
+                    var settings = (ResourceSettingsPane) pane.getContent();
+                    ((javafx.scene.control.TabPane) pane.lookup("#resourceSettingsTabs")).getSelectionModel().select(2);
+                    settings.showPluginFeedback("无法应用：插件进程启动失败");
+                    pane.applyCss();
+                    pane.layout();
+                    var feedback = (javafx.scene.control.TextArea) pane.lookup("#modelPluginsFeedback");
+                    assertTrue(feedback.isVisible());
+                    assertTrue(feedback.getHeight() >= feedback.prefHeight(-1), "插件结果必须保留可读的显示高度");
+                } finally {
+                    dialog.close();
+                }
+            } finally {
+                stage.close();
+            }
         });
     }
 
@@ -204,23 +878,6 @@ class WorkspaceLayoutTest {
             assertTrue(menu.getTooltip().getText().contains("自动匹配"));
             assertTrue(new PortableSettings().loadClientResourcePath(Path.of(configured),"1.21.1").isEmpty());
         });
-    }
-
-    @Test void resourceDiagnosticsSeparatesCountsOriginsAndStaticApproximation()throws Exception {
-        var coordinate=new com.mcworldexplorer.voxel.data.ChunkCoordinate(0,0);
-        var warnings=java.util.List.of(
-            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_CONTEXT,coordinate,"实例：pack-a"),
-            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.RESOURCE_ORIGIN,coordinate,"example:block/shape → shapes.jar"),
-            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.TEXTURE_FALLBACK,coordinate,"example:absent MISSING_RESOURCE",7),
-            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.TEXTURE_FALLBACK,coordinate,"example:runtime UNSUPPORTED_MODEL",2),
-            new com.mcworldexplorer.voxel.mesh.MeshWarning(com.mcworldexplorer.voxel.mesh.MeshWarning.Code.MODEL_APPROXIMATION,coordinate,"OBJ 静态几何",4));
-        var scene=new com.mcworldexplorer.voxel.mesh.VoxelSceneSnapshot(0,0,java.util.List.of(),new com.mcworldexplorer.voxel.mesh.MeshBounds(0,0,0,0,0,0),0,0,0,0,warnings);
-        var request=new com.mcworldexplorer.viewer.ViewerRequest(home,"test","minecraft:overworld","主世界",com.mcworldexplorer.voxel.data.ChunkRectangle.target(0,0,0,0),
-            com.mcworldexplorer.viewer.ViewerPerformanceProfile.BASIC,new com.mcworldexplorer.viewer.ViewerMapReturnState(0,0,2,com.mcworldexplorer.preview.PreviewLayer.surfaceOverview()));
-        var diagnostics=MapViewerController.class.getDeclaredMethod("resourceDiagnostics",com.mcworldexplorer.viewer.ViewerTaskResult.class);diagnostics.setAccessible(true);
-        String text=(String)diagnostics.invoke(null,new com.mcworldexplorer.viewer.ViewerTaskResult(request,scene,false,0));
-        assertTrue(text.contains("仅统计当前加载选区"));assertTrue(text.contains("TEXTURE_FALLBACK"));
-        assertTrue(text.contains("实例：pack-a"));assertTrue(text.contains("shapes.jar"));assertTrue(text.contains("OBJ 静态几何"));assertTrue(text.contains("不代表整个 Mod"));
     }
 
     @Test void aCompletedOlderManualLookupCannotPersistAfterReturningToAutomatic()throws Exception {
@@ -302,7 +959,7 @@ class WorkspaceLayoutTest {
             assertTrue(diagnosticBounds.getMinX()>=helpLayoutBounds.getMaxX()+5,"诊断按钮与帮助入口须留间距");
             assertEquals(helpLayoutBounds.getCenterY(),diagnosticBounds.getCenterY(),1,"资源操作垂直居中");
             var diagnosticText=(javafx.scene.text.Text)diagnostics.lookup(".text");
-            assertEquals("资源诊断",diagnosticText.getText(),"诊断按钮文字完整显示");
+            assertEquals(diagnostics.getText(),diagnosticText.getText(),"诊断按钮文字完整显示");
             assertTrue(root.lookup("#viewportHost").getBoundsInLocal().getHeight() >= 160);
             snapshotIfRequested(root, "texture-toolbar-900x600.png");
             Stage stage = new Stage();
@@ -387,6 +1044,84 @@ class WorkspaceLayoutTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void narrowingToolbarAndReversingDetailsKeepMapAndActionsReachable() throws Exception {
+        withWorkspace(root -> {
+            Stage stage = new Stage();
+            stage.setOpacity(0);
+            stage.setScene(root.getScene());
+            stage.show();
+            try {
+                loadEmptyTestWorld(root);
+                Label summary = (Label) root.lookup("#worldSummaryLabel");
+                assertEquals("1.21.1 · 只读浏览", summary.getText());
+                var path = (Label) root.lookup("#folderPathLabel");
+                assertEquals(home.resolve("empty-test-world").toString(), path.getText());
+                var toolbar = (MapToolbar) root.lookup("#mapToolbar");
+                Button resource = (Button) root.lookup("#resourceSettingsButton");
+                MenuButton tools = (MenuButton) root.lookup("#moreMenuButton");
+                MenuItem moved = tools.getItems().stream().filter(i -> "resourceSettingsItem".equals(i.getId())).findFirst().orElseThrow();
+                stage.setWidth(1200);
+                awaitFx(() -> resource.isVisible() && toolbar.getWidth() > 800);
+                assertFalse(moved.isVisible());
+                stage.setWidth(900);
+                awaitFx(() -> root.getLayoutBounds().getWidth() <= 900);
+                ((SplitPane) root).setDividerPositions(0.5);
+                awaitFx(() -> !resource.isVisible());
+                assertTrue(moved.isVisible());
+                assertEquals(tools.getBoundsInParent().getCenterY(),
+                        root.lookup("#viewerModeButton").getBoundsInParent().getCenterY(), 2);
+                openResourceDialog(root,(MapViewerController) root.getProperties().get("mapViewerController")).close();
+                var viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+                ((ToggleButton) root.lookup("#viewerModeButton")).fire();
+                var ranges = (ComboBox<com.mcworldexplorer.viewer.ViewerRangeOption>) root.lookup("#viewerRangeComboBox");
+                ranges.setValue(com.mcworldexplorer.viewer.ViewerRangeOption.FREE);
+                root.applyCss();
+                root.layout();
+                drag(viewport.lookup("Canvas"), 90, 65, 106, 77, MouseButton.PRIMARY);
+                var locked = viewport.viewerLockedSelection().orElseThrow();
+                ToggleButton toggle = (ToggleButton) root.lookup("#detailsToggleButton");
+                ScrollPane panel = (ScrollPane) root.lookup("#detailsPane");
+                double width = viewport.getWidth(), height = viewport.getHeight();
+                toggle.fire();
+                awaitFx(() -> panel.getOpacity() > 0);
+                toggle.fire();
+                assertTrue(panel.isMouseTransparent());
+                toggle.fire();
+                awaitFx(() -> panel.getOpacity() == 1);
+                assertFalse(panel.isMouseTransparent());
+                assertEquals(0, panel.getTranslateX(), .01);
+                var clipboard = Clipboard.getSystemClipboard();
+                var previous = new ClipboardContent();
+                for (var type : clipboard.getContentTypes()) {
+                    var value = clipboard.getContent(type);
+                    if (value != null) previous.put(type, value);
+                }
+                try {
+                    ((Button) panel.lookup("#copyPathButton")).fire();
+                    awaitFx(() -> path.getText().equals(clipboard.getString()));
+                } finally {
+                    if (path.getText().equals(clipboard.getString())) clipboard.setContent(previous);
+                }
+                viewport.centerOn(23, 41);
+                Event.fireEvent(root, escapeKey());
+                awaitFx(() -> !panel.isVisible());
+                assertFalse(panel.isManaged());
+                assertSame(toggle, root.getScene().getFocusOwner());
+                assertEquals(23, viewport.viewportState().centerX(), .01);
+                assertEquals(locked, viewport.viewerLockedSelection().orElseThrow());
+                assertEquals(width, viewport.getWidth(), .01);
+                assertEquals(height, viewport.getHeight(), .01);
+                stage.setWidth(1200);
+                awaitFx(resource::isVisible);
+                assertFalse(moved.isVisible());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void invalidWorldShowsParseFailureAndNeverEnablesThreeDimensionalAction() throws Exception {
         withWorkspace(root -> {
             WorldInfo invalid = new WorldInfo(home.resolve("broken-world"));
@@ -411,6 +1146,7 @@ class WorkspaceLayoutTest {
             selectWorld(root, world);
             root.layout();
             Label title = (Label) root.lookup("#worldNameLabel");
+            assertEquals("未知 · 解析失败 · long-name-world", ((Label) root.lookup("#worldSummaryLabel")).getText());
             assertNotNull(title.getTooltip(), "截断的世界名称必须能读取全文");
             assertEquals(name, title.getTooltip().getText());
             Button sidebar = (Button) root.lookup("#sidebarToggleButton");
@@ -674,9 +1410,14 @@ class WorkspaceLayoutTest {
 
     private static MouseEvent pointer(javafx.scene.Node canvas, javafx.event.EventType<MouseEvent> type,
                                       double x, double y, MouseButton button) {
+        return pointer(canvas, type, x, y, button, type != MouseEvent.MOUSE_RELEASED && button == MouseButton.PRIMARY);
+    }
+
+    private static MouseEvent pointer(javafx.scene.Node canvas, javafx.event.EventType<MouseEvent> type,
+                                      double x, double y, MouseButton button, boolean primaryDown) {
         boolean down = type != MouseEvent.MOUSE_RELEASED;
         return new MouseEvent(type, x, y, x, y, button, 1,
-                false, false, false, false, down && button == MouseButton.PRIMARY,
+                false, false, false, false, primaryDown,
                 false, down && button == MouseButton.SECONDARY, false, false, true,
                 new javafx.scene.input.PickResult(canvas, new javafx.geometry.Point3D(x, y, 0), 0));
     }
@@ -868,6 +1609,72 @@ class WorkspaceLayoutTest {
     }
 
     @Test
+    void searchesAndVisitsPlacesInsideLayerPopupWithoutClosingIt() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            var store = new SavedPlaces(home.resolve("empty-test-world"));
+            store.change(new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, -7, 11), null, "基地 Alpha");
+            store.change(new SavedPlaces.Position(WorldDimension.NETHER_ID, 28, 34), null, "基地 Beta");
+            for (int i = 0; i < 48; i++) {
+                store.change(new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, i, 200), null, "村庄 " + i);
+            }
+            Stage stage = new Stage();
+            stage.setScene(root.getScene());
+            stage.setOpacity(0);
+            try {
+                stage.show();
+                var layers = (MenuButton) root.lookup("#layersMenuButton");
+                var view = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+                layers.show();
+                Parent body = menuContent(layers);
+                var panel = (SavedPlacesPanel) body.lookup("#savedPlacesPanel");
+                assertFalse(panel.isExpanded());
+                panel.setExpanded(true);
+                body.getScene().getRoot().applyCss();
+                body.getScene().getRoot().layout();
+                var search = (TextField) panel.lookup("#placeSearch");
+                var list = (javafx.scene.control.ListView<?>) panel.lookup("#placeResults");
+                assertEquals(50, list.getItems().size());
+                assertTrue(body.getBoundsInLocal().getWidth() < view.getWidth());
+                double height = list.getHeight();
+                assertTrue(height > 0 && height <= 116);
+                list.scrollTo(49);
+                list.layout();
+                assertTrue(list.lookupAll(".list-cell").stream().anyMatch(n ->
+                        n instanceof javafx.scene.control.ListCell<?> c && c.getIndex() == 49 && !c.isEmpty()));
+                assertEquals(height, list.getHeight());
+                search.setText("空结果");
+                assertTrue(list.getItems().isEmpty());
+                search.setText("  alPHA ");
+                assertEquals(1, list.getItems().size());
+                clickFirstPlaceRow(list);
+                assertEquals(-6.5, view.viewportState().centerX());
+                assertTrue(layers.isShowing() && panel.isExpanded());
+                search.setText("下界");
+                clickFirstPlaceRow(list);
+                awaitFx(() -> view.viewportState() != null && view.viewportState().centerX() == 28.5);
+                assertTrue(layers.isShowing() && panel.isExpanded());
+                assertEquals("下界", search.getText());
+                panel.setExpanded(false);
+                assertTrue(layers.isShowing());
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    private static void clickFirstPlaceRow(javafx.scene.control.ListView<?> list) {
+        list.applyCss();
+        list.layout();
+        var cell = list.lookupAll(".list-cell").stream()
+                .filter(n -> n instanceof javafx.scene.control.ListCell<?> c && c.getIndex() == 0 && !c.isEmpty())
+                .findFirst().orElseThrow();
+        Event.fireEvent(cell, pointer(cell, MouseEvent.MOUSE_PRESSED, 5, 5, MouseButton.PRIMARY));
+        Event.fireEvent(cell, pointer(cell, MouseEvent.MOUSE_RELEASED, 5, 5, MouseButton.PRIMARY));
+        Event.fireEvent(cell, pointer(cell, MouseEvent.MOUSE_CLICKED, 5, 5, MouseButton.PRIMARY));
+    }
+
+    @Test
     void popupControlsFitAndCoordinateErrorsDoNotCloseTheMenu() throws Exception {
         withWorkspace(root -> {
             loadEmptyTestWorld(root);
@@ -898,6 +1705,16 @@ class WorkspaceLayoutTest {
                         x.setText("invalid");
                         Event.fireEvent(x, new ActionEvent());
                         assertTrue(menu.isShowing(), "输入无效时保留可修正的定位弹窗");
+                    }
+                    if (id.equals("moreMenuButton")) {
+                        MenuButton png = exportMenu(root);
+                        Button clear = (Button) content.lookup("#clearCacheButton");
+                        assertEquals(clear.getWidth(), png.getWidth(), 0.5);
+                        assertEquals(clear.getHeight(), png.getHeight(), 0.5);
+                        png.show();
+                        assertTrue(png.isShowing());
+                        assertTrue(menu.isShowing());
+                        png.hide();
                     }
                     snapshotIfRequested(content.getScene().getRoot(), id + ".png");
                     Event.fireEvent(content, escapeKey());
@@ -963,9 +1780,8 @@ class WorkspaceLayoutTest {
                 awaitFx(viewport::hasCompleteTargetCoverage);
                 long complete = (System.nanoTime() - started) / 1_000_000;
                 assertTrue(((Label) root.lookup("#statusLabel")).getText().contains("已清晰加载"));
-                Parent maintenance = menuContent((MenuButton) root.lookup("#moreMenuButton"));
-                Button export = (Button) maintenance.lookup("#exportButton");
-                assertFalse(export.isDisabled());
+                MenuItem export = exportMenu(root).getItems().getFirst();
+                assertFalse(export.isDisable());
                 export.fire();
                 awaitFx(() -> ((Label) root.lookup("#statusLabel")).getText().startsWith("已导出当前视口"));
                 try (var files = Files.list(home.resolve("exports"))) {
@@ -1040,11 +1856,16 @@ class WorkspaceLayoutTest {
     }
 
     private void loadEmptyTestWorld(Parent root) throws Exception {
+        loadEmptyTestWorld(root, null);
+    }
+
+    private void loadEmptyTestWorld(Parent root, String name) throws Exception {
         Path worldPath = Files.createDirectories(home.resolve("empty-test-world"));
         Files.createDirectories(worldPath.resolve("region"));
         Files.createDirectories(worldPath.resolve("DIM-1/region"));
         Files.createDirectories(worldPath.resolve("DIM1/region"));
         WorldInfo world = new WorldInfo(worldPath);
+        if (name != null) world.setLevelName(name);
         world.setParsed(true);
         world.setVersionName("1.21.1");
         selectWorld(root, world);
@@ -1053,7 +1874,408 @@ class WorkspaceLayoutTest {
     }
 
     private static Parent menuContent(MenuButton menu) {
-        return (Parent) ((CustomMenuItem) menu.getItems().getFirst()).getContent();
+        return (Parent) menu.getItems().stream().filter(CustomMenuItem.class::isInstance)
+                .map(CustomMenuItem.class::cast).filter(item -> item.getContent() instanceof javafx.scene.layout.VBox)
+                .findFirst().orElseThrow().getContent();
+    }
+
+    private static MenuButton exportMenu(Parent root) {
+        return (MenuButton) menuContent((MenuButton) root.lookup("#moreMenuButton")).lookup("#exportButton");
+    }
+
+    private Path rangeResult(Label status) {
+        String prefix = "已导出指定范围地表\n";
+        awaitFx(() -> status.getText().startsWith(prefix));
+        Path relative = Path.of(status.getText().substring(prefix.length()));
+        assertFalse(relative.isAbsolute());
+        assertEquals(Path.of("exports"), relative.getParent());
+        Path png = home.resolve(relative);
+        assertTrue(Files.isRegularFile(png));
+        return png;
+    }
+
+    private static java.util.List<Path> recordOpenedFolders(Parent root) throws Exception {
+        var opened = new java.util.ArrayList<Path>();
+        var field = MapViewerController.class.getDeclaredField("exportFolders");
+        field.setAccessible(true);
+        field.set(root.getProperties().get("mapViewerController"), new ExportFolders(opened::add));
+        return opened;
+    }
+
+    @Test
+    void viewportNoticeTracksActualFolderIndependentlyOfMapStatus() throws Exception {
+        withWorkspace(root -> {
+            var opened = recordOpenedFolders(root);
+            var menu = exportMenu(root);
+            assertFalse(menu.isDisabled());
+            assertTrue(menu.getItems().getFirst().isDisable());
+            menu.getItems().getLast().fire();
+            assertEquals(List.of(home.resolve("exports")), opened);
+            assertTrue(Files.isDirectory(opened.getFirst()));
+            loadEmptyTestWorld(root);
+            var controller = (MapViewerController) root.getProperties().get("mapViewerController");
+            var viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+            var actual = Files.createDirectory(home.resolve("另存位置"));
+            var file = new com.mcworldexplorer.map.ViewportExporter().exportToFile(
+                    new BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB), actual.resolve("另存视口.png"),
+                    home.resolve("empty-test-world"));
+            viewport.requestFocus();
+            var focusBefore = root.getScene().getFocusOwner();
+            controller.showViewportExportSuccess(file);
+            assertSame(focusBefore, root.getScene().getFocusOwner());
+            viewport.centerOn(15, -30);
+            var notice = root.lookup("#exportNotice");
+            assertTrue(notice.isVisible());
+            assertEquals(file.getFileName().toString(), ((Label) root.lookup("#exportNoticeFile")).getText());
+            assertFalse(((Label) root.lookup("#statusLabel")).getText().startsWith("已导出当前视口"));
+            ((Button) root.lookup("#exportNoticeFolder")).fire();
+            menu.getItems().getLast().fire();
+            assertEquals(List.of(home.resolve("exports"), actual, home.resolve("exports")), opened);
+            var timerField = MapViewerController.class.getDeclaredField("exportNoticeTimeout");
+            timerField.setAccessible(true);
+            var timer = (PauseTransition) timerField.get(controller);
+            assertEquals(Duration.seconds(8), timer.getDuration());
+            Event.fireEvent(notice, mouse(MouseEvent.MOUSE_ENTERED, MouseButton.NONE));
+            assertEquals(javafx.animation.Animation.Status.PAUSED, timer.getStatus());
+            timer.jumpTo(Duration.millis(7900));
+            Event.fireEvent(notice, mouse(MouseEvent.MOUSE_EXITED, MouseButton.NONE));
+            awaitFx(() -> !notice.isVisible());
+            assertFalse(notice.isManaged());
+        });
+    }
+
+    @Test
+    void showsCompleteLongChineseRangePathAndOpensFolder() throws Exception {
+        checkRangeResultLayout("山间基地".repeat(20));
+    }
+
+    @Test
+    void wrapsLongUnbrokenRangeFilename() throws Exception {
+        checkRangeResultLayout("W".repeat(80));
+    }
+
+    private void checkRangeResultLayout(String name) throws Exception {
+        withWorkspace(root -> {
+            var opened = recordOpenedFolders(root);
+            loadEmptyTestWorld(root, name);
+            var stage = new Stage();
+            stage.setScene(root.getScene());
+            try {
+                exportMenu(root).getItems().get(1).fire();
+                DialogPane pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                        .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                var window = pane.getScene().getWindow();
+                var folder = (Button) pane.lookup("#rangeExportFolder");
+                folder.fire();
+                assertTrue(window.isShowing());
+                ((TextField) pane.lookup("#firstCorner")).setText("0, 0");
+                ((TextField) pane.lookup("#secondCorner")).setText("2, 2");
+                double initialHeight = window.getHeight();
+                ((Button) pane.lookupButton(pane.getButtonTypes().getFirst())).fire();
+                var status = (Label) pane.lookup("#rangeExportStatus");
+                var png = rangeResult(status);
+                awaitFx(() -> window.getHeight() > initialHeight && status.getHeight() >= status.prefHeight(status.getWidth()) - 1);
+                pane.applyCss();
+                pane.layout();
+                var text = (javafx.scene.text.Text) status.lookup(".text");
+                assertEquals("已导出指定范围地表\n" + home.relativize(png), text.getText());
+                var bounds = text.localToScene(text.getBoundsInLocal());
+                var labelBounds = status.localToScene(status.getLayoutBounds());
+                assertTrue(bounds.getMaxX() <= labelBounds.getMaxX() + 1);
+                assertTrue(bounds.getMaxY() <= labelBounds.getMaxY() + 1);
+                double buttonsY = folder.localToScene(folder.getBoundsInLocal()).getMinY();
+                assertTrue(bounds.getMaxY() <= buttonsY, () -> "结果文字底部 " + bounds.getMaxY()
+                        + "，按钮顶部 " + buttonsY + "，小窗 " + pane.getWidth() + " × " + pane.getHeight()
+                        + "，首选高度 " + pane.prefHeight(pane.getWidth()) + "，初始窗口高度 " + initialHeight);
+                assertTrue(pane.getWidth() <= 431, "长文件名应在小窗内换行");
+                folder.fire();
+                assertTrue(window.isShowing());
+                assertEquals(List.of(home.resolve("exports"), png.getParent()), opened);
+                ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    @Test
+    void copiesBothCornersFromMapWhileRangeWindowStaysOpen() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            Stage owner = new Stage();
+            owner.setScene(root.getScene());
+            owner.setOpacity(0);
+            owner.show();
+            var clipboard = Clipboard.getSystemClipboard();
+            var previous = new ClipboardContent();
+            for (var type : clipboard.getContentTypes()) {
+                var value = clipboard.getContent(type);
+                if (value != null) previous.put(type, value);
+            }
+            try {
+                MapViewport viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+                viewport.centerOn(0, 0);
+                var item = exportMenu(root).getItems().get(1);
+                item.fire();
+                DialogPane pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                        .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                Stage form = (Stage) pane.getScene().getWindow();
+                assertEquals(javafx.stage.Modality.NONE, form.getModality());
+                var first = (TextField) pane.lookup("#firstCorner");
+                var second = (TextField) pane.lookup("#secondCorner");
+                Button export = (Button) pane.lookupButton(pane.getButtonTypes().getFirst());
+                assertTrue(BlockCoordinates.isPair(first.getText()));
+                for (String invalid : List.of("-16", "1, 2, 3", "1.5, 0", "2147483648, 0")) {
+                    first.setText(invalid);
+                    assertTrue(export.isDisabled());
+                }
+                copyMapCorner(viewport, -16, -8, first);
+                var canvas = viewport.lookup("Canvas");
+                double center = viewport.viewportState().centerX();
+                drag(canvas, 90, 80, 102, 80, MouseButton.SECONDARY);
+                assertNotEquals(center, viewport.viewportState().centerX());
+                item.fire();
+                assertTrue(form.isShowing());
+                assertEquals("-16, -8", first.getText());
+                copyMapCorner(viewport, 15, 7, second);
+                Label status = (Label) pane.lookup("#rangeExportStatus");
+                assertEquals("输出尺寸：32 × 16 像素", status.getText());
+                assertFalse(export.isDisabled());
+                export.fire();
+                var image = ImageIO.read(rangeResult(status).toFile());
+                assertEquals(32, image.getWidth());
+                assertEquals(16, image.getHeight());
+                ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+            } finally {
+                String value = clipboard.getString();
+                if ("-16, -8".equals(value) || "15, 7".equals(value)) clipboard.setContent(previous);
+                owner.close();
+            }
+        });
+    }
+
+    private static void copyMapCorner(MapViewport viewport, int x, int z, TextField field) {
+        Window mapWindow = viewport.getScene().getWindow();
+        mapWindow.requestFocus();
+        awaitFx(mapWindow::isFocused);
+        double sx = viewport.viewportState().screenXFor(x + 0.5, viewport.getWidth());
+        double sy = viewport.viewportState().screenYFor(z + 0.5, viewport.getHeight());
+        drag(viewport.lookup("Canvas"), sx, sy, sx, sy, MouseButton.SECONDARY);
+        var menu = showingPlaceMenu();
+        var copy = menu.getItems().stream().filter(i -> "复制坐标".equals(i.getText())).findFirst().orElseThrow();
+        copy.fire();
+        menu.hide();
+        String expected = x + ", " + z;
+        awaitFx(() -> expected.equals(Clipboard.getSystemClipboard().getString()));
+        assertEquals(expected, Clipboard.getSystemClipboard().getString(),
+                () -> ((Label) viewport.getScene().lookup("#statusLabel")).getText());
+        Window formWindow = field.getScene().getWindow();
+        formWindow.requestFocus();
+        awaitFx(formWindow::isFocused);
+        field.requestFocus();
+        field.positionCaret(1);
+        field.paste();
+        assertEquals(expected, field.getText());
+    }
+
+    @Test
+    void wheelRoundTripKeepsIntegralTileSizeAndPixels() throws Exception {
+        withWorkspace(root -> {
+            var zoom = com.mcworldexplorer.map.MapZoomLevel.BLOCKS_1;
+            var key = new com.mcworldexplorer.map.MapTileKey("world", "minecraft:overworld",
+                    com.mcworldexplorer.preview.PreviewLayer.surfaceOverview(), zoom, 0, 0, "test");
+            var view = new MapViewport();
+            view.resize(512, 512);
+            view.layout();
+            var state = new com.mcworldexplorer.map.MapViewportState(128, 128, zoom);
+            view.setViewportState(state);
+            view.setTargetTiles(List.of(key));
+            var stripes = new WritableImage(256, 256);
+            var writer = stripes.getPixelWriter();
+            for (int y = 0; y < 256; y++) for (int x = 0; x < 256; x++)
+                writer.setArgb(x, y, (x % 2 == 0) ? 0xff447755 : 0xffaacc77);
+            view.showTile(key, stripes, List.of());
+            int[] exact = view.snapshotTerrain().getRGB(0, 0, 512, 512, null, 0, 512);
+            state.zoomVisualAt(0.9999999999999964, 256, 256, 512, 512);
+            assertArrayEquals(exact, view.snapshotTerrain().getRGB(0, 0, 512, 512, null, 0, 512));
+        });
+    }
+
+    @Test
+    void fractionalZoomAssignsEachEdgePixelToTheSameTileInEitherLoadOrder() throws Exception {
+        withWorkspace(root -> {
+            var zoom = com.mcworldexplorer.map.MapZoomLevel.BLOCKS_1;
+            var layer = com.mcworldexplorer.preview.PreviewLayer.surfaceOverview();
+            var keys = new java.util.ArrayList<com.mcworldexplorer.map.MapTileKey>();
+            for (int z = -1; z <= 0; z++) for (int x = -1; x <= 0; x++) {
+                keys.add(new com.mcworldexplorer.map.MapTileKey("world", "minecraft:overworld", layer, zoom, x, z, "test"));
+            }
+            for (var order : List.of(keys, keys.reversed())) {
+                var view = new MapViewport();
+                view.resize(512, 512);
+                view.layout();
+                var state = new com.mcworldexplorer.map.MapViewportState(.25, .25, zoom);
+                state.zoomVisualAt(Math.nextDown(1.0), 256, 256, 512, 512);
+                view.setViewportState(state);
+                view.setTargetTiles(keys);
+                for (var key : order) {
+                    var image = new WritableImage(1, 1);
+                    image.getPixelWriter().setArgb(0, 0, 0xff344450 + keys.indexOf(key));
+                    view.showTile(key, image, List.of());
+                }
+                var screen = view.snapshotTerrain();
+                for (int i = 0; i < keys.size(); i++) {
+                    assertEquals(0xff344450 + i, screen.getRGB(254 + i % 2, 254 + i / 2));
+                }
+            }
+        });
+    }
+
+    @Test
+    void bothPngModesProduceIdenticalTerrainWhileOverlaysStayVisible() throws Exception {
+        Path region = home.resolve("empty-test-world/region/r.0.0.mca");
+        com.mcworldexplorer.map.MapSamplingFixtures.region(region, "minecraft:stone", 0, 1, 15, 16);
+        withWorkspace(root -> {
+            var store = new SavedPlaces(home.resolve("empty-test-world"));
+            var first = new SavedPlaces.Position(WorldDimension.OVERWORLD_ID, 250, 8);
+            store.change(first, null, "接缝旁的地点");
+            store.connect(first, new SavedPlaces.Position(first.dimension(), 220, 8), "西端");
+            loadEmptyTestWorld(root);
+            var stage = new Stage();
+            stage.setScene(root.getScene());
+            try {
+                var viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+                var zoom = com.mcworldexplorer.map.MapZoomLevel.BLOCKS_1;
+                double cx = viewport.getWidth() / 2, cz = viewport.getHeight() / 2;
+                viewport.viewportState().setView(cx, cz, zoom);
+                viewport.centerOn(cx, cz);
+                var menu = exportMenu(root);
+                awaitFx(() -> !menu.getItems().getFirst().isDisable() && viewport.hasCompleteTargetCoverage()
+                        && viewport.completeTiles().keySet().stream().anyMatch(key -> key.zoom() == zoom));
+                viewport.setViewerSelectionMode(true);
+                viewport.lockViewerSelection(new com.mcworldexplorer.voxel.data.ChunkRectangle(13, 1, 13, 1));
+                var canvas = viewport.lookup("Canvas");
+                var screenBefore = canvas.snapshot(null, null);
+                menu.getItems().getFirst().fire();
+                var screenAfter = canvas.snapshot(null, null);
+                var mapStatus = (Label) root.lookup("#statusLabel");
+                awaitFx(() -> mapStatus.getText().startsWith("已导出当前视口："));
+                BufferedImage current = ImageIO.read(Path.of(mapStatus.getText().substring("已导出当前视口：".length())).toFile());
+
+                menu.getItems().get(1).fire();
+                DialogPane pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                        .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                ((Button) pane.lookupButton(pane.getButtonTypes().getFirst())).fire();
+                Label status = (Label) pane.lookup("#rangeExportStatus");
+                BufferedImage range = ImageIO.read(rangeResult(status).toFile());
+                ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+
+                int w = current.getWidth(), h = current.getHeight();
+                assertEquals((int) screenBefore.getWidth(), w);
+                assertEquals((int) screenBefore.getHeight(), h);
+                assertEquals(w, range.getWidth());
+                assertEquals(h, range.getHeight());
+                assertNotEquals(current.getRGB(245, 8), current.getRGB(100, 8), "保留已保存地形和空白区域");
+                assertArrayEquals(range.getRGB(0, 0, w, h, null, 0, w), current.getRGB(0, 0, w, h, null, 0, w));
+                for (int[] pixel : List.of(new int[]{235, 8}, new int[]{250, 8}, new int[]{256, 8}, new int[]{216, 24})) {
+                    int x = pixel[0], y = pixel[1];
+                    int displayed = screenBefore.getPixelReader().getArgb(x, y);
+                    assertNotEquals(displayed, current.getRGB(x, y), "连线、图标、瓦片线框和选区仅在界面显示");
+                    assertEquals(displayed, screenAfter.getPixelReader().getArgb(x, y));
+                }
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    @Test
+    void exportsOffscreenRangeFromSharedPngMenu() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            Files.write(home.resolve("empty-test-world/region/r.20.20.mca"), new byte[12]);
+            MapViewport viewport = (MapViewport) ((StackPane) root.lookup("#viewportHost")).getChildren().getFirst();
+            viewport.centerOn(10250, 10250);
+            Label mapStatus = (Label) root.lookup("#statusLabel");
+            awaitFx(() -> mapStatus.getText().contains("部分区域未完整加载"));
+            MenuButton menu = exportMenu(root);
+            assertFalse(menu.isDisable());
+            assertTrue(menu.getItems().getFirst().isDisable());
+            assertInstanceOf(javafx.scene.control.SeparatorMenuItem.class, menu.getItems().get(2));
+            assertEquals(List.of("导出当前视口", "导出指定范围地表…", "打开导出文件夹"),
+                    menu.getItems().stream().filter(i -> !(i instanceof javafx.scene.control.SeparatorMenuItem))
+                            .map(MenuItem::getText).toList());
+            Stage stage = new Stage();
+            stage.setScene(root.getScene());
+            try {
+                menu.getItems().get(1).fire();
+                DialogPane pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                        .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                Button export = (Button) pane.lookupButton(pane.getButtonTypes().getFirst());
+                ((TextField) pane.lookup("#firstCorner")).setText("-10000, 7");
+                ((TextField) pane.lookup("#secondCorner")).setText("0, -8");
+                assertTrue(export.isDisabled());
+                ((TextField) pane.lookup("#secondCorner")).setText("-9969, -8");
+                assertFalse(export.isDisabled());
+                Label status = (Label) pane.lookup("#rangeExportStatus");
+                assertTrue(status.getText().contains("32 × 16"));
+                export.fire();
+                awaitFx(() -> status.getText().startsWith("已导出指定范围地表"));
+                try (var files = Files.list(home.resolve("exports"))) {
+                    var png = ImageIO.read(files.findFirst().orElseThrow().toFile());
+                    assertEquals(32, png.getWidth());
+                    assertEquals(16, png.getHeight());
+                }
+                Window window = pane.getScene().getWindow();
+                ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+                assertFalse(window.isShowing());
+                viewport.centerOn(0, 0);
+                MenuItem viewportExport = menu.getItems().getFirst();
+                awaitFx(() -> !viewportExport.isDisable());
+                viewportExport.fire();
+                awaitFx(() -> ((Label) root.lookup("#statusLabel")).getText().startsWith("已导出当前视口"));
+                assertTrue(root.lookup("#exportNotice").isVisible());
+                String fileName = ((Label) root.lookup("#exportNoticeFile")).getText();
+                assertTrue(Files.isRegularFile(home.resolve("exports").resolve(fileName)));
+                try (var files = Files.list(home.resolve("exports"))) {
+                    assertEquals(2, files.count());
+                }
+            } finally {
+                stage.close();
+            }
+        });
+    }
+
+    @Test
+    void cancelsRangeAndReportsUnreadableOffscreenRegionWithoutWritingPng() throws Exception {
+        withWorkspace(root -> {
+            loadEmptyTestWorld(root);
+            Files.write(home.resolve("empty-test-world/region/r.20.20.mca"), new byte[12]);
+            var stage = new Stage();
+            stage.setScene(root.getScene());
+            try {
+                MenuItem item = exportMenu(root).getItems().get(1);
+                for (boolean cancel : List.of(true, false)) {
+                    item.fire();
+                    DialogPane pane = Window.getWindows().stream().map(w -> w.getScene().getRoot())
+                            .filter(DialogPane.class::isInstance).map(DialogPane.class::cast).findFirst().orElseThrow();
+                    for (String id : List.of("firstCorner", "secondCorner")) {
+                        ((TextField) pane.lookup("#" + id)).setText(cancel ? "0, 0" : "10250, 10250");
+                    }
+                    ((Button) pane.lookupButton(pane.getButtonTypes().getFirst())).fire();
+                    if (!cancel) {
+                        Label status = (Label) pane.lookup("#rangeExportStatus");
+                        awaitFx(() -> status.getText().contains("r.20.20.mca"));
+                        assertTrue(status.getText().startsWith("导出失败"));
+                    }
+                    ((Button) pane.lookupButton(ButtonType.CANCEL)).fire();
+                }
+                assertTrue(Files.notExists(home.resolve("exports")));
+                assertTrue(Files.notExists(home.resolve("cache/export-temp")));
+            } finally {
+                stage.close();
+            }
+        });
     }
 
     private static KeyEvent escapeKey() {
@@ -1071,14 +2293,18 @@ class WorkspaceLayoutTest {
             return;
         }
         Object key = new Object();
-        Timeline poll = new Timeline(new KeyFrame(Duration.millis(25), e -> {
-            if (ready.getAsBoolean()) {
-                Platform.exitNestedEventLoop(key, true);
-            }
+        Timeline poll = new Timeline();
+        PauseTransition timeout = new PauseTransition(Duration.seconds(8));
+        java.util.function.Consumer<Boolean> finish = result -> {
+            poll.stop();
+            timeout.stop();
+            Platform.exitNestedEventLoop(key, result);
+        };
+        poll.getKeyFrames().add(new KeyFrame(Duration.millis(25), e -> {
+            if (ready.getAsBoolean()) finish.accept(true);
         }));
         poll.setCycleCount(Timeline.INDEFINITE);
-        PauseTransition timeout = new PauseTransition(Duration.seconds(8));
-        timeout.setOnFinished(e -> Platform.exitNestedEventLoop(key, false));
+        timeout.setOnFinished(e -> finish.accept(false));
         poll.play();
         timeout.play();
         try {
@@ -1122,8 +2348,7 @@ class WorkspaceLayoutTest {
                 var executorField = com.mcworldexplorer.map.MapTileScheduler.class.getDeclaredField("executor");
                 executorField.setAccessible(true);
                 closingScheduler.set((java.util.concurrent.ExecutorService) executorField.get(schedulerField.get(mapController)));
-                Scene scene = new Scene(root, 900, 600);
-                scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
+                new Scene(root, 900, 600);
                 root.applyCss();
                 root.resize(900, 600);
                 root.layout();

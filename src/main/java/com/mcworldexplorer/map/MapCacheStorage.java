@@ -5,6 +5,7 @@ import com.mcworldexplorer.storage.WorldCachePaths;
 import com.mcworldexplorer.world.WorldInfo;
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.*;
 import java.util.*;
 
@@ -56,17 +57,9 @@ final class MapCacheStorage {
         Path app = PortablePaths.cacheDirectory().toAbsolutePath().normalize();
         Path wr = WorldCachePaths.worldDirectory(world).toAbsolutePath().normalize();
         if (!app.equals(scannedRoot)) {
+            scannedRoot = null;
             usage.clear(); total = 0;
-            if (Files.exists(app)) try (var walk = Files.walk(app)) {
-                var iterator = walk.filter(Files::isRegularFile).iterator();
-                while (iterator.hasNext()) {
-                    Path p = iterator.next();
-                    Path rel = app.relativize(p);
-                    if (rel.getNameCount() < 3 || !Set.of("map-v03", "map-v075").contains(rel.getName(1).toString())) continue;
-                    long size = Files.size(p); total += size;
-                    usage.merge(app.resolve(rel.getName(0)), size, Long::sum);
-                }
-            }
+            if (Files.exists(app)) scanUsage(app);
             scannedRoot = app;
         }
         long delta = 0;
@@ -82,5 +75,26 @@ final class MapCacheStorage {
         try { for (var e : files.entrySet()) atomic(e.getKey(), e.getValue()); }
         catch (IOException failure) { scannedRoot = null; throw failure; }
         total += delta; usage.merge(wr, delta, Long::sum); return true;
+    }
+
+    private static void scanUsage(Path app) throws IOException {
+        Files.walkFileTree(app, new SimpleFileVisitor<>() {
+            @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                Path relative = app.relativize(dir);
+                if (relative.getNameCount() == 2 && !Set.of("map-v03", "map-v075").contains(relative.getName(1).toString()))
+                    return FileVisitResult.SKIP_SUBTREE;
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Path relative = app.relativize(file);
+                if (relative.getNameCount() >= 3 && (attrs.isRegularFile() || attrs.isSymbolicLink() && Files.isRegularFile(file))) {
+                    long size = attrs.isRegularFile() ? attrs.size() : Files.size(file);
+                    total += size;
+                    usage.merge(app.resolve(relative.getName(0)), size, Long::sum);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 }

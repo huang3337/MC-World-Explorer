@@ -19,6 +19,35 @@ public class LevelDatReaderTest {
     Path tempDir;
 
     @Test
+    void readsStructuredWorldAndPlayerSpawnAndRejectsIncompletePosition() throws IOException {
+        var spawn = CompoundBinaryTag.builder().putIntArray("pos", new int[]{0,63,112})
+                .putString("dimension","minecraft:overworld").build();
+        var respawn = CompoundBinaryTag.builder().putIntArray("pos", new int[]{-16,70,-2})
+                .putString("dimension","minecraft:the_nether").build();
+        var data = CompoundBinaryTag.builder().put("spawn",spawn)
+                .put("Player", CompoundBinaryTag.builder().put("respawn",respawn).build());
+        var file = tempDir.resolve("level.dat");
+        BinaryTagIO.writer().write(CompoundBinaryTag.builder().put("Data",data.build()).build(),
+                file, BinaryTagIO.Compression.GZIP);
+        var info = LevelDatReader.readLevelDat(tempDir);
+        assertTrue(info.isSpawnPositionAvailable());
+        assertEquals(112, info.getSpawnZ());
+        assertEquals("minecraft:overworld", info.getSpawnDimension());
+        assertTrue(info.isPlayerRespawnPositionAvailable());
+        assertEquals(-16, info.getPlayerRespawnX());
+        assertEquals("minecraft:the_nether", info.getPlayerRespawnDimension());
+        var shortPosition = CompoundBinaryTag.builder().putIntArray("pos",new int[]{0,0})
+                .putString("dimension","minecraft:overworld").build();
+        var missingDimension = CompoundBinaryTag.builder().putIntArray("pos",new int[]{0,63,112}).build();
+        for (var invalid : java.util.List.of(shortPosition, missingDimension)) {
+            data.put("spawn",invalid);
+            BinaryTagIO.writer().write(CompoundBinaryTag.builder().put("Data",data.build()).build(),
+                    file, BinaryTagIO.Compression.GZIP);
+            assertFalse(LevelDatReader.readLevelDat(tempDir).isSpawnPositionAvailable());
+        }
+    }
+
+    @Test
     public void testReaderHandlesMissingDirectory() {
         Path fakePath = Paths.get("some/fake/path/that/does/not/exist");
         assertThrows(IOException.class, () -> {

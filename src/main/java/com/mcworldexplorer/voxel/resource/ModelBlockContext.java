@@ -55,6 +55,7 @@ public final class ModelBlockContext {
         this.view=null;
         this.fixtureBiomes=Map.of();
     }
+    Position modelPosition(){return exposePosition?position:null;}
     public Position position() { if(!exposePosition)throw new IllegalStateException("规则未声明绝对位置依赖");return position; }
     ModelBlockContext restricted(ModelRule rule){
         if(view==null)return new ModelBlockContext(area,position,cancellation,rule.neighbors(),rule.positionDependent());
@@ -91,6 +92,11 @@ public final class ModelBlockContext {
     public String dimension() { return view!=null?view.dimension():area.dimension().id(); }
     /** Host-only saved biome lookup. No raw area or undeclared inputs are sent to the plugin worker. */
     record BiomeSample(Optional<String> id,ChunkLoadStatus status,String detail) { }
+    boolean sharesBiomeSnapshot(ModelBlockContext other) {
+        if(cancellation.isCancelled()||Thread.currentThread().isInterrupted())
+            throw new java.util.concurrent.CancellationException("biome context cancelled");
+        return this==other || (area!=null && other!=null && area==other.area);
+    }
     BiomeSample biomeAtQuart(int x,int y,int z){
         if(cancellation.isCancelled()||Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("biome context cancelled");
         if(area==null){var id=Optional.ofNullable(fixtureBiomes.get(new Position(x,y,z)));return new BiomeSample(id,id.isPresent()?ChunkLoadStatus.SUCCESS:ChunkLoadStatus.UNSUPPORTED,id.isPresent()?"":"上下文没有该保存群系单元");}

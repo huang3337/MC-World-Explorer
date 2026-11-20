@@ -17,6 +17,18 @@ class MapP3CacheTest {
     String oldHome;
     WorldInfo world;
     WorldDimension dimension;
+    @Test void initialQuotaIncludesBothMapFormatsAndSkipsUnrelatedFiles() throws Exception {
+        Path root = WorldCachePaths.worldDirectory(world);
+        for (String dir : List.of("map-v03", "map-v075", "other")) {
+            Files.write(Files.createDirectories(root.resolve(dir)).resolve("existing"), new byte[4]);
+        }
+        Path tile = root.resolve("map-v075/tile");
+        synchronized (MapCacheStorage.LOCK) {
+            assertFalse(MapCacheStorage.write(world, Map.of(tile, new byte[3]), 10, 10));
+            assertTrue(MapCacheStorage.write(world, Map.of(tile, new byte[2]), 10, 10));
+        }
+    }
+
     @BeforeEach void setup() throws Exception {
         oldHome = System.getProperty("mcworldexplorer.home");
         System.setProperty("mcworldexplorer.home", temp.resolve("app").toString());

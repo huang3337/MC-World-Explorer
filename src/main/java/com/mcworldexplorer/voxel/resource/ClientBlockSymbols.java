@@ -8,7 +8,7 @@ import static com.mcworldexplorer.voxel.resource.RegistrationClassFile.*;
 
 /** Versioned names of the recognized block registry API; no block IDs or default-state table. */
 final class ClientBlockSymbols {
-    static final String REVISION="client-block-state/4";
+    static final String REVISION="client-block-state/5";
     private final Map<String,String> types=new HashMap<>();
     private final Map<String,List<Member>> methods=new HashMap<>();
     private final Map<String,Member> fields=new HashMap<>();

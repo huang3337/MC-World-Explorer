@@ -1,15 +1,16 @@
 package com.mcworldexplorer.region;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
 final class ChunkDecompressor {
-    private static final int BUFFER_SIZE = 8192;
+    // Region scans decode many small chunks on the same worker. Returned chunks own their bytes.
+    private static final ThreadLocal<byte[]> PREFIX = ThreadLocal.withInitial(() -> new byte[64 * 1024]);
 
     private ChunkDecompressor() {
     }
@@ -21,24 +22,22 @@ final class ChunkDecompressor {
             Path regionPath,
             int localChunkX,
             int localChunkZ) throws RegionReadException {
-        try (InputStream input = decompressionStream(compression, payload);
-             ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(payload.length * 2, BUFFER_SIZE))) {
-            byte[] buffer = new byte[BUFFER_SIZE];
-            int total = 0;
-            int read;
-            while ((read = input.read(buffer)) != -1) {
-                if (read > maximumOutputBytes - total) {
-                    throw failure(
-                            RegionReadException.Reason.DECOMPRESSED_SIZE_LIMIT,
-                            regionPath,
-                            localChunkX,
-                            localChunkZ,
-                            "decompressed data exceeds " + maximumOutputBytes + " bytes");
-                }
-                output.write(buffer, 0, read);
-                total += read;
+        try (InputStream input = decompressionStream(compression, payload)) {
+            if (compression == ChunkCompression.UNCOMPRESSED && payload.length <= maximumOutputBytes) {
+                return payload;
             }
-            return output.toByteArray();
+            byte[] prefix = PREFIX.get();
+            int capacity = Math.min(prefix.length, maximumOutputBytes);
+            int used = input.readNBytes(prefix, 0, capacity);
+            if (used < capacity) return Arrays.copyOf(prefix, used);
+            byte[] tail = input.readNBytes(maximumOutputBytes - used);
+            if (used + tail.length == maximumOutputBytes && input.read() != -1) {
+                throw failure(RegionReadException.Reason.DECOMPRESSED_SIZE_LIMIT, regionPath,
+                        localChunkX, localChunkZ, "decompressed data exceeds " + maximumOutputBytes + " bytes");
+            }
+            byte[] result = Arrays.copyOf(prefix, used + tail.length);
+            System.arraycopy(tail, 0, result, used, tail.length);
+            return result;
         } catch (RegionReadException e) {
             throw e;
         } catch (IOException e) {

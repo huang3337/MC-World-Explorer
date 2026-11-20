@@ -1,13 +1,15 @@
 param(
     [switch]$Offline,
     [switch]$SkipTests,
-    [switch]$Replace
+    [switch]$Replace,
+    [ValidatePattern('\Awindows-package(?:-[0-9]+\.[0-9]+\.[0-9]+)?\z')]
+    [string]$OutputName = 'windows-package'
 )
 
 # Reusable local Windows packaging. Never commits, uploads, or changes user data.
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$outputRoot = Join-Path $projectRoot 'build\windows-package'
+$outputRoot = Join-Path (Join-Path $projectRoot 'build') $OutputName
 $appName = 'MC World Explorer'
 $appImage = Join-Path $outputRoot $appName
 $taskJdk = if ($env:JAVA_HOME) { $env:JAVA_HOME } else {
@@ -41,7 +43,7 @@ $buildRoot = Join-Path $projectRoot 'build'
 if (Test-Path -LiteralPath $buildRoot) {
     if ((Get-Item -LiteralPath $buildRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Refusing linked build directory.' }
 }
-foreach ($tree in @((Join-Path $buildRoot 'core-0.7.4'), $outputRoot)) {
+foreach ($tree in @((Join-Path $buildRoot 'core-0.7.5'), $outputRoot)) {
     if (Test-Path -LiteralPath $tree) {
         if ((Get-Item -LiteralPath $tree -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Refusing linked tree: $tree" }
         if (Get-ChildItem -LiteralPath $tree -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw "Refusing linked contents: $tree" }
@@ -67,8 +69,8 @@ try {
     & (Join-Path $projectRoot 'gradlew.bat') @gradleArgs
     if ($LASTEXITCODE -ne 0) { throw "Gradle failed ($LASTEXITCODE)." }
 
-    $inputDir = Join-Path $projectRoot 'build\core-0.7.4\install\MC-World-Explorer\lib'
-    $expected = Get-Content -LiteralPath (Join-Path $buildRoot 'core-0.7.4\packaging\runtime-files.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $inputDir = Join-Path $projectRoot 'build\core-0.7.5\install\MC-World-Explorer\lib'
+    $expected = Get-Content -LiteralPath (Join-Path $buildRoot 'core-0.7.5\packaging\runtime-files.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     if (Get-ChildItem -LiteralPath $inputDir -Directory -Force) { throw 'Unexpected nested directory in distribution inputs.' }
     $actual = @(Get-ChildItem -LiteralPath $inputDir -File -Force)
     $names = @($expected.PSObject.Properties.Name | Sort-Object)

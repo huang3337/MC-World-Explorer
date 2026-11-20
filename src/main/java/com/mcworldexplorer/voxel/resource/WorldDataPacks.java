@@ -12,6 +12,8 @@ final class WorldDataPacks {
     record DimensionType(String reference,BlockResourceSource.DimensionHeight inline,String problem) { }
     record Dimensions(Map<ResourceLocation,DimensionType> types,String problem){Dimensions{types=Map.copyOf(types);}}
     record Selection(List<String> enabled,List<String> disabled,List<InstanceResourceLocator.Layer> layers,Seed seed,Dimensions dimensions){Selection{enabled=List.copyOf(enabled);disabled=List.copyOf(disabled);layers=List.copyOf(layers);}}
+    static final String SEPARATE_SETTINGS = "data/minecraft/world_gen_settings.dat";
+
     static Selection locate(Path world,Optional<Path> instance,List<Path> jars,CancellationSignal cancel)throws IOException {
         Path file=world.resolve("level.dat");if(!Files.isRegularFile(file))return new Selection(List.of(),List.of(),List.of(),new Seed(Optional.empty(),""),new Dimensions(Map.of(),""));
         CompoundBinaryTag root;try(var input=Files.newInputStream(file)){root=BinaryTagIO.reader(16*1024*1024).read(input,BinaryTagIO.Compression.GZIP);}
@@ -29,7 +31,24 @@ final class WorldDataPacks {
             }
         }
         }
-        return new Selection(enabled,disabled,layers,seed(root.getCompound("Data")),dimensions(root.getCompound("Data")));
+        var data = root.getCompound("Data");
+        Path separate = world.resolve(SEPARATE_SETTINGS);
+        if (Files.exists(separate, LinkOption.NOFOLLOW_LINKS)) {
+            try {
+                if (!Files.isRegularFile(separate,LinkOption.NOFOLLOW_LINKS) || !separate.toRealPath().startsWith(world.toRealPath())
+                        || Files.size(separate)>16*1024*1024) throw new IOException("独立世界生成设置不是存档内的有界普通文件");
+                try(var input=Files.newInputStream(separate)) {
+                    var saved=BinaryTagIO.reader(16*1024*1024).read(input,BinaryTagIO.Compression.GZIP);
+                    if (!(saved.get("data") instanceof CompoundBinaryTag settings))
+                        throw new IOException("独立世界生成设置缺少 data 复合标签");
+                    data=CompoundBinaryTag.builder().put(data).put("WorldGenSettings",settings).build();
+                }
+            } catch (IOException malformed) {
+                String problem="独立世界生成设置不可用："+malformed.getMessage();
+                return new Selection(enabled,disabled,layers,new Seed(Optional.empty(),problem),new Dimensions(Map.of(),problem));
+            }
+        }
+        return new Selection(enabled,disabled,layers,seed(data),dimensions(data));
     }
     private static Dimensions dimensions(CompoundBinaryTag data){
         var settings=data.get("WorldGenSettings");

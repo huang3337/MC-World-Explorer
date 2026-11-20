@@ -38,6 +38,22 @@ class ResourceDiagnosticReportTest {
         var east=report.entries().stream().filter(e->e.state().get("facing").equals("east")).findFirst().orElseThrow();
         assertEquals(6,east.occurrences());assertEquals(List.of(new ChunkCoordinate(0,0),new ChunkCoordinate(1,0)),east.chunks());
     }
+    @Test void resourceDiagnosticsSeparatesCountsOriginsAndStaticApproximation() {
+        var coordinate = new ChunkCoordinate(0, 0);
+        var warnings = List.of(
+                new MeshWarning(MeshWarning.Code.RESOURCE_CONTEXT, coordinate, "实例：pack-a"),
+                new MeshWarning(MeshWarning.Code.RESOURCE_ORIGIN, coordinate, "example:block/shape → shapes.jar"),
+                new MeshWarning(MeshWarning.Code.TEXTURE_FALLBACK, coordinate, "example:absent MISSING_RESOURCE", 7),
+                new MeshWarning(MeshWarning.Code.TEXTURE_FALLBACK, coordinate, "example:runtime UNSUPPORTED_MODEL", 2),
+                new MeshWarning(MeshWarning.Code.MODEL_APPROXIMATION, coordinate, "OBJ 静态几何", 4));
+        String text = ResourceDiagnosticReport.from(result(warnings, Set.of())).toText();
+        assertTrue(text.contains("仅统计当前加载选区"));
+        assertTrue(text.contains("TEXTURE_FALLBACK"));
+        assertTrue(text.contains("实例：pack-a"));
+        assertTrue(text.contains("shapes.jar"));
+        assertTrue(text.contains("OBJ 静态几何"));
+        assertTrue(text.contains("不代表整个 Mod"));
+    }
     @Test void unstructuredWarningsAreNotParsedIntoGuessedModFailures(){
         var legacy=new MeshWarning(MeshWarning.Code.TEXTURE_FALLBACK,new ChunkCoordinate(0,0),"invented:mod: UNSUPPORTED_MODEL text",4);
         var report=ResourceDiagnosticReport.from(result(List.of(legacy),Set.of("invented")));

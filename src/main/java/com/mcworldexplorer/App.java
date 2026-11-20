@@ -2,6 +2,7 @@ package com.mcworldexplorer;
 
 import com.mcworldexplorer.storage.PortablePaths;
 import com.mcworldexplorer.ui.MainController;
+import com.mcworldexplorer.ui.MapRenderDevice;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -31,11 +32,6 @@ public class App extends Application {
         controller = loader.getController();
         controller.setDocumentOpener(getHostServices()::showDocument);
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
-        URL stylesheet = getClass().getResource("/css/styles.css");
-        if (stylesheet == null) {
-            throw new IllegalStateException("Cannot find /css/styles.css");
-        }
-        scene.getStylesheets().add(stylesheet.toExternalForm());
         stage.setScene(scene);
         stage.setTitle("MC World Explorer");
         URL iconLocation = App.class.getResource("/images/mc-world-explorer.png");
@@ -52,6 +48,10 @@ public class App extends Application {
         stage.setMinWidth(900);
         stage.setMinHeight(600);
         stage.show();
+        if (ClientRuntime.awaitingMapAdapter()) {
+            javafx.application.Platform.runLater(() ->
+                    ClientRuntime.confirmMapAdapter(MapRenderDevice.read(stage.getTitle()).adapterId()));
+        }
     }
 
     @Override
