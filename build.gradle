@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.mcworldexplorer'
-version = '0.7.6'
+version = '0.7.7'
 
 repositories {
     maven { url 'https://maven.aliyun.com/repository/public/' }
@@ -127,7 +127,7 @@ test {
 }
 
 // Use a fresh output tree so postponed classes cannot survive incremental compilation.
-layout.buildDirectory = layout.projectDirectory.dir('build/core-0.7.6')
+layout.buildDirectory = layout.projectDirectory.dir('build/core-0.7.7')
 
 // Both repository sources and the actual host archive must remain independent of deferred work.
 tasks.register('verifyCoreIsolation') {

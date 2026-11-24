@@ -15,12 +15,57 @@ record VanillaTintLayers(Map<ResourceLocation,List<Kind>> blocks, boolean repeat
         static final Set<ResourceLocation> BASE_TEXTURES = DATA.getAsJsonArray("verifiedBaseTextureAtIndexZero")
                 .asList().stream().map(value->ResourceLocation.parse(value.getAsString()))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        static final Set<String> REGISTERED_VERSIONS = loadRegisteredVersions();
         private static JsonObject load() {
             try (var input = VanillaTintLayers.class.getResourceAsStream("/model-protocols/vanilla-tint-layers.json")) {
                 if (input == null) throw new IllegalStateException("缺少原版着色协议数据");
                 return com.google.gson.JsonParser.parseReader(new InputStreamReader(input, StandardCharsets.UTF_8)).getAsJsonObject();
             } catch (IOException invalid) {throw new IllegalStateException(invalid);}
         }
+        private static Set<String> loadRegisteredVersions() {
+            Set<String> versions = new HashSet<>();
+            var profiles = DATA.getAsJsonObject("profiles");
+            for (var entry : profiles.entrySet()) {
+                versions.add(entry.getKey());
+                var builds = entry.getValue().getAsJsonObject().getAsJsonArray("compatibleBuilds");
+                if (builds != null) {
+                    for (var item : builds) {
+                        var obj = item.getAsJsonObject();
+                        if (obj.has("version")) versions.add(obj.get("version").getAsString());
+                    }
+                }
+            }
+            return Set.copyOf(versions);
+        }
+    }
+
+    static boolean hasRegisteredProfile(String version) {
+        if (version == null || version.isBlank()) return false;
+        return ClientBlockColors.hasLegacyRegistry(version) || Profiles.REGISTERED_VERSIONS.contains(version);
+    }
+
+    static VanillaTintLayers genericFallback(String version, int resourceFormat) {
+        var groups = new HashMap<ResourceLocation, List<Kind>>();
+        var definitions = Profiles.DATA.getAsJsonObject("groups");
+        boolean modernParticleWater = resourceFormat >= 84;
+        List<String> standardGroups = new ArrayList<>(List.of(
+                "doubleGrass", "worldGrass", "flowerStem",
+                "biomeFoliage", "spruceFoliage", "birchFoliage",
+                "cauldronWater", "wire", "attachedStem", "growingStem",
+                "waterLily", modernParticleWater ? "particleWater" : "waterBlocks"));
+        if (!modernParticleWater) {
+            standardGroups.add("uncoloredLeaves");
+        }
+        if (resourceFormat >= 35) {
+            standardGroups.add("dryFoliage");
+        }
+        for (String name : standardGroups) {
+            var group = definitions.getAsJsonObject(name);
+            var layers = group.getAsJsonArray("layers").asList().stream().map(v -> Kind.valueOf(v.getAsString())).toList();
+            for (var id : group.getAsJsonArray("blocks")) groups.put(ResourceLocation.parse(id.getAsString()), layers);
+        }
+        return new VanillaTintLayers(Map.copyOf(groups), !modernParticleWater, false,
+                "原版世界颜色层（通用近似）：" + version + "（pack_format=" + resourceFormat + "）；使用通用原版着色分组，未经该版本客户端字节码静态注册核对");
     }
 
     static Optional<VanillaTintLayers> find(BlockResourceSource source, String version) throws IOException, ModelRule.Failure {
@@ -36,7 +81,7 @@ record VanillaTintLayers(Map<ResourceLocation,List<Kind>> blocks, boolean repeat
                 if(match.isPresent())return match;
             }catch(ModelRule.Failure unverified){mismatch=unverified;}
         }
-        if(mismatch!=null)throw mismatch;
+        if(mismatch!=null && hasRegisteredProfile(version))throw mismatch;
         return Optional.empty();
     }
     private static Optional<VanillaTintLayers> match(BlockResourceSource source,String version,JsonObject profile)throws IOException,ModelRule.Failure {

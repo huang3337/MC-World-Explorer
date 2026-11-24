@@ -171,6 +171,46 @@ class ClientResourceArchiveTest {
         assertReason(VERSION_MISMATCH,()->ClientResourceArchive.open(fixture(Map.of("version.json",modern.getBytes(StandardCharsets.UTF_8))),"1.21.1"));
     }
 
+    @Test void readsLegacyIntegerPackVersionFor114Through1165() throws Exception {
+        String v1165 = "{\"id\":\"1.16.5\",\"world_version\":2586,\"pack_version\":6}";
+        try (var archive = ClientResourceArchive.open(fixture(Map.of("version.json", v1165.getBytes(StandardCharsets.UTF_8))), "1.16.5")) {
+            assertEquals(new ClientResourceArchive.Metadata("1.16.5", 2586, 6, 0), archive.metadata());
+            assertEquals(6, archive.baseResourceFormat());
+        }
+        String zeroPack = "{\"id\":\"1.16.5\",\"world_version\":2586,\"pack_version\":0}";
+        assertReason(INVALID_METADATA, () -> ClientResourceArchive.open(fixture(Map.of("version.json", zeroPack.getBytes(StandardCharsets.UTF_8))), "1.16.5"));
+        String negPack = "{\"id\":\"1.16.5\",\"world_version\":2586,\"pack_version\":-2}";
+        assertReason(INVALID_METADATA, () -> ClientResourceArchive.open(fixture(Map.of("version.json", negPack.getBytes(StandardCharsets.UTF_8))), "1.16.5"));
+        String strPack = "{\"id\":\"1.16.5\",\"world_version\":2586,\"pack_version\":\"6\"}";
+        assertReason(INVALID_METADATA, () -> ClientResourceArchive.open(fixture(Map.of("version.json", strPack.getBytes(StandardCharsets.UTF_8))), "1.16.5"));
+    }
+
+    @Test void readsLegacy113ArchiveViaPackMcmetaAndRejectsOtherMissingVersionJson() throws Exception {
+        Map<String, byte[]> entries113 = new LinkedHashMap<>();
+        entries113.put("pack.mcmeta", "{\"pack\":{\"pack_format\":4,\"description\":\"1.13.2\"}}".getBytes(StandardCharsets.UTF_8));
+        entries113.put("assets/minecraft/blockstates/stone.json", "{}".getBytes(StandardCharsets.UTF_8));
+        entries113.put(MODEL, "{\"parent\":\"minecraft:block/cube_all\"}".getBytes(StandardCharsets.UTF_8));
+        entries113.put(TEXTURE, new byte[]{(byte) 137, 80, 78, 71});
+        Path jar113 = archive(entries113);
+        try (var archive = ClientResourceArchive.open(jar113, "1.13.2")) {
+            assertEquals(new ClientResourceArchive.Metadata("1.13.2", -1, 4, 0), archive.metadata());
+            assertEquals(4, archive.baseResourceFormat());
+        }
+        try (var archive = ClientResourceArchive.open(jar113, "1.13")) {
+            assertEquals("1.13", archive.metadata().versionId());
+        }
+        assertReason(INVALID_METADATA, () -> ClientResourceArchive.open(jar113, "1.12.2"));
+        assertReason(INVALID_METADATA, () -> ClientResourceArchive.open(jar113, "1.14.4"));
+
+        Map<String, byte[]> wrongFormat = new LinkedHashMap<>(entries113);
+        wrongFormat.put("pack.mcmeta", "{\"pack\":{\"pack_format\":3}}".getBytes(StandardCharsets.UTF_8));
+        assertReason(INVALID_METADATA, () -> ClientResourceArchive.open(archive(wrongFormat), "1.13.2"));
+
+        Map<String, byte[]> missingStone = new LinkedHashMap<>(entries113);
+        missingStone.remove(TEXTURE);
+        assertReason(INVALID_ARCHIVE, () -> ClientResourceArchive.open(archive(missingStone), "1.13.2"));
+    }
+
     private Path fixture(Map<String, byte[]> overrides) throws IOException {
         Map<String, byte[]> entries = new LinkedHashMap<>();
         entries.put("version.json", VERSION.getBytes(StandardCharsets.UTF_8));

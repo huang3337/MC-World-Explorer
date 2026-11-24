@@ -525,6 +525,37 @@ class BlockModelResolverTest {
         try(var archive=open(Map.of(STATE,json))){var result=new BlockModelResolver(archive,ModelRuleRegistry.defaults()).resolve(state(Map.of()));assertTrue(result.resolved(),result.detail());assertEquals(6,result.model().orElseThrow().faces().size());}
         assertFallback(UNSUPPORTED_MODEL,STATE,json.replace("__comment","unknown_render_condition"),Map.of());
     }
+    @Test void multipartGroupNegationWorksForPackFormats4Through14() throws Exception {
+        String json = "{\"multipart\":[{\"when\":{\"facing\":\"!north|south\"},\"apply\":{\"model\":\"block/stone\"}}]}";
+        for (int format : List.of(4, 6, 9, 14)) {
+            String versionJson = format <= 6
+                    ? "{\"id\":\"1.16.5\",\"world_version\":2586,\"pack_version\":" + format + "}"
+                    : "{\"id\":\"1.19.4\",\"world_version\":3337,\"pack_version\":{\"resource\":" + format + "}}";
+            String versionId = format <= 6 ? "1.16.5" : "1.19.4";
+            Map<String, String> entries = new LinkedHashMap<>();
+            entries.put("version.json", versionJson);
+            entries.put(STATE, json);
+            entries.put(MODEL, model(cube()));
+            entries.put("assets/minecraft/textures/block/stone.png", "synthetic placeholder");
+            Path path = home.resolve("legacy-mp-" + format + "-" + sequence++ + ".jar");
+            try (var out = new ZipOutputStream(Files.newOutputStream(path))) {
+                for (var entry : entries.entrySet()) {
+                    out.putNextEntry(new ZipEntry(entry.getKey()));
+                    out.write(entry.getValue().getBytes(StandardCharsets.UTF_8));
+                    out.closeEntry();
+                }
+            }
+            try (var archive = ClientResourceArchive.open(path, versionId)) {
+                var resolver = new BlockModelResolver(archive, ModelRuleRegistry.defaults());
+                var east = resolver.resolve(state(Map.of("facing", "east")));
+                assertTrue(east.resolved(), east.detail());
+                assertEquals(6, east.model().orElseThrow().faces().size());
+                var south = resolver.resolve(state(Map.of("facing", "south")));
+                assertTrue(south.resolved(), south.detail());
+                assertTrue(south.model().orElseThrow().faces().isEmpty());
+            }
+        }
+    }
     private static String model(String elements) { return "{\"textures\":{\"all\":\"block/synthetic\"},\"elements\":" + elements + "}"; }
     private static BlockState state(Map<String, String> properties) { return new BlockState("minecraft:stone", properties); }
     private void assertFallback(BlockModelResolver.Reason reason, String path, String json, Map<String, String> properties) throws Exception {

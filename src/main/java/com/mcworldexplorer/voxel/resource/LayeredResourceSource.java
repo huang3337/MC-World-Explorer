@@ -8,6 +8,7 @@ import java.util.*;
 public final class LayeredResourceSource implements BlockResourceSource {
     private final List<BlockResourceSource> sources;
     private final ClientResourceArchive.Fingerprint fingerprint;
+    private final Map<String,String> origins=new LinkedHashMap<>(16,.75f,true);
     private long bytesRead;
     public LayeredResourceSource(List<? extends BlockResourceSource> sources) {
         if(sources.isEmpty()||sources.size()>16)throw new IllegalArgumentException("资源源数量须为 1..16");
@@ -28,6 +29,39 @@ public final class LayeredResourceSource implements BlockResourceSource {
         }
         return format;
     }
+    @Override public Optional<String> baseClientVersion(){
+        String version=null;
+        for(var source:sources){
+            var candidate=source.baseClientVersion();
+            if(candidate.isEmpty())continue;
+            if(version!=null && !version.equals(candidate.get()))return Optional.empty();
+            version=candidate.get();
+        }
+        return Optional.ofNullable(version);
+    }
+    @Override public Optional<Boolean> baseDataRegistry(String directory)throws IOException {
+        return sources.getLast().baseDataRegistry(directory);
+    }
+    @Override public Optional<Long> worldSeed()throws IOException {return sources.getLast().worldSeed();}
+    @Override public Optional<Integer> biomeBlendRadius()throws IOException {return sources.getLast().biomeBlendRadius();}
+    @Override public Optional<DimensionHeight> dimensionHeight(ResourceLocation dimension)throws IOException {
+        return sources.getLast().dimensionHeight(dimension);
+    }
+    @Override public synchronized Optional<RegistrationClass> clientClass(String internalName)throws IOException {
+        RegistrationClass.checkName(internalName);
+        if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException();
+        var value=sources.getLast().clientClass(internalName);
+        if(value.isPresent()){
+            int length=value.get().bytes().length;
+            if(bytesRead+length>ClientResourceArchive.MAX_SESSION_READ_BYTES)
+                throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"资源源叠加读取超过预算");
+            bytesRead+=length;
+        }
+        return value;
+    }
+    @Override public synchronized Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){
+        return Optional.ofNullable(origins.get(kind+":"+id));
+    }
     @Override public void validate() throws IOException {for(var source:sources)source.validate();}
     @Override public boolean hasBaseTexture(ResourceLocation id)throws IOException {
         return sources.getLast().hasBaseTexture(id);
@@ -41,7 +75,12 @@ public final class LayeredResourceSource implements BlockResourceSource {
             if(data.length>kind.maxBytes())throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"单个叠加资源超过读取预算",ResourceAccessException.Scope.RESOURCE);
             if(bytesRead+data.length>ClientResourceArchive.MAX_SESSION_READ_BYTES)
                 throw new ResourceAccessException(ResourceAccessException.Reason.LIMIT_EXCEEDED,"资源源叠加读取超过预算");
-            bytesRead+=data.length;return Optional.of(data);
+            bytesRead+=data.length;
+            source.origin(kind,id).ifPresent(from->{
+                if(origins.size()>=256)origins.remove(origins.keySet().iterator().next());
+                origins.put(kind+":"+id,from);
+            });
+            return Optional.of(data);
         }}return Optional.empty();
     }
     @Override public synchronized List<String> dataLayers(ResourceLocation id)throws IOException {

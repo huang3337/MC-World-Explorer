@@ -400,6 +400,91 @@ class ChunkNbtDecoderTest {
         return builder.build();
     }
 
+    @Test void decodesLegacy115To117Int1024BiomesAndUnknownIdsDegradeWithoutLosingGeometry() throws Exception {
+        int[] biomes = new int[1024];
+        java.util.Arrays.fill(biomes, 1); // plains
+        // Section Y=4 (globalQy = 16..19), local qy=1 (globalQy=17), qz=2, qx=3 -> jungle (21)
+        biomes[((17 << 2) | 2) << 2 | 3] = 21;
+        // Section Y=5 has an unknown numeric biome ID 250
+        biomes[(20 << 4)] = 250;
+
+        CompoundBinaryTag sec4 = CompoundBinaryTag.builder()
+                .putByte("Y", (byte) 4)
+                .put("Palette", palette(named("minecraft:grass_block")))
+                .putLongArray("BlockStates", new long[0])
+                .build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder()
+                .putInt("DataVersion", 2586)
+                .put("Level", CompoundBinaryTag.builder()
+                        .putInt("xPos", 0).putInt("zPos", 0)
+                        .put("Sections", sections(sec4))
+                        .putIntArray("Biomes", biomes)
+                        .build())
+                .build();
+
+        VoxelChunk chunk = ChunkNbtDecoder.read(stream(root), 0, 0).chunk();
+        assertEquals("minecraft:grass_block", chunk.blockState(0, 64, 0).name());
+        assertEquals(java.util.Optional.of("minecraft:plains"), chunk.biomeAtQuart(0, 16, 0));
+        assertEquals(java.util.Optional.of("minecraft:jungle"), chunk.biomeAtQuart(3, 17, 2));
+        assertEquals(com.mcworldexplorer.voxel.data.BiomeSection.Status.INVALID, chunk.biomeSection(5).orElseThrow().status());
+        assertTrue(chunk.biomeAtQuart(0, 20, 0).isEmpty());
+    }
+
+    @Test void decodesLegacyInt256AndByte256BiomesAndMalformedBiomesKeepGeometry() throws Exception {
+        int[] biomesInt256 = new int[256];
+        java.util.Arrays.fill(biomesInt256, 4); // forest
+        biomesInt256[8 * 16 + 12] = 6; // qz=2, qx=3 -> swamp
+        CompoundBinaryTag sec = CompoundBinaryTag.builder()
+                .putByte("Y", (byte) 4)
+                .put("Palette", palette(named("minecraft:stone")))
+                .putLongArray("BlockStates", new long[0])
+                .build();
+        CompoundBinaryTag root113 = CompoundBinaryTag.builder()
+                .putInt("DataVersion", 1631)
+                .put("Level", CompoundBinaryTag.builder()
+                        .putInt("xPos", 0).putInt("zPos", 0)
+                        .put("Sections", sections(sec))
+                        .putIntArray("Biomes", biomesInt256)
+                        .build())
+                .build();
+        VoxelChunk chunk113 = ChunkNbtDecoder.read(stream(root113), 0, 0).chunk();
+        assertEquals(java.util.Optional.of("minecraft:forest"), chunk113.biomeAtQuart(0, 16, 0));
+        assertEquals(java.util.Optional.of("minecraft:swamp"), chunk113.biomeAtQuart(3, 19, 2));
+
+        // byte[256] with unsigned ID 129 (sunflower_plains)
+        byte[] biomesByte256 = new byte[256];
+        java.util.Arrays.fill(biomesByte256, (byte) 129);
+        byte[] blocks = new byte[4096];
+        blocks[0] = 1; // stone
+        CompoundBinaryTag legacySec = CompoundBinaryTag.builder()
+                .putByte("Y", (byte) 0)
+                .putByteArray("Blocks", blocks)
+                .putByteArray("Data", new byte[2048])
+                .build();
+        CompoundBinaryTag root112 = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .putInt("xPos", 0).putInt("zPos", 0)
+                        .put("Sections", sections(legacySec))
+                        .putByteArray("Biomes", biomesByte256)
+                        .build())
+                .build();
+        VoxelChunk chunk112 = ChunkNbtDecoder.read(stream(root112), 0, 0).chunk();
+        assertEquals("minecraft:stone", chunk112.blockState(0, 0, 0).name());
+        assertEquals(java.util.Optional.of("minecraft:sunflower_plains"), chunk112.biomeAtQuart(0, 0, 0));
+
+        // Malformed Biomes length preserves block geometry
+        CompoundBinaryTag malformedRoot = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .putInt("xPos", 0).putInt("zPos", 0)
+                        .put("Sections", sections(sec))
+                        .putIntArray("Biomes", new int[100])
+                        .build())
+                .build();
+        VoxelChunk malformedChunk = ChunkNbtDecoder.read(stream(malformedRoot), 0, 0).chunk();
+        assertEquals("minecraft:stone", malformedChunk.blockState(0, 64, 0).name());
+        assertEquals(com.mcworldexplorer.voxel.data.BiomeSection.Status.INVALID, malformedChunk.biomeSection(4).orElseThrow().status());
+    }
+
     private static ListBinaryTag sections(CompoundBinaryTag... entries) {
         ListBinaryTag.Builder<CompoundBinaryTag> builder =
                 ListBinaryTag.builder(BinaryTagTypes.COMPOUND);

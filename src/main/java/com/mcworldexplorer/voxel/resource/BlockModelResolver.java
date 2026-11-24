@@ -734,7 +734,7 @@ public final class BlockModelResolver {
         if (expression.indexOf('!') < 0) return alternatives(expression, actual);
         int format = archive.baseResourceFormat();
         boolean multiple = expression.indexOf('|') >= 0;
-        if (multiple && format < 15)
+        if (multiple && format < 4)
             throw fail(Reason.UNSUPPORTED_MODEL, "基础客户端的 multipart 多值否定语义未核对");
         // Older clients negate the whole disjunction. Newer clients negate individual terms.
         boolean groupNegation = format <= 51 && expression.startsWith("!");

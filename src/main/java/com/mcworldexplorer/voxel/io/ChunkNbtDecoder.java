@@ -2,12 +2,17 @@ package com.mcworldexplorer.voxel.io;
 
 import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.region.RegionChunkData;
+import com.mcworldexplorer.voxel.data.BiomeSection;
 import com.mcworldexplorer.voxel.data.BlockState;
 import com.mcworldexplorer.voxel.data.ChunkSection;
+import com.mcworldexplorer.voxel.data.VanillaLegacyBiomes;
 import com.mcworldexplorer.voxel.data.VoxelChunk;
+import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.BinaryTagIO;
 import net.kyori.adventure.nbt.BinaryTagTypes;
+import net.kyori.adventure.nbt.ByteArrayBinaryTag;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
+import net.kyori.adventure.nbt.IntArrayBinaryTag;
 import net.kyori.adventure.nbt.IntBinaryTag;
 import net.kyori.adventure.nbt.ListBinaryTag;
 
@@ -177,6 +182,9 @@ public final class ChunkNbtDecoder {
                     "Level/Sections contains no supported block states");
         }
         if (!scene) return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections));
+        if (layout != ChunkStorageLayout.MODERN_ROOT) {
+            readLegacyBiomes(coordinateContainer.get("Biomes"), sections, biomes);
+        }
         List<com.mcworldexplorer.voxel.data.BlockEntityData> entities = new ArrayList<>();
         var entityTags = coordinateContainer.getList(
                 layout == ChunkStorageLayout.MODERN_ROOT ? "block_entities" : "TileEntities",
@@ -262,5 +270,113 @@ public final class ChunkNbtDecoder {
             states.add(paletteReader.read(palette.get(i), sectionY, i));
         }
         return new ChunkSection(sectionY, states, data);
+    }
+
+    private static void readLegacyBiomes(
+            BinaryTag biomesTag,
+            List<ChunkSection> sections,
+            TreeMap<Integer, BiomeSection> biomes) {
+        if (biomesTag == null) {
+            return;
+        }
+        if (biomesTag instanceof IntArrayBinaryTag intTag) {
+            int[] values = intTag.value();
+            if (values.length == 0) {
+                return;
+            }
+            if (values.length == 1024) {
+                for (int sectionY = 0; sectionY < 16; sectionY++) {
+                    biomes.put(sectionY, decodeLegacy3dSection(values, sectionY));
+                }
+                return;
+            }
+            if (values.length == 256) {
+                BiomeSection column = decodeLegacy2dColumn(values, null);
+                fillLegacyColumnBiomes(column, sections, biomes);
+                return;
+            }
+            markLegacyBiomesInvalid(sections, biomes, "旧版 Level.Biomes 整型数组长度无效：" + values.length);
+            return;
+        }
+        if (biomesTag instanceof ByteArrayBinaryTag byteTag) {
+            byte[] values = byteTag.value();
+            if (values.length == 0) {
+                return;
+            }
+            if (values.length == 256) {
+                BiomeSection column = decodeLegacy2dColumn(null, values);
+                fillLegacyColumnBiomes(column, sections, biomes);
+                return;
+            }
+            markLegacyBiomesInvalid(sections, biomes, "旧版 Level.Biomes 字节数组长度无效：" + values.length);
+            return;
+        }
+        markLegacyBiomesInvalid(sections, biomes, "旧版 Level.Biomes 标签类型无效");
+    }
+
+    private static BiomeSection decodeLegacy3dSection(int[] values, int sectionY) {
+        List<String> cells = new ArrayList<>(64);
+        for (int qy = 0; qy < 4; qy++) {
+            int globalQy = sectionY * 4 + qy;
+            for (int qz = 0; qz < 4; qz++) {
+                for (int qx = 0; qx < 4; qx++) {
+                    int id = values[((globalQy << 2) | qz) << 2 | qx];
+                    var name = VanillaLegacyBiomes.name(id);
+                    if (name.isEmpty()) {
+                        return BiomeSection.invalid("未知旧版数字群系 ID：" + id);
+                    }
+                    cells.add(name.get());
+                }
+            }
+        }
+        return BiomeSection.fromCells(cells);
+    }
+
+    private static BiomeSection decodeLegacy2dColumn(int[] intValues, byte[] byteValues) {
+        String[] horizontal = new String[16];
+        for (int qz = 0; qz < 4; qz++) {
+            for (int qx = 0; qx < 4; qx++) {
+                int index = (qz * 4) * 16 + (qx * 4);
+                int id = intValues != null ? intValues[index] : (byteValues[index] & 0xFF);
+                var name = VanillaLegacyBiomes.name(id);
+                if (name.isEmpty()) {
+                    return BiomeSection.invalid("未知旧版数字群系 ID：" + id);
+                }
+                horizontal[qz * 4 + qx] = name.get();
+            }
+        }
+        List<String> cells = new ArrayList<>(64);
+        for (int qy = 0; qy < 4; qy++) {
+            for (int i = 0; i < 16; i++) {
+                cells.add(horizontal[i]);
+            }
+        }
+        return BiomeSection.fromCells(cells);
+    }
+
+    private static void fillLegacyColumnBiomes(
+            BiomeSection column,
+            List<ChunkSection> sections,
+            TreeMap<Integer, BiomeSection> biomes) {
+        for (int sectionY = 0; sectionY < 16; sectionY++) {
+            biomes.put(sectionY, column);
+        }
+        for (ChunkSection section : sections) {
+            biomes.putIfAbsent(section.sectionY(), column);
+        }
+    }
+
+    private static void markLegacyBiomesInvalid(
+            List<ChunkSection> sections,
+            TreeMap<Integer, BiomeSection> biomes,
+            String detail) {
+        BiomeSection invalid = BiomeSection.invalid(detail);
+        if (sections.isEmpty()) {
+            biomes.put(0, invalid);
+            return;
+        }
+        for (ChunkSection section : sections) {
+            biomes.put(section.sectionY(), invalid);
+        }
     }
 }

@@ -43,4 +43,31 @@ class LayeredResourceSourceTest {
         assertTrue(resources.read(ResourceLocation.Kind.TEXTURE,id).isPresent());
         assertFalse(resources.hasBaseTexture(id));
     }
+    @Test void delegatesBaseClientCapabilitiesAndRejectsConflictingClientVersions() throws Exception {
+        var base = new BlockResourceSource() {
+            public ClientResourceArchive.Fingerprint fingerprint(){return new ClientResourceArchive.Fingerprint(Path.of("client").toAbsolutePath(),1,1,"client");}
+            public Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id){return Optional.empty();}
+            public Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id){return Optional.empty();}
+            public Optional<String> baseClientVersion(){return Optional.of("1.16.5");}
+            public int baseResourceFormat(){return 6;}
+            public Optional<Boolean> baseDataRegistry(String directory){return Optional.of(false);}
+            public Optional<Long> worldSeed(){return Optional.of(77L);}
+            public Optional<Integer> biomeBlendRadius(){return Optional.of(2);}
+        };
+        var overlay = source("pack", Map.of());
+        var layered = new LayeredResourceSource(List.of(overlay, base));
+        assertEquals(Optional.of("1.16.5"), layered.baseClientVersion());
+        assertEquals(6, layered.baseResourceFormat());
+        assertEquals(Optional.of(false), layered.baseDataRegistry("worldgen/biome"));
+        assertEquals(Optional.of(77L), layered.worldSeed());
+        assertEquals(Optional.of(2), layered.biomeBlendRadius());
+
+        var conflicting = new BlockResourceSource() {
+            public ClientResourceArchive.Fingerprint fingerprint(){return new ClientResourceArchive.Fingerprint(Path.of("other").toAbsolutePath(),1,1,"other");}
+            public Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id){return Optional.empty();}
+            public Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id){return Optional.empty();}
+            public Optional<String> baseClientVersion(){return Optional.of("1.18.2");}
+        };
+        assertEquals(Optional.empty(), new LayeredResourceSource(List.of(conflicting, base)).baseClientVersion());
+    }
 }

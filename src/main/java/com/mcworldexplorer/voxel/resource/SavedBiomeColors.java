@@ -9,7 +9,7 @@ import static com.mcworldexplorer.voxel.resource.ModelRule.BiomeColor;
 /** Shared biome resolvers. Definitions cache independently of position-dependent grass modifiers. */
 final class SavedBiomeColors {
     private record Key(String biome,BiomeColor kind) { }
-    private record Color(int rgb,String modifier,List<Source> sources) {
+    private record Color(int rgb,String modifier,List<Source> sources,boolean fallbackClimate) {
         int at(int x,int z,boolean floatNoise){return switch(modifier){case "dark_forest"->((rgb&0xfefefe)+0x28340a)>>1;case "swamp"->BiomeGrassNoise.color(x,z,floatNoise);default->rgb;};}
     }
     private final Map<Key,Color> colors=new LinkedHashMap<>(16,.75f,true);
@@ -71,7 +71,11 @@ final class SavedBiomeColors {
         floatSwampNoise=protocol.floatSwampNoise();
     }
     @FunctionalInterface interface DataReader {Optional<JsonObject> read(ResourceLocation id)throws IOException,ModelRule.Failure;}
-    record Inputs(String version,long hashedSeed,int radius,BlockResourceSource.DimensionHeight height) { }
+    record Inputs(String version,long hashedSeed,int radius,BlockResourceSource.DimensionHeight height,boolean fallbackDimensionHeight) {
+        Inputs(String version,long hashedSeed,int radius,BlockResourceSource.DimensionHeight height){
+            this(version,hashedSeed,radius,height,false);
+        }
+    }
     static Inputs inputs(BlockResourceSource source,String dimensionId)throws IOException,ModelRule.Failure {
         String version=source.baseClientVersion().orElse("");
 
@@ -79,8 +83,37 @@ final class SavedBiomeColors {
         int radius=source.biomeBlendRadius().orElseThrow(()->failure(Reason.CONTEXT_REQUIRED,"缺少当前实例群系混合设置"));
         if(radius<0||radius>7)throw invalid("群系混合半径须为0..7");
         ResourceLocation dimension;try{dimension=ResourceLocation.parse(dimensionId);}catch(IllegalArgumentException invalid){throw invalid("保存维度ID无效");}
-        var height=source.dimensionHeight(dimension).orElseThrow(()->failure(Reason.CONTEXT_REQUIRED,"缺少保存维度类型/有效高度，不能从现有区段推测"));
-        return new Inputs(version,SavedBiomeSampler.obfuscateSeed(seed),radius,height);
+        var heightOpt=source.dimensionHeight(dimension);
+        boolean fallbackHeight=false;
+        BlockResourceSource.DimensionHeight height;
+        if(heightOpt.isPresent()){
+            height=heightOpt.get();
+        }else{
+            height=legacyDimensionHeight(source,dimension)
+                    .orElseThrow(()->failure(Reason.CONTEXT_REQUIRED,"缺少保存维度类型/有效高度，不能从现有区段推测"));
+            fallbackHeight=true;
+        }
+        return new Inputs(version,SavedBiomeSampler.obfuscateSeed(seed),radius,height,fallbackHeight);
+    }
+    private static Optional<BlockResourceSource.DimensionHeight> legacyDimensionHeight(
+            BlockResourceSource source, ResourceLocation dimension) throws IOException {
+        int format = source.baseResourceFormat();
+        if (format < 4 || !source.baseDataRegistry("dimension_type").equals(Optional.of(false))) {
+            return Optional.empty();
+        }
+        String id = dimension.toString();
+        if (format <= 7) {
+            return switch (id) {
+                case "minecraft:overworld", "minecraft:the_nether", "minecraft:the_end" ->
+                        Optional.of(new BlockResourceSource.DimensionHeight(0, 256));
+                default -> Optional.empty();
+            };
+        }
+        return switch (id) {
+            case "minecraft:overworld" -> Optional.of(new BlockResourceSource.DimensionHeight(-64, 384));
+            case "minecraft:the_nether", "minecraft:the_end" -> Optional.of(new BlockResourceSource.DimensionHeight(0, 256));
+            default -> Optional.empty();
+        };
     }
     // Host preparation owns source validation; no filesystem validation per block sample.
     int color(BiomeColor kind,BlockResourceSource source,DataReader data,java.util.function.Consumer<String> note,
@@ -95,48 +128,100 @@ final class SavedBiomeColors {
             samples(block,inputs);
             Color last = null;
             String lastBiome = null;
+            boolean usedFallbackClimate = false;
             for(int dz=-radius;dz<=radius;dz++)for(int dx=-radius;dx<=radius;dx++){
                 int x=(int)position.x()+dx,z=(int)position.z()+dz;
                 String id = window.biome(x,position.y(),z);
                 if (!id.equals(lastBiome)) {
                     last = definition(new Key(id,kind),source,data,sources);
                     lastBiome = id;
+                    usedFallbackClimate |= last.fallbackClimate();
                 }
                 int rgb=last.at(x,z,floatSwampNoise);red+=(rgb>>16)&255;green+=(rgb>>8)&255;blue+=rgb&255;
             }
-            note.accept("保存群系颜色："+version+" "+kind+"；种子扰动与混合半径"+radius+"；维度高度"+height.minY()+".."+(height.minY()+height.height()-1)+"；有效数据包/颜色表，未执行游戏代码");
+            StringBuilder detail = new StringBuilder("保存群系颜色：").append(version).append(' ').append(kind)
+                    .append("；种子扰动与混合半径").append(radius)
+                    .append("；维度高度").append(height.minY()).append("..").append(height.minY()+height.height()-1)
+                    .append("；有效数据包/颜色表，未执行游戏代码");
+            if (inputs.fallbackDimensionHeight()) {
+                detail.append("；维度高度取自原版标准默认范围（客户端未内置 dimension_type）");
+            }
+            if (usedFallbackClimate) {
+                detail.append("；群系气候与水色取自内置原版表近似（客户端未内置 worldgen/biome）");
+            }
+            note.accept(detail.toString());
             return (red/count)<<16|(green/count)<<8|blue/count;
     }
     private Color definition(Key key,BlockResourceSource source,DataReader data,List<Source> sources)throws IOException,ModelRule.Failure {
         var cached=colors.get(key);if(cached!=null){for(var ref:cached.sources())if(!sources.contains(ref))sources.add(ref);return cached;}
         int start=sources.size();ResourceLocation id;
         try {id=ResourceLocation.parse(key.biome());} catch(IllegalArgumentException invalid){throw invalid("保存群系ID无效");}
-        var json=data.read(new ResourceLocation(id.namespace(),"worldgen/biome/"+id.path()+".json")).orElseThrow(()->failure(Reason.MISSING_RESOURCE,"缺少有效群系定义："+id));
+        var jsonOpt=data.read(new ResourceLocation(id.namespace(),"worldgen/biome/"+id.path()+".json"));
+        if(jsonOpt.isEmpty()){
+            if(source!=null && source.baseResourceFormat()>=4
+                    && source.baseDataRegistry("worldgen/biome").equals(Optional.of(false))
+                    && id.namespace().equals("minecraft")){
+                var climate=com.mcworldexplorer.voxel.data.VanillaLegacyBiomes.climate(id.toString());
+                if(climate.isPresent()){
+                    return cacheColor(key, legacyColor(key, climate.get(), source, sources, start));
+                }
+            }
+            throw failure(Reason.MISSING_RESOURCE,"缺少有效群系定义："+id);
+        }
+        var json=jsonOpt.get();
         var effect=json.get("effects");if(effect==null||!effect.isJsonObject())throw invalid("群系effects须为对象："+id);
         var effects=effect.getAsJsonObject();String field=key.kind().name().toLowerCase(Locale.ROOT)+"_color";var override=effects.get(field);int rgb;
         if(override!=null)rgb=rgb(override,field);
         else if(key.kind()==BiomeColor.WATER)throw invalid("群系缺少water_color："+id);
         else{
             double temperature=climate(json,"temperature"),downfall=climate(json,"downfall");
-            int x=(int)((1-temperature)*255),y=(int)((1-downfall*temperature)*255);
-            var colormap=new ResourceLocation("minecraft","colormap/"+key.kind().name().toLowerCase(Locale.ROOT));var pixels=colormaps.get(key.kind());
-            if(pixels==null){
-                int textureTraceStart=sources.size();
-                var bytes=source.read(ResourceLocation.Kind.TEXTURE,colormap).orElseThrow(()->failure(Reason.MISSING_RESOURCE,"缺少有效颜色表："+colormap));
-                var reference=new Source(ResourceLocation.Kind.TEXTURE,colormap);
-                if(!sources.subList(textureTraceStart,sources.size()).contains(reference))sources.add(reference);
-                try{var image=TextureAtlas.decode(bytes,false);if(image.getWidth()!=256||image.getHeight()!=256)throw new IOException("颜色表须为256×256");pixels=image.getRGB(0,0,256,256,null,0,256);colormaps.put(key.kind(),pixels);}
-                catch(IOException invalid){throw invalid("颜色表无效："+invalid.getMessage());}
-            }else sources.add(new Source(ResourceLocation.Kind.TEXTURE,colormap));
-            rgb=pixels[y*256+x]&0xffffff;
+            rgb=sampleColormap(key.kind(),temperature,downfall,source,sources);
         }
         String modifier="none";
         if(key.kind()==BiomeColor.GRASS&&effects.has("grass_color_modifier")){
             var raw=effects.get("grass_color_modifier");if(!raw.isJsonPrimitive()||!raw.getAsJsonPrimitive().isString())throw invalid("grass_color_modifier须为字符串");
             modifier=raw.getAsString();if(!Set.of("none","dark_forest","swamp").contains(modifier))throw failure(Reason.UNSUPPORTED_MODEL,"未知草色修饰协议："+modifier);
         }
-        var value=new Color(rgb,modifier,List.copyOf(new LinkedHashSet<>(sources.subList(start,sources.size()))));
-        if(colors.size()>=128)colors.remove(colors.keySet().iterator().next());colors.put(key,value);return value;
+        return cacheColor(key, new Color(rgb,modifier,List.copyOf(new LinkedHashSet<>(sources.subList(start,sources.size()))),false));
+    }
+    private Color legacyColor(Key key,com.mcworldexplorer.voxel.data.VanillaLegacyBiomes.Climate climate,
+                              BlockResourceSource source,List<Source> sources,int start)throws IOException,ModelRule.Failure {
+        int rgb;
+        String modifier = "none";
+        if (key.kind() == BiomeColor.WATER) {
+            rgb = climate.waterColor() & 0xffffff;
+        } else if (key.kind() == BiomeColor.GRASS && climate.grassColorOverride() != null) {
+            rgb = climate.grassColorOverride() & 0xffffff;
+            modifier = climate.grassColorModifier();
+        } else if (key.kind() == BiomeColor.FOLIAGE && climate.foliageColorOverride() != null) {
+            rgb = climate.foliageColorOverride() & 0xffffff;
+        } else {
+            double temperature = Math.max(0f, Math.min(1f, climate.temperature()));
+            double downfall = Math.max(0f, Math.min(1f, climate.downfall()));
+            rgb = sampleColormap(key.kind(), temperature, downfall, source, sources);
+            if (key.kind() == BiomeColor.GRASS) {
+                modifier = climate.grassColorModifier();
+            }
+        }
+        return new Color(rgb, modifier, List.copyOf(new LinkedHashSet<>(sources.subList(start, sources.size()))), true);
+    }
+    private int sampleColormap(BiomeColor kind,double temperature,double downfall,BlockResourceSource source,List<Source> sources)throws IOException,ModelRule.Failure {
+        int x=(int)((1-temperature)*255),y=(int)((1-downfall*temperature)*255);
+        var colormap=new ResourceLocation("minecraft","colormap/"+kind.name().toLowerCase(Locale.ROOT));var pixels=colormaps.get(kind);
+        if(pixels==null){
+            int textureTraceStart=sources.size();
+            var bytes=source.read(ResourceLocation.Kind.TEXTURE,colormap).orElseThrow(()->failure(Reason.MISSING_RESOURCE,"缺少有效颜色表："+colormap));
+            var reference=new Source(ResourceLocation.Kind.TEXTURE,colormap);
+            if(!sources.subList(textureTraceStart,sources.size()).contains(reference))sources.add(reference);
+            try{var image=TextureAtlas.decode(bytes,false);if(image.getWidth()!=256||image.getHeight()!=256)throw new IOException("颜色表须为256×256");pixels=image.getRGB(0,0,256,256,null,0,256);colormaps.put(kind,pixels);}
+            catch(IOException invalid){throw invalid("颜色表无效："+invalid.getMessage());}
+        }else sources.add(new Source(ResourceLocation.Kind.TEXTURE,colormap));
+        return pixels[y*256+x]&0xffffff;
+    }
+    private Color cacheColor(Key key,Color value){
+        if(colors.size()>=128)colors.remove(colors.keySet().iterator().next());
+        colors.put(key,value);
+        return value;
     }
     private static int rgb(JsonElement value,String field)throws ModelRule.Failure {
         try{

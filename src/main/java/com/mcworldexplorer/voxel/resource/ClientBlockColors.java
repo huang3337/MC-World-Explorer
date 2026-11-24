@@ -31,15 +31,30 @@ final class ClientBlockColors {
     }
     ClientBlockColors(BlockResourceSource source) throws IOException, ModelRule.Failure {
         String version=source.baseClientVersion().orElse("");
-        layers = VanillaTintLayers.find(source, version).orElse(null);
-        if (layers != null) {
+        var verifiedLayers = VanillaTintLayers.find(source, version).orElse(null);
+        if (verifiedLayers != null) {
+            layers = verifiedLayers;
             bindings = Map.of();
             baseTextures = VanillaTintLayers.verifiedBaseTextures();
             unresolvedBindings = Map.of();
             provenance = layers.provenance();
             return;
         }
-        if(!hasLegacyRegistry(version))throw unsupported("标准颜色协议尚未核对此客户端："+version);
+        if (!hasLegacyRegistry(version)) {
+            if (VanillaTintLayers.hasRegisteredProfile(version)) {
+                throw unsupported("标准颜色协议指纹未匹配此已登记客户端：" + version);
+            }
+            if (source.baseResourceFormat() >= 4 && !version.isBlank()) {
+                layers = VanillaTintLayers.genericFallback(version, source.baseResourceFormat());
+                bindings = Map.of();
+                baseTextures = VanillaTintLayers.verifiedBaseTextures();
+                unresolvedBindings = Map.of();
+                provenance = layers.provenance();
+                return;
+            }
+            throw unsupported("标准颜色协议尚未核对此客户端：" + version);
+        }
+        layers = null;
         JsonObject profile;
         try(var input=getClass().getResourceAsStream("/model-protocols/client-block-colors-"+version+".json")) {
             if(input==null)throw unsupported("缺少标准颜色协议证明");

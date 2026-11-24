@@ -35,6 +35,8 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
     public static final int MAX_JSON_NESTING = 32;
     public static final int MAX_METADATA_BYTES = 64 * 1024;
     public static final long MAX_SESSION_READ_BYTES = 64L * 1024 * 1024;
+    private static final java.util.regex.Pattern LEGACY_113_VERSION =
+            java.util.regex.Pattern.compile("^1\\.13(?:\\.[12])?(?:[._+-].*)?$");
 
     public record Metadata(String versionId,int worldVersion,int resourcePackVersion,int resourcePackMinor) {
         public Metadata(String versionId,int worldVersion,int resourcePackVersion){this(versionId,worldVersion,resourcePackVersion,0);}
@@ -72,9 +74,20 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
             zip = new ZipFile(path.toFile());
             validateIndex(zip);
             ZipEntry version = zip.getEntry("version.json");
-            if (version == null || version.isDirectory()) throw new ResourceAccessException(INVALID_METADATA, "资源文件缺少 version.json");
-            byte[] bytes = readEntry(zip, version, MAX_METADATA_BYTES);
-            Metadata metadata = parseMetadata(bytes);
+            byte[] bytes;
+            Metadata metadata;
+            if (version == null || version.isDirectory()) {
+                if (!LEGACY_113_VERSION.matcher(expectedVersion).matches())
+                    throw new ResourceAccessException(INVALID_METADATA, "资源文件缺少 version.json");
+                ZipEntry packMeta = zip.getEntry("pack.mcmeta");
+                if (packMeta == null || packMeta.isDirectory())
+                    throw new ResourceAccessException(INVALID_METADATA, "资源文件缺少 version.json 与 pack.mcmeta");
+                bytes = readEntry(zip, packMeta, MAX_METADATA_BYTES);
+                metadata = parseLegacy113PackMetadata(bytes, expectedVersion);
+            } else {
+                bytes = readEntry(zip, version, MAX_METADATA_BYTES);
+                metadata = parseMetadata(bytes);
+            }
             for (String required : new String[]{"assets/minecraft/blockstates/stone.json",
                     "assets/minecraft/models/block/stone.json", "assets/minecraft/textures/block/stone.png"}) {
                 ZipEntry asset = zip.getEntry(required);
@@ -235,22 +248,31 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
                         world = reader.nextInt();
                     }
                     case "pack_version" -> {
-                        Set<String> packFields = new HashSet<>();
-                        reader.beginObject();
-                        while (reader.hasNext()) {
-                            String name = reader.nextName();
-                            if (!packFields.add(name)) throw new IOException("duplicate pack metadata field");
-                            if (name.equals("resource")||name.equals("resource_major")) {
-                                if (reader.peek() != JsonToken.NUMBER) throw new IOException("pack version must be numeric");
-                                int major=reader.nextInt();
-                                if(pack!=-1&&pack!=major)throw new IOException("conflicting resource format versions");
-                                pack=major;
-                            } else if(name.equals("resource_minor")) {
-                                if(reader.peek()!=JsonToken.NUMBER)throw new IOException("resource minor format must be numeric");
-                                minor=reader.nextInt();if(minor<0)throw new IOException("negative resource minor format");
-                            } else reader.skipValue();
+                        if (reader.peek() == JsonToken.NUMBER) {
+                            int single = reader.nextInt();
+                            if (single < 1) throw new IOException("pack version must be positive");
+                            pack = single;
+                            minor = 0;
+                        } else if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                            Set<String> packFields = new HashSet<>();
+                            reader.beginObject();
+                            while (reader.hasNext()) {
+                                String name = reader.nextName();
+                                if (!packFields.add(name)) throw new IOException("duplicate pack metadata field");
+                                if (name.equals("resource")||name.equals("resource_major")) {
+                                    if (reader.peek() != JsonToken.NUMBER) throw new IOException("pack version must be numeric");
+                                    int major=reader.nextInt();
+                                    if(pack!=-1&&pack!=major)throw new IOException("conflicting resource format versions");
+                                    pack=major;
+                                } else if(name.equals("resource_minor")) {
+                                    if(reader.peek()!=JsonToken.NUMBER)throw new IOException("resource minor format must be numeric");
+                                    minor=reader.nextInt();if(minor<0)throw new IOException("negative resource minor format");
+                                } else reader.skipValue();
+                            }
+                            reader.endObject();
+                        } else {
+                            throw new IOException("pack version must be object or integer");
                         }
-                        reader.endObject();
                     }
                     default -> reader.skipValue();
                 }
@@ -261,6 +283,39 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
             return new Metadata(id, world, pack,minor);
         } catch (IOException | IllegalStateException | NumberFormatException e) {
             throw new ResourceAccessException(INVALID_METADATA, "客户端版本元数据无效", e);
+        }
+    }
+
+    private static Metadata parseLegacy113PackMetadata(byte[] bytes, String expectedVersion) throws IOException {
+        try (JsonReader reader = new JsonReader(new StringReader(decodeUtf8(bytes)))) {
+            reader.setStrictness(Strictness.STRICT);
+            reader.setNestingLimit(MAX_JSON_NESTING);
+            int packFormat = -1;
+            Set<String> fields = new HashSet<>();
+            reader.beginObject();
+            while (reader.hasNext()) {
+                String field = reader.nextName();
+                if (!fields.add(field)) throw new IOException("duplicate pack.mcmeta field");
+                if (field.equals("pack")) {
+                    Set<String> packFields = new HashSet<>();
+                    reader.beginObject();
+                    while (reader.hasNext()) {
+                        String name = reader.nextName();
+                        if (!packFields.add(name)) throw new IOException("duplicate pack section field");
+                        if (name.equals("pack_format")) {
+                            if (reader.peek() != JsonToken.NUMBER) throw new IOException("pack_format must be numeric");
+                            packFormat = reader.nextInt();
+                        } else reader.skipValue();
+                    }
+                    reader.endObject();
+                } else reader.skipValue();
+            }
+            reader.endObject();
+            if (reader.peek() != JsonToken.END_DOCUMENT || packFormat != 4)
+                throw new IOException("invalid 1.13 pack.mcmeta format");
+            return new Metadata(expectedVersion, -1, 4, 0);
+        } catch (IOException | IllegalStateException | NumberFormatException e) {
+            throw new ResourceAccessException(INVALID_METADATA, "1.13 客户端 pack.mcmeta 元数据无效", e);
         }
     }
 

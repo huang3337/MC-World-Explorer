@@ -17,6 +17,7 @@
       "blocks": [
         "grass_block",
         "fern",
+        "grass",
         "short_grass",
         "potted_fern",
         "bush",
@@ -245,6 +246,7 @@
       ],
       "compatibleBuilds": [
         {
+          "version": "26.1",
           "clientSha256": "bc6194c61566b587f196090d730698f2191170f7580adb143e4ff839939d3840",
           "changedClasses": {
             "net/minecraft/world/level/block/Blocks": {

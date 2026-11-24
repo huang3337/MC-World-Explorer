@@ -43,5 +43,14 @@ public final class BiomeSection {
         }
         return new BiomeSection(values,"");
     }
-    private static BiomeSection invalid(String detail){return new BiomeSection(List.of(),detail);}
+    /** Builds a biome section from 64 already-resolved YZX-ordered biome identifiers. */
+    public static BiomeSection fromCells(List<String> cells){
+        if(cells==null||cells.size()!=64)return invalid("biome section requires exactly 64 cells");
+        for(String name:cells){
+            if(name==null||name.length()>512||!name.matches("[a-z0-9_.-]+:[a-z0-9_./-]+"))
+                return invalid("invalid saved biome identifier");
+        }
+        return new BiomeSection(cells,"");
+    }
+    public static BiomeSection invalid(String detail){return new BiomeSection(List.of(),detail);}
 }

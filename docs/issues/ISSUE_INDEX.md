@@ -1,9 +1,10 @@
 # Issue 编号登记与记录索引
 
-更新于 2026-11-24。按源文件名排序，同一前缀内编号递增。
+更新于 2026-11-25。按源文件名排序，同一前缀内编号递增。
 
 ## 对齐结果
 
+- 2026-11-25，0.7.7 旧版客户端准入与着色回退审查的 2 项问题已修复归档，1 项中、1 项低。现有 149 个前缀、241 个已用编号，其中 150 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-24，0.7.6 预扁平化兼容审查的 5 项问题已修复归档，2 项高、3 项中。现有 147 个前缀、239 个已用编号，其中 148 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-19，二维渲染排查的 2 项问题已修复归档，1 项高、1 项中。现有 145 个前缀、234 个已用编号，其中 143 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-19，文档收尾审查归档 4 项低严重程度的代码精简。登记 143 个前缀、232 个编号，141 个有正文或最终条目，91 个缺失编号继续占用。
@@ -71,6 +72,7 @@
 | `JavaFxCameraTransform.java` | `JFXCAM` | 001 | `ISSUE-JFXCAM-001` | `ISSUE-JFXCAM-002` | [V0.4：001](resolved/V0.4/JavaFxCameraTransform.java.md) |
 | `JavaFxOrbitController.java` | `JFXORBIT` | 001 | `ISSUE-JFXORBIT-001` | `ISSUE-JFXORBIT-002` | [V0.4：001](resolved/V0.4/JavaFxOrbitController.java.md) |
 | `LauncherResourceLibraries.java` | `LAUNCHLIB` | 001,002 | `ISSUE-LAUNCHLIB-002` | `ISSUE-LAUNCHLIB-003` | [正文缺失登记](#缺失正文登记) |
+| `LayeredResourceSource.java` | `LAYERED` | 001 | `ISSUE-LAYERED-001` | `ISSUE-LAYERED-002` | [V0.7.7：001](resolved/V0.7.7/LayeredResourceSource.java.md) |
 | `LevelDatReader.java` | `LEVELDAT` | 001,002,003,004,005,006,007,008 | `ISSUE-LEVELDAT-008` | `ISSUE-LEVELDAT-009` | [V0.7.5：007–008](resolved/V0.7.5/LevelDatReader.java.md)、[V0.1.1：001–006](resolved/V0.1.1/LevelDatReader.java.md) |
 | `LwjglV04Renderer.java` | `LWJGLRENDER` | 001 | `ISSUE-LWJGLRENDER-001` | `ISSUE-LWJGLRENDER-002` | [V0.4：001](resolved/V0.4/LwjglV04Renderer.java.md) |
 | `LwjglV05Launcher.java` | `V05-MEM` | 001 | `ISSUE-V05-MEM-001` | `ISSUE-V05-MEM-002` | [V0.5：001](resolved/V0.5/LwjglV05Launcher.java.md) |
@@ -137,6 +139,7 @@
 | `V04Arguments.java` | `V04ARGS` | 001,002 | `ISSUE-V04ARGS-002` | `ISSUE-V04ARGS-003` | [V0.4：001–002](resolved/V0.4/V04Arguments.java.md) |
 | `V05ReportWriter.java` | `V05-REPORT` | 001 | `ISSUE-V05-REPORT-001` | `ISSUE-V05-REPORT-002` | [V0.5：001](resolved/V0.5/V05ReportWriter.java.md) |
 | `V05ValidationPipeline.java` | `V05-PIPE` | 001 | `ISSUE-V05-PIPE-001` | `ISSUE-V05-PIPE-002` | [V0.5：001](resolved/V0.5/V05ValidationPipeline.java.md) |
+| `VanillaTintLayers.java` | `VTINT` | 001 | `ISSUE-VTINT-001` | `ISSUE-VTINT-002` | [V0.7.7：001](resolved/V0.7.7/VanillaTintLayers.java.md) |
 | `ViewerAreaList.java` | `VAREALIST` | 001 | `ISSUE-VAREALIST-001` | `ISSUE-VAREALIST-002` | [V0.7：001](resolved/V0.7/ViewerAreaList.java.md) |
 | `ViewerAreaThumbnail.java` | `VTHUMB` | 001 | `ISSUE-VTHUMB-001` | `ISSUE-VTHUMB-002` | [V0.7：001](resolved/V0.7/ViewerAreaThumbnail.java.md) |
 | `ViewerCameraMatrices.java` | `VCMAT` | — | — | `ISSUE-VCMAT-001` | 尚未登记问题 |
