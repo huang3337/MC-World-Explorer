@@ -1,13 +1,16 @@
 package com.mcworldexplorer.voxel.resource;
 
+import com.mcworldexplorer.nbt.LevelDatReader;
 import com.mcworldexplorer.voxel.io.CancellationSignal;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /** Bounded discovery of existing local resources. No recursive search, downloads or launcher execution. */
 public final class ClientResourceLocator {
     public static final int MAX_CANDIDATES = 16;
+    private static final Pattern PRE_FLATTENING_RELEASE = Pattern.compile("^1\\.(?:[2-9]|1[0-2])(?:\\.[0-9]+)?(?:[._+-].*)?$");
     public enum Status { FOUND, MISSING, AMBIGUOUS, INVALID_VERSION }
     public record Result(Status status, Optional<Path> path, String message, int checkedCandidates) { }
 
@@ -16,6 +19,8 @@ public final class ClientResourceLocator {
         Objects.requireNonNull(world); Objects.requireNonNull(binding);
         Objects.requireNonNull(roots); Objects.requireNonNull(cancellation);
         check(cancellation);
+        if (isPreFlatteningVersion(version)) return new Result(Status.INVALID_VERSION, Optional.empty(),
+                "预扁平化旧版存档，三维预览使用简化颜色底座", 0);
         if (!isValidVersion(version)) return new Result(Status.INVALID_VERSION, Optional.empty(),
                 "无法识别存档版本，暂用简化颜色", 0);
         List<List<Path>> tiers = new ArrayList<>();
@@ -66,6 +71,12 @@ public final class ClientResourceLocator {
         }
         return new Result(Status.MISSING, Optional.empty(), "未找到可用的 " + version + " 客户端资源，可手动选择或使用简化颜色"
                 + (rejected.isEmpty() ? "" : "\n已跳过：" + String.join("；", rejected)), checked);
+    }
+
+    public static boolean isPreFlatteningVersion(String version) {
+        if (version == null || version.isBlank()) return false;
+        return LevelDatReader.LEGACY_PRE_1_9_VERSION.equals(version)
+                || PRE_FLATTENING_RELEASE.matcher(version).matches();
     }
 
     public static boolean isValidVersion(String version) {

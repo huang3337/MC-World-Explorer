@@ -50,7 +50,10 @@ final class BuiltinBlockModels implements BlockResourceSource {
     @Override public List<String> dataLayers(ResourceLocation id)throws IOException{return source.dataLayers(id);}
     @Override public Optional<String> readJson(ResourceLocation.Kind kind,ResourceLocation id)throws IOException{return source.readJson(kind,id);}
     Optional<List<Part>> resolve(BlockState state) throws IOException {
-        var id=ResourceLocation.parse(state.name());if(!id.namespace().equals("minecraft"))return Optional.empty();
+        ResourceLocation id;
+        try { id = ResourceLocation.parse(state.name()); }
+        catch (IllegalArgumentException invalid) { return Optional.empty(); }
+        if(!id.namespace().equals("minecraft"))return Optional.empty();
         String name=id.path();
         var metadata=entities.get(state.properties().getOrDefault("__mcwe_entity",""));
         if(metadata!=null&&!metadata.visual().getString("__visual_warning").isBlank())note(state,metadata.visual().getString("__visual_warning"));

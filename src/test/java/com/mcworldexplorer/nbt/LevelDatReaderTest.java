@@ -251,4 +251,20 @@ public class LevelDatReaderTest {
 
         assertFalse(info.isParsed());
     }
+
+    @Test
+    void labelsPre19AnvilWorldWithoutVersionCompound() throws IOException {
+        Path worldFolder = Files.createDirectory(tempDir.resolve("legacy-1710"));
+        CompoundBinaryTag data = CompoundBinaryTag.builder()
+                .putString("LevelName", "Legacy 1.7.10")
+                .putInt("version", LevelDatReader.ANVIL_DATA_VERSION_FLAG)
+                .build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder().put("Data", data).build();
+        BinaryTagIO.writer().write(root, worldFolder.resolve("level.dat"), BinaryTagIO.Compression.GZIP);
+
+        WorldInfo info = LevelDatReader.readLevelDat(worldFolder);
+
+        assertTrue(info.isParsed());
+        assertEquals(LevelDatReader.LEGACY_PRE_1_9_VERSION, info.getVersionName());
+    }
 }

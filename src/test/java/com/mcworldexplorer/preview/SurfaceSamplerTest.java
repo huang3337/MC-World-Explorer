@@ -200,6 +200,42 @@ class SurfaceSamplerTest {
                 invalidStorage.getReason());
     }
 
+    @Test
+    void samplesPreFlatteningLegacySectionWithFmlMapping() throws IOException {
+        byte[] blocks = new byte[4096];
+        byte[] data = new byte[2048];
+        byte[] add = new byte[2048];
+        int grassIdx = blockIndex(2, 5, 3);
+        blocks[grassIdx] = 2; // grass -> grass_block
+        int modIdx = blockIndex(4, 6, 7);
+        blocks[modIdx] = (byte) (312 & 0xFF);
+        add[modIdx >>> 1] = (byte) ((modIdx & 1) == 0 ? (312 >>> 8) : ((312 >>> 8) << 4));
+
+        CompoundBinaryTag section = CompoundBinaryTag.builder()
+                .putByte("Y", (byte) 4)
+                .putByteArray("Blocks", blocks)
+                .putByteArray("Data", data)
+                .putByteArray("Add", add)
+                .build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .put("Sections", sections(section))
+                        .build())
+                .build();
+
+        var fml = com.mcworldexplorer.nbt.SavedLegacyIdMap.of(
+                com.mcworldexplorer.nbt.SavedLegacyIdMap.Source.FML_ITEM_DATA,
+                java.util.Map.of(312, "Thaumcraft:blockMagicalLeaves"));
+
+        ChunkSurface surface = sampler.sample(stream(root), fml);
+
+        assertEquals(ChunkSurfaceLayout.LEVEL_LEGACY, surface.getLayout());
+        assertEquals(new SurfaceColumn("minecraft:grass_block", 69),
+                surface.getColumn(2, 3).orElseThrow());
+        assertEquals(new SurfaceColumn("Thaumcraft:blockMagicalLeaves", 70),
+                surface.getColumn(4, 7).orElseThrow());
+    }
+
     private static ListBinaryTag palette(String... names) {
         ListBinaryTag.Builder<CompoundBinaryTag> builder = ListBinaryTag.builder(BinaryTagTypes.COMPOUND);
         for (String name : names) {

@@ -15,6 +15,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 
 public class LevelDatReader {
+    public static final int ANVIL_DATA_VERSION_FLAG = 19133;
+    public static final String LEGACY_PRE_1_9_VERSION = "Anvil (<1.9)";
+
     private static final Logger LOGGER = LoggerFactory.getLogger(LevelDatReader.class);
     static final long MAX_LEVEL_DAT_BYTES = 16L * 1024 * 1024;
     private static final BinaryTagIO.Reader LEVEL_DAT_READER = BinaryTagIO.reader(MAX_LEVEL_DAT_BYTES);
@@ -24,26 +27,30 @@ public class LevelDatReader {
             BinaryTagIO.Compression.ZLIB
     };
 
+    static CompoundBinaryTag readRootTag(Path levelDatPath) throws IOException {
+        Exception lastFailure = null;
+        for (BinaryTagIO.Compression compression : SUPPORTED_COMPRESSIONS) {
+            try {
+                return LEVEL_DAT_READER.read(levelDatPath, compression);
+            } catch (Exception e) {
+                lastFailure = e;
+                LOGGER.debug("Failed to read {} using {} compression", levelDatPath, compression, e);
+            }
+        }
+        throw new IOException("Failed to read level.dat with supported compression formats: " + levelDatPath, lastFailure);
+    }
+
     public static WorldInfo readLevelDat(Path worldFolder) throws IOException {
         Path levelDatPath = worldFolder.resolve("level.dat");
         if (!Files.exists(levelDatPath)) {
             throw new IOException("level.dat not found in " + worldFolder);
         }
 
-        CompoundBinaryTag root = null;
-        Exception lastFailure = null;
-        for (BinaryTagIO.Compression compression : SUPPORTED_COMPRESSIONS) {
-            try {
-                root = LEVEL_DAT_READER.read(levelDatPath, compression);
-                break;
-            } catch (Exception e) {
-                lastFailure = e;
-                LOGGER.debug("Failed to read {} using {} compression", levelDatPath, compression, e);
-            }
-        }
-
-        if (root == null) {
-            LOGGER.warn("Failed to read level.dat for {} with supported compression formats", worldFolder, lastFailure);
+        CompoundBinaryTag root;
+        try {
+            root = readRootTag(levelDatPath);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read level.dat for {} with supported compression formats", worldFolder, e.getCause());
             return createUnparsedWorld(worldFolder);
         }
 
@@ -79,17 +86,22 @@ public class LevelDatReader {
         if (data.keySet().contains("Time")) {
             info.setGameTime(data.getLong("Time"));
         }
-        
+
         // Spawn
         SavedSpawn.read(data, "spawn").ifPresent(spawn ->
                 info.setSpawnPosition(spawn.x(), spawn.y(), spawn.z(), spawn.dimension()));
 
-        // Version (1.9+)
+        // Version (1.9+ has Data.Version; pre-1.9 Anvil saves have Data.version == 19133)
         CompoundBinaryTag versionTag = data.getCompound("Version");
-        if (versionTag != null && !versionTag.keySet().isEmpty()) {
-            info.setVersionName(versionTag.getString("Name"));
+        String versionName = versionTag != null && !versionTag.keySet().isEmpty()
+                ? versionTag.getString("Name")
+                : "";
+        if (!versionName.isBlank()) {
+            info.setVersionName(versionName);
+        } else if (data.getInt("version") == ANVIL_DATA_VERSION_FLAG) {
+            info.setVersionName(LEGACY_PRE_1_9_VERSION);
         } else {
-            info.setVersionName("Unknown/Old");
+            info.setVersionName("Unknown");
         }
 
         // Seed

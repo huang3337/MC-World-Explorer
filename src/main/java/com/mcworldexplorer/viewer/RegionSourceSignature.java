@@ -30,10 +30,15 @@ public record RegionSourceSignature(List<RegionFileStamp> files) {
         if (!regionDirectory.startsWith(world)) {
             throw new IOException("dimension Region directory is outside the world: " + regionDirectory);
         }
-        return capture(regionDirectory, key.target());
+        return capture(world, regionDirectory, key.target());
     }
 
     static RegionSourceSignature capture(Path regionDirectory, ChunkRectangle target)
+            throws IOException {
+        return capture(null, regionDirectory, target);
+    }
+
+    static RegionSourceSignature capture(Path worldDirectory, Path regionDirectory, ChunkRectangle target)
             throws IOException {
         Path normalizedDirectory = regionDirectory.toAbsolutePath().normalize();
         TreeSet<Path> paths = new TreeSet<>((left, right) ->
@@ -42,6 +47,9 @@ public record RegionSourceSignature(List<RegionFileStamp> files) {
             int regionX = Math.floorDiv(coordinate.x(), 32);
             int regionZ = Math.floorDiv(coordinate.z(), 32);
             paths.add(normalizedDirectory.resolve("r." + regionX + "." + regionZ + ".mca"));
+        }
+        if (worldDirectory != null) {
+            paths.add(worldDirectory.toAbsolutePath().normalize().resolve("level.dat"));
         }
         java.util.ArrayList<RegionFileStamp> stamps = new java.util.ArrayList<>(paths.size());
         for (Path path : paths) {

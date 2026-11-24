@@ -1,10 +1,10 @@
 package com.mcworldexplorer.preview;
 
+import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.region.RegionChunkData;
 import com.mcworldexplorer.voxel.data.VoxelChunk;
 import com.mcworldexplorer.voxel.io.ChunkDecodeException;
 import com.mcworldexplorer.voxel.io.ChunkNbtDecoder;
-import com.mcworldexplorer.voxel.io.ChunkStorageLayout;
 import com.mcworldexplorer.voxel.io.DecodedChunk;
 
 import java.io.IOException;
@@ -27,11 +27,16 @@ public final class ParsedChunkSections {
 
     public static ParsedChunkSections read(RegionChunkData chunkData)
             throws SurfaceSamplingException {
+        return read(chunkData, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    public static ParsedChunkSections read(RegionChunkData chunkData, SavedLegacyIdMap legacyIdMap)
+            throws SurfaceSamplingException {
         if (chunkData == null) {
             throw new IllegalArgumentException("chunkData must not be null");
         }
         try (InputStream input = chunkData.openNbtStream()) {
-            return fromDecoded(ChunkNbtDecoder.readSurface(input));
+            return fromDecoded(ChunkNbtDecoder.readSurface(input, legacyIdMap));
         } catch (ChunkDecodeException e) {
             throw translate(e);
         } catch (SurfaceSamplingException e) {
@@ -45,11 +50,16 @@ public final class ParsedChunkSections {
     }
 
     static ParsedChunkSections read(InputStream input) throws SurfaceSamplingException {
+        return read(input, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    public static ParsedChunkSections read(InputStream input, SavedLegacyIdMap legacyIdMap)
+            throws SurfaceSamplingException {
         if (input == null) {
             throw new IllegalArgumentException("input must not be null");
         }
         try {
-            return fromDecoded(ChunkNbtDecoder.readSurface(input));
+            return fromDecoded(ChunkNbtDecoder.readSurface(input, legacyIdMap));
         } catch (ChunkDecodeException e) {
             throw translate(e);
         }
@@ -90,9 +100,11 @@ public final class ParsedChunkSections {
     }
 
     private static ParsedChunkSections fromDecoded(DecodedChunk decoded) {
-        ChunkSurfaceLayout layout = decoded.layout() == ChunkStorageLayout.MODERN_ROOT
-                ? ChunkSurfaceLayout.MODERN_ROOT
-                : ChunkSurfaceLayout.LEVEL_PALETTE;
+        ChunkSurfaceLayout layout = switch (decoded.layout()) {
+            case MODERN_ROOT -> ChunkSurfaceLayout.MODERN_ROOT;
+            case LEVEL_PALETTE -> ChunkSurfaceLayout.LEVEL_PALETTE;
+            case LEVEL_LEGACY -> ChunkSurfaceLayout.LEVEL_LEGACY;
+        };
         return new ParsedChunkSections(layout, decoded.chunk());
     }
 

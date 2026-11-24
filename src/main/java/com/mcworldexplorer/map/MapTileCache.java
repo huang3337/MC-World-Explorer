@@ -18,7 +18,9 @@ public final class MapTileCache {
     private record Metadata(int format, MapTileKey key, Snapshot snapshot, String pngHash, List<MapMarker> markers) { }
     static Snapshot snapshot(WorldInfo world, WorldDimension dimension, MapTileKey key) throws IOException {
         validate(world, dimension, key);
-        return new Snapshot(world.getFolderPath().toRealPath() + "/" + MapCacheStorage.generation(world),
+        Path realWorld = world.getFolderPath().toRealPath();
+        return new Snapshot(
+                realWorld + "/" + MapCacheStorage.generation(world) + "/ld=" + MapTileGenerator.levelDatStamp(realWorld),
                 sourceStates(dimension, key.bounds()));
     }
     public MapTileCacheResult store(WorldInfo world, WorldDimension dimension, MapTileKey key, BufferedImage image) throws IOException {

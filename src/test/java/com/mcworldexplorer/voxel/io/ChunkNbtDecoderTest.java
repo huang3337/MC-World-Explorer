@@ -1,5 +1,6 @@
 package com.mcworldexplorer.voxel.io;
 
+import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.voxel.data.BlockState;
 import com.mcworldexplorer.voxel.data.VoxelChunk;
 import net.kyori.adventure.nbt.BinaryTagIO;
@@ -212,7 +213,7 @@ class ChunkNbtDecoderTest {
     }
 
     @Test
-    void rejectsCoordinateMismatchAndPreFlatteningData() throws IOException {
+    void rejectsCoordinateMismatchAndUnsupportedLegacyEmptySections() throws IOException {
         CompoundBinaryTag mismatch = CompoundBinaryTag.builder()
                 .putInt("xPos", 4)
                 .putInt("zPos", -7)
@@ -227,23 +228,163 @@ class ChunkNbtDecoderTest {
         assertEquals(ChunkDecodeException.Reason.CHUNK_COORDINATE_MISMATCH,
                 coordinateFailure.reason());
 
-        CompoundBinaryTag oldSection = CompoundBinaryTag.builder()
+        CompoundBinaryTag noBlockStateSection = CompoundBinaryTag.builder()
                 .putInt("Y", 0)
-                .putByteArray("Blocks", new byte[4096])
-                .putByteArray("Data", new byte[2048])
                 .build();
-        CompoundBinaryTag oldRoot = CompoundBinaryTag.builder()
+        CompoundBinaryTag unsupportedRoot = CompoundBinaryTag.builder()
                 .put("Level", CompoundBinaryTag.builder()
                         .putInt("xPos", 0)
                         .putInt("zPos", 0)
-                        .put("Sections", sections(oldSection))
+                        .put("Sections", sections(noBlockStateSection))
                         .build())
                 .build();
-        ChunkDecodeException oldFailure = assertThrows(
+        ChunkDecodeException unsupportedFailure = assertThrows(
                 ChunkDecodeException.class,
-                () -> ChunkNbtDecoder.read(stream(oldRoot), 0, 0));
+                () -> ChunkNbtDecoder.read(stream(unsupportedRoot), 0, 0));
         assertEquals(ChunkDecodeException.Reason.UNSUPPORTED_CHUNK_LAYOUT,
-                oldFailure.reason());
+                unsupportedFailure.reason());
+
+        CompoundBinaryTag mcrLikeRoot = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .putInt("xPos", 0)
+                        .putInt("zPos", 0)
+                        .putByteArray("Blocks", new byte[32768])
+                        .build())
+                .build();
+        ChunkDecodeException mcrFailure = assertThrows(
+                ChunkDecodeException.class,
+                () -> ChunkNbtDecoder.read(stream(mcrLikeRoot), 0, 0));
+        assertEquals(ChunkDecodeException.Reason.UNSUPPORTED_CHUNK_LAYOUT,
+                mcrFailure.reason());
+    }
+
+    @Test
+    void decodesPreFlatteningLegacySectionsWithNibbleBoundariesAddAndFmlIds() throws Exception {
+        byte[] blocks = new byte[4096];
+        byte[] data = new byte[2048];
+        byte[] add = new byte[2048];
+
+        // Even index (0,0,0): wool (35), meta=14 -> red_wool
+        int idx0 = blockIndex(0, 0, 0);
+        blocks[idx0] = (byte) 35;
+        setNibble(data, idx0, 14);
+
+        // Odd index (1,0,0): FML Mod block ID 412 = (1 << 8) | 156, meta=5
+        int idx1 = blockIndex(1, 0, 0);
+        blocks[idx1] = (byte) (412 & 0xFF);
+        setNibble(add, idx1, 412 >>> 8);
+        setNibble(data, idx1, 5);
+
+        // Unmapped high ID 500 = (1 << 8) | 244, meta=3 -> deterministic legacy:block_500
+        int idx2 = blockIndex(2, 3, 4);
+        blocks[idx2] = (byte) (500 & 0xFF);
+        setNibble(add, idx2, 500 >>> 8);
+        setNibble(data, idx2, 3);
+
+        // Vanilla grass (2), meta=0 -> grass_block
+        int idx3 = blockIndex(3, 0, 0);
+        blocks[idx3] = (byte) 2;
+
+        CompoundBinaryTag legacySection = CompoundBinaryTag.builder()
+                .putByte("Y", (byte) 4)
+                .putByteArray("Blocks", blocks)
+                .putByteArray("Data", data)
+                .putByteArray("Add", add)
+                .build();
+        CompoundBinaryTag allAirSection = CompoundBinaryTag.builder()
+                .putByte("Y", (byte) 5)
+                .putByteArray("Blocks", new byte[4096])
+                .putByteArray("Data", new byte[2048])
+                .build();
+        CompoundBinaryTag root = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .putInt("xPos", -2)
+                        .putInt("zPos", 5)
+                        .put("Sections", sections(legacySection, allAirSection))
+                        .build())
+                .build();
+
+        SavedLegacyIdMap fmlMap = SavedLegacyIdMap.of(
+                SavedLegacyIdMap.Source.FML_ITEM_DATA,
+                Map.of(412, "Thaumcraft:blockMagicalLog"));
+
+        DecodedChunk sceneDecoded = ChunkNbtDecoder.read(stream(root), -2, 5, fmlMap);
+        DecodedChunk surfaceDecoded = ChunkNbtDecoder.readSurface(stream(root), fmlMap);
+
+        assertEquals(ChunkStorageLayout.LEVEL_LEGACY, sceneDecoded.layout());
+        assertEquals(ChunkStorageLayout.LEVEL_LEGACY, surfaceDecoded.layout());
+
+        BlockState wool = sceneDecoded.chunk().blockState(0, 64, 0);
+        assertEquals("minecraft:red_wool", wool.name());
+        assertEquals(Map.of("data", "14"), wool.properties());
+        assertEquals("minecraft:red_wool", surfaceDecoded.chunk().blockState(0, 64, 0).name());
+        assertTrue(surfaceDecoded.chunk().blockState(0, 64, 0).properties().isEmpty());
+
+        BlockState modBlock = sceneDecoded.chunk().blockState(1, 64, 0);
+        assertEquals("Thaumcraft:blockMagicalLog", modBlock.name());
+        assertEquals(Map.of("data", "5"), modBlock.properties());
+        assertEquals("Thaumcraft:blockMagicalLog", surfaceDecoded.chunk().blockState(1, 64, 0).name());
+
+        BlockState unknownBlock = sceneDecoded.chunk().blockState(2, 67, 4);
+        assertEquals("legacy:block_500", unknownBlock.name());
+        assertEquals(Map.of("data", "3"), unknownBlock.properties());
+        assertEquals("legacy:block_500", surfaceDecoded.chunk().blockState(2, 67, 4).name());
+
+        assertEquals("minecraft:grass_block", sceneDecoded.chunk().blockState(3, 64, 0).name());
+        assertEquals(BlockState.AIR, sceneDecoded.chunk().blockState(0, 80, 0));
+        assertEquals(BlockState.AIR, sceneDecoded.chunk().sections().get(1).uniformState().orElseThrow());
+    }
+
+    @Test
+    void rejectsMalformedLegacyArraysAndNonZeroAdd2() {
+        CompoundBinaryTag shortBlocks = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .put("Sections", sections(CompoundBinaryTag.builder()
+                                .putInt("Y", 0)
+                                .putByteArray("Blocks", new byte[100])
+                                .putByteArray("Data", new byte[2048])
+                                .build()))
+                        .build())
+                .build();
+        assertEquals(ChunkDecodeException.Reason.INVALID_BLOCK_STATE_STORAGE,
+                assertThrows(ChunkDecodeException.class, () -> ChunkNbtDecoder.read(stream(shortBlocks))).reason());
+
+        CompoundBinaryTag shortAdd = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .put("Sections", sections(CompoundBinaryTag.builder()
+                                .putInt("Y", 0)
+                                .putByteArray("Blocks", new byte[4096])
+                                .putByteArray("Data", new byte[2048])
+                                .putByteArray("Add", new byte[16])
+                                .build()))
+                        .build())
+                .build();
+        assertEquals(ChunkDecodeException.Reason.INVALID_BLOCK_STATE_STORAGE,
+                assertThrows(ChunkDecodeException.class, () -> ChunkNbtDecoder.read(stream(shortAdd))).reason());
+
+        byte[] add2 = new byte[2048];
+        add2[0] = 1;
+        CompoundBinaryTag nonZeroAdd2 = CompoundBinaryTag.builder()
+                .put("Level", CompoundBinaryTag.builder()
+                        .put("Sections", sections(CompoundBinaryTag.builder()
+                                .putInt("Y", 0)
+                                .putByteArray("Blocks", new byte[4096])
+                                .putByteArray("Data", new byte[2048])
+                                .putByteArray("Add2", add2)
+                                .build()))
+                        .build())
+                .build();
+        assertEquals(ChunkDecodeException.Reason.UNSUPPORTED_CHUNK_LAYOUT,
+                assertThrows(ChunkDecodeException.class, () -> ChunkNbtDecoder.read(stream(nonZeroAdd2))).reason());
+    }
+
+    private static void setNibble(byte[] array, int index, int value) {
+        int byteIndex = index >>> 1;
+        if ((index & 1) == 0) {
+            array[byteIndex] = (byte) ((array[byteIndex] & 0xF0) | (value & 0x0F));
+        } else {
+            array[byteIndex] = (byte) ((array[byteIndex] & 0x0F) | ((value & 0x0F) << 4));
+        }
     }
 
     private static CompoundBinaryTag named(String name) {

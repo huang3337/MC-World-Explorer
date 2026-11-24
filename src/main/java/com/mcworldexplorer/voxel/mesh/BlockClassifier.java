@@ -12,17 +12,24 @@ public final class BlockClassifier {
             "minecraft:void_air");
     private static final Set<String> FLUID = Set.of(
             "minecraft:water",
-            "minecraft:lava");
+            "minecraft:flowing_water",
+            "minecraft:lava",
+            "minecraft:flowing_lava");
     private static final Set<String> TRANSLUCENT = Set.of(
             "minecraft:glass",
+            "minecraft:glass_pane",
             "minecraft:tinted_glass",
             "minecraft:ice",
             "minecraft:frosted_ice",
+            "minecraft:slime",
             "minecraft:slime_block",
             "minecraft:honey_block",
+            "minecraft:portal",
             "minecraft:nether_portal",
             "minecraft:end_gateway",
             "minecraft:end_portal",
+            "minecraft:stained_glass",
+            "minecraft:stained_glass_pane",
             "minecraft:white_stained_glass",
             "minecraft:orange_stained_glass",
             "minecraft:magenta_stained_glass",
@@ -56,6 +63,8 @@ public final class BlockClassifier {
             "minecraft:red_stained_glass_pane",
             "minecraft:black_stained_glass_pane");
     private static final Set<String> CUTOUT = Set.of(
+            "minecraft:leaves",
+            "minecraft:leaves2",
             "minecraft:oak_leaves",
             "minecraft:spruce_leaves",
             "minecraft:birch_leaves",
@@ -66,15 +75,42 @@ public final class BlockClassifier {
             "minecraft:cherry_leaves",
             "minecraft:azalea_leaves",
             "minecraft:flowering_azalea_leaves",
+            "minecraft:tallgrass",
+            "minecraft:double_plant",
             "minecraft:short_grass",
             "minecraft:tall_grass",
             "minecraft:fern",
             "minecraft:large_fern",
+            "minecraft:deadbush",
+            "minecraft:dead_bush",
+            "minecraft:yellow_flower",
+            "minecraft:red_flower",
+            "minecraft:dandelion",
+            "minecraft:poppy",
+            "minecraft:sunflower",
+            "minecraft:lilac",
+            "minecraft:rose_bush",
+            "minecraft:peony",
+            "minecraft:sapling",
+            "minecraft:oak_sapling",
+            "minecraft:spruce_sapling",
+            "minecraft:birch_sapling",
+            "minecraft:jungle_sapling",
+            "minecraft:acacia_sapling",
+            "minecraft:dark_oak_sapling",
+            "minecraft:reeds",
+            "minecraft:sugar_cane",
+            "minecraft:waterlily",
+            "minecraft:lily_pad",
+            "minecraft:web",
+            "minecraft:cobweb",
             "minecraft:vine",
             "minecraft:torch",
             "minecraft:soul_torch",
             "minecraft:redstone_torch",
+            "minecraft:unlit_redstone_torch",
             "minecraft:rail",
+            "minecraft:golden_rail",
             "minecraft:powered_rail",
             "minecraft:detector_rail",
             "minecraft:activator_rail");
@@ -91,7 +127,9 @@ public final class BlockClassifier {
             return new BlockRenderClass(BlockRenderClass.Kind.AIR, null, 0, 0.0f);
         }
         if (FLUID.contains(name)) {
-            int rgb = "minecraft:water".equals(name) ? 0x3F76E4 : 0xF36B21;
+            int rgb = ("minecraft:water".equals(name) || "minecraft:flowing_water".equals(name))
+                    ? 0x3F76E4
+                    : 0xF36B21;
             return new BlockRenderClass(
                     BlockRenderClass.Kind.FLUID, RenderLayer.FLUID, rgb, 0.72f);
         }

@@ -101,7 +101,7 @@ import java.util.Set;
 
 public final class MapViewerController {
     private static final Logger LOGGER = LoggerFactory.getLogger(MapViewerController.class);
-    private static final String RENDER_VERSION = "v075-p3-r2";
+    private static final String RENDER_VERSION = "v076-p1";
     private static final MapZoomLevel DEFAULT_ZOOM = MapZoomLevel.BLOCKS_2;
 
     private final MapTileService tileService = new MapTileService();

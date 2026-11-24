@@ -1,5 +1,6 @@
 package com.mcworldexplorer.voxel.io;
 
+import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.preview.WorldDimension;
 import com.mcworldexplorer.preview.WorldDimensionDiscovery;
 import com.mcworldexplorer.region.RegionChunkData;
@@ -44,6 +45,7 @@ public final class VoxelAreaLoader {
         if (!regionDirectory.startsWith(world) || !Files.isDirectory(regionDirectory)) {
             throw new IOException("dimension Region directory is invalid: " + regionDirectory);
         }
+        SavedLegacyIdMap legacyIdMap = SavedLegacyIdMap.readFromWorld(world);
 
         List<ChunkCoordinate> coordinates = request.target().expanded(1).coordinates();
         int workers = Math.min(4, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
@@ -57,7 +59,7 @@ public final class VoxelAreaLoader {
                     new ExecutorCompletionService<>(executor);
             for (ChunkCoordinate coordinate : coordinates) {
                 completion.submit((Callable<ChunkLoadResult>) () ->
-                        readChunk(regionDirectory, coordinate, cancellation));
+                        readChunk(regionDirectory, coordinate, legacyIdMap, cancellation));
             }
             Map<ChunkCoordinate, ChunkLoadResult> results = new LinkedHashMap<>();
             for (int completed = 1; completed <= coordinates.size(); completed++) {
@@ -97,6 +99,7 @@ public final class VoxelAreaLoader {
     private static ChunkLoadResult readChunk(
             Path regionDirectory,
             ChunkCoordinate coordinate,
+            SavedLegacyIdMap legacyIdMap,
             CancellationSignal cancellation) {
         if (cancellation.isCancelled() || Thread.currentThread().isInterrupted()) {
             return ChunkLoadResult.withoutChunk(
@@ -144,7 +147,7 @@ public final class VoxelAreaLoader {
         try {
             return ChunkLoadResult.success(
                     coordinate,
-                    ChunkNbtDecoder.read(data.orElseThrow(), coordinate.x(), coordinate.z()).chunk(),
+                    ChunkNbtDecoder.read(data.orElseThrow(), coordinate.x(), coordinate.z(), legacyIdMap).chunk(),
                     readNanos,
                     System.nanoTime() - parseStart);
         } catch (ChunkDecodeException e) {

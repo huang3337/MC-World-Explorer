@@ -1,5 +1,6 @@
 package com.mcworldexplorer.preview;
 
+import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.region.RegionChunkData;
 import com.mcworldexplorer.region.RegionFileReader;
 import com.mcworldexplorer.world.WorldInfo;
@@ -62,6 +63,7 @@ public final class PreviewGenerator {
         }
 
         Path worldDirectory = world.getFolderPath().toAbsolutePath().normalize();
+        SavedLegacyIdMap legacyIdMap = SavedLegacyIdMap.readFromWorld(worldDirectory);
         Path regionDirectory = request.dimension().regionDirectory().toAbsolutePath().normalize();
         if (!regionDirectory.startsWith(worldDirectory)) {
             throw new IllegalArgumentException("dimension Region directory must stay inside the world directory");
@@ -149,7 +151,8 @@ public final class PreviewGenerator {
                         } else {
                             ChunkSurface surface = surfaceSampler.sample(
                                     chunk.orElseThrow(),
-                                    request.layer());
+                                    request.layer(),
+                                    legacyIdMap);
                             sampledChunks++;
                             for (int localZ = 0; localZ < 16; localZ++) {
                                 for (int localX = 0; localX < 16; localX++) {

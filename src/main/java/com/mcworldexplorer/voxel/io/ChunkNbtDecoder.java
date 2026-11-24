@@ -1,5 +1,6 @@
 package com.mcworldexplorer.voxel.io;
 
+import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.region.RegionChunkData;
 import com.mcworldexplorer.voxel.data.BlockState;
 import com.mcworldexplorer.voxel.data.ChunkSection;
@@ -26,11 +27,19 @@ public final class ChunkNbtDecoder {
 
     public static DecodedChunk read(RegionChunkData data, int chunkX, int chunkZ)
             throws ChunkDecodeException {
+        return read(data, chunkX, chunkZ, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    public static DecodedChunk read(
+            RegionChunkData data,
+            int chunkX,
+            int chunkZ,
+            SavedLegacyIdMap legacyIdMap) throws ChunkDecodeException {
         if (data == null) {
             throw new IllegalArgumentException("data must not be null");
         }
         try (InputStream input = data.openNbtStream()) {
-            return read(input, chunkX, chunkZ);
+            return read(input, chunkX, chunkZ, legacyIdMap);
         } catch (ChunkDecodeException e) {
             throw e;
         } catch (IOException e) {
@@ -43,24 +52,50 @@ public final class ChunkNbtDecoder {
     }
 
     public static DecodedChunk read(InputStream input) throws ChunkDecodeException {
-        return readRoot(input, null, null, true);
+        return readRoot(input, null, null, true, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    public static DecodedChunk read(InputStream input, SavedLegacyIdMap legacyIdMap)
+            throws ChunkDecodeException {
+        return readRoot(input, null, null, true, legacyIdMap);
     }
 
     public static DecodedChunk read(InputStream input, int chunkX, int chunkZ)
             throws ChunkDecodeException {
-        return readRoot(input, chunkX, chunkZ, true);
+        return readRoot(input, chunkX, chunkZ, true, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    public static DecodedChunk read(
+            InputStream input,
+            int chunkX,
+            int chunkZ,
+            SavedLegacyIdMap legacyIdMap) throws ChunkDecodeException {
+        return readRoot(input, chunkX, chunkZ, true, legacyIdMap);
     }
 
     /** Surface and portal sampling require block identity only. */
     public static DecodedChunk readSurface(InputStream input) throws ChunkDecodeException {
-        return readRoot(input, null, null, false);
+        return readRoot(input, null, null, false, SavedLegacyIdMap.vanillaOnly());
     }
 
-    private static DecodedChunk readRoot(InputStream input, Integer expectedX, Integer expectedZ, boolean scene)
+    /** Surface and portal sampling with optional Forge/FML numeric block ID mapping. */
+    public static DecodedChunk readSurface(InputStream input, SavedLegacyIdMap legacyIdMap)
             throws ChunkDecodeException {
+        return readRoot(input, null, null, false, legacyIdMap);
+    }
+
+    private static DecodedChunk readRoot(
+            InputStream input,
+            Integer expectedX,
+            Integer expectedZ,
+            boolean scene,
+            SavedLegacyIdMap legacyIdMap) throws ChunkDecodeException {
         if (input == null) {
             throw new IllegalArgumentException("input must not be null");
         }
+        SavedLegacyIdMap effectiveLegacyMap = legacyIdMap == null
+                ? SavedLegacyIdMap.vanillaOnly()
+                : legacyIdMap;
         CompoundBinaryTag root;
         try {
             // Region chunks are already in memory. Keep the NBT reader's size and depth checks.
@@ -88,11 +123,27 @@ public final class ChunkNbtDecoder {
                 throw new ChunkDecodeException(
                         ChunkDecodeException.Reason.UNSUPPORTED_CHUNK_LAYOUT,
                         -1,
-                        "chunk has neither root sections nor Level/Sections palette data");
+                        "chunk has neither root sections nor Level/Sections data");
             }
-            layout = ChunkStorageLayout.LEVEL_PALETTE;
             sectionTags = level.getList("Sections", BinaryTagTypes.COMPOUND);
             coordinateContainer = level;
+            boolean sawPalette = false;
+            boolean sawLegacy = false;
+            for (int i = 0; i < sectionTags.size(); i++) {
+                CompoundBinaryTag sectionTag = sectionTags.getCompound(i);
+                if (sectionTag.keySet().contains("Palette")) {
+                    sawPalette = true;
+                } else if (sectionTag.keySet().contains("Blocks")) {
+                    sawLegacy = true;
+                }
+            }
+            if (sawPalette && sawLegacy) {
+                throw new ChunkDecodeException(
+                        ChunkDecodeException.Reason.INVALID_SECTION,
+                        -1,
+                        "Level/Sections mixes palette-based and pre-flattening block storage");
+            }
+            layout = sawLegacy ? ChunkStorageLayout.LEVEL_LEGACY : ChunkStorageLayout.LEVEL_PALETTE;
         }
 
         int chunkX = expectedX == null ? storedCoordinate(coordinateContainer, "xPos") : expectedX;
@@ -104,34 +155,37 @@ public final class ChunkNbtDecoder {
         int version = root.get("DataVersion") instanceof IntBinaryTag number ? number.value() : -1;
         var paletteReader = new BlockPaletteDecoder(version, scene);
         List<ChunkSection> sections = new ArrayList<>();
-        var biomes=new TreeMap<Integer,com.mcworldexplorer.voxel.data.BiomeSection>();
+        var biomes = new TreeMap<Integer, com.mcworldexplorer.voxel.data.BiomeSection>();
         for (int i = 0; i < sectionTags.size(); i++) {
-            var sectionTag=sectionTags.getCompound(i);
-            ChunkSection section = readSection(sectionTag, layout, paletteReader);
+            var sectionTag = sectionTags.getCompound(i);
+            ChunkSection section = readSection(sectionTag, layout, paletteReader, effectiveLegacyMap, scene);
             if (section != null) {
                 sections.add(section);
             }
-            if(scene && layout==ChunkStorageLayout.MODERN_ROOT&&sectionTag.get("biomes")!=null){
-                int y=sectionTag.getInt("Y");
-                if(biomes.putIfAbsent(y,com.mcworldexplorer.voxel.data.BiomeSection.read(sectionTag.get("biomes")))!=null)
-                    throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_SECTION,y,"duplicate saved biome section");
+            if (scene && layout == ChunkStorageLayout.MODERN_ROOT && sectionTag.get("biomes") != null) {
+                int y = sectionTag.getInt("Y");
+                if (biomes.putIfAbsent(y, com.mcworldexplorer.voxel.data.BiomeSection.read(sectionTag.get("biomes"))) != null)
+                    throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_SECTION, y, "duplicate saved biome section");
             }
         }
-        if (layout == ChunkStorageLayout.LEVEL_PALETTE
+        if ((layout == ChunkStorageLayout.LEVEL_PALETTE || layout == ChunkStorageLayout.LEVEL_LEGACY)
                 && sectionTags.size() > 0
                 && sections.isEmpty()) {
             throw new ChunkDecodeException(
                     ChunkDecodeException.Reason.UNSUPPORTED_CHUNK_LAYOUT,
                     -1,
-                    "Level/Sections contains no palette-based block states");
+                    "Level/Sections contains no supported block states");
         }
         if (!scene) return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections));
-        List<com.mcworldexplorer.voxel.data.BlockEntityData> entities=new ArrayList<>();
-        var entityTags=coordinateContainer.getList(layout==ChunkStorageLayout.MODERN_ROOT?"block_entities":"TileEntities",BinaryTagTypes.COMPOUND);
-        if(entityTags.size()>4096)throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_NBT,-1,"方块实体数量超过 4096，无法完整准备该区块外观");
-        for(int i=0;i<entityTags.size();i++)
-            com.mcworldexplorer.voxel.data.BlockEntityData.read(entityTags.getCompound(i),chunkX,chunkZ).ifPresent(entities::add);
-        return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections,entities,biomes));
+        List<com.mcworldexplorer.voxel.data.BlockEntityData> entities = new ArrayList<>();
+        var entityTags = coordinateContainer.getList(
+                layout == ChunkStorageLayout.MODERN_ROOT ? "block_entities" : "TileEntities",
+                BinaryTagTypes.COMPOUND);
+        if (entityTags.size() > 4096)
+            throw new ChunkDecodeException(ChunkDecodeException.Reason.INVALID_NBT, -1, "方块实体数量超过 4096，无法完整准备该区块外观");
+        for (int i = 0; i < entityTags.size(); i++)
+            com.mcworldexplorer.voxel.data.BlockEntityData.read(entityTags.getCompound(i), chunkX, chunkZ).ifPresent(entities::add);
+        return new DecodedChunk(layout, new VoxelChunk(chunkX, chunkZ, sections, entities, biomes));
     }
 
     private static int storedCoordinate(CompoundBinaryTag container, String key) {
@@ -162,7 +216,10 @@ public final class ChunkNbtDecoder {
 
     private static ChunkSection readSection(
             CompoundBinaryTag section,
-            ChunkStorageLayout layout, BlockPaletteDecoder paletteReader) throws ChunkDecodeException {
+            ChunkStorageLayout layout,
+            BlockPaletteDecoder paletteReader,
+            SavedLegacyIdMap legacyIdMap,
+            boolean scene) throws ChunkDecodeException {
         if (!section.keySet().contains("Y")) {
             throw new ChunkDecodeException(
                     ChunkDecodeException.Reason.INVALID_SECTION,
@@ -170,6 +227,13 @@ public final class ChunkNbtDecoder {
                     "section is missing Y");
         }
         int sectionY = section.getInt("Y");
+        if (layout == ChunkStorageLayout.LEVEL_LEGACY) {
+            if (!section.keySet().contains("Blocks")) {
+                return null;
+            }
+            return LegacyAnvilSectionDecoder.decode(section, sectionY, legacyIdMap, scene);
+        }
+
         ListBinaryTag palette;
         long[] data;
         if (layout == ChunkStorageLayout.MODERN_ROOT) {
@@ -199,5 +263,4 @@ public final class ChunkNbtDecoder {
         }
         return new ChunkSection(sectionY, states, data);
     }
-
 }

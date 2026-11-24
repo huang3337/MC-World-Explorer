@@ -37,4 +37,30 @@ class RegionSourceSignatureTest {
         assertNotEquals(missing, created);
         assertNotEquals(created, changed);
     }
+
+    @Test
+    void changesWhenLevelDatAppearsOrChangesSizeOrTimestamp() throws IOException {
+        Path world = Files.createDirectory(tempDir.resolve("world-sig"));
+        Path regionDir = Files.createDirectories(world.resolve("region"));
+        Files.writeString(regionDir.resolve("r.0.0.mca"), "region");
+        ViewerAreaKey key = new ViewerAreaKey(
+                world,
+                "minecraft:overworld",
+                ChunkRectangle.target(0, 0, 0, 0),
+                VoxelPreviewCoordinator.RENDER_VERSION);
+
+        RegionSourceSignature withoutLevelDat = RegionSourceSignature.capture(key);
+        Path levelDat = world.resolve("level.dat");
+        Files.writeString(levelDat, "v1");
+        RegionSourceSignature withLevelDat = RegionSourceSignature.capture(key);
+        Files.writeString(levelDat, "v2-longer");
+        RegionSourceSignature resizedLevelDat = RegionSourceSignature.capture(key);
+        var mtime = Files.getLastModifiedTime(levelDat);
+        Files.setLastModifiedTime(levelDat, java.nio.file.attribute.FileTime.fromMillis(mtime.toMillis() + 5000L));
+        RegionSourceSignature touchedLevelDat = RegionSourceSignature.capture(key);
+
+        assertNotEquals(withoutLevelDat, withLevelDat);
+        assertNotEquals(withLevelDat, resizedLevelDat);
+        assertNotEquals(resizedLevelDat, touchedLevelDat);
+    }
 }

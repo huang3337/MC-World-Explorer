@@ -3,14 +3,18 @@ package com.mcworldexplorer.preview;
 import com.mcworldexplorer.world.WorldInfo;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
+import java.util.stream.Stream;
 
 public final class WorldDimensionDiscovery {
     private WorldDimensionDiscovery() {
@@ -32,12 +36,60 @@ public final class WorldDimensionDiscovery {
             dimensions.add(WorldDimension.end(worldFolder));
         }
 
-        List<WorldDimension> modDimensions = new ArrayList<>(discoverModDimensions(worldFolder));
-        var vanillaIds=dimensions.stream().map(WorldDimension::id).collect(java.util.stream.Collectors.toSet());
-        modDimensions.removeIf(dimension->vanillaIds.contains(dimension.id()));
+        var vanillaIds = dimensions.stream()
+                .map(WorldDimension::id)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<String, WorldDimension> modDimensionsById = new LinkedHashMap<>();
+        for (WorldDimension dim : discoverModDimensions(worldFolder)) {
+            if (!vanillaIds.contains(dim.id())) {
+                modDimensionsById.putIfAbsent(dim.id(), dim);
+            }
+        }
+        for (WorldDimension dim : discoverLegacyModDimensions(worldFolder)) {
+            if (!vanillaIds.contains(dim.id())) {
+                modDimensionsById.putIfAbsent(dim.id(), dim);
+            }
+        }
+        List<WorldDimension> modDimensions = new ArrayList<>(modDimensionsById.values());
         modDimensions.sort(Comparator.comparing(WorldDimension::id));
         dimensions.addAll(modDimensions);
         return List.copyOf(dimensions);
+    }
+
+    private static List<WorldDimension> discoverLegacyModDimensions(Path worldFolder) throws IOException {
+        if (!Files.isDirectory(worldFolder)) {
+            return List.of();
+        }
+        List<WorldDimension> dimensions = new ArrayList<>();
+        try (Stream<Path> entries = Files.list(worldFolder)) {
+            for (Path entry : entries.toList()) {
+                if (!Files.isDirectory(entry) || entry.getFileName() == null) {
+                    continue;
+                }
+                String name = entry.getFileName().toString();
+                if (!name.startsWith("DIM")) {
+                    continue;
+                }
+                OptionalInt parsed = WorldDimension.parseCanonicalInt(name.substring(3));
+                if (parsed.isEmpty()) {
+                    continue;
+                }
+                int dimNumber = parsed.getAsInt();
+                if (dimNumber == 0 || dimNumber == -1 || dimNumber == 1) {
+                    continue;
+                }
+                Path regionDir = entry.resolve("region").normalize();
+                if (!Files.isDirectory(regionDir)) {
+                    continue;
+                }
+                dimensions.add(new WorldDimension(
+                        WorldDimension.legacyModDimensionId(dimNumber),
+                        "DIM" + dimNumber,
+                        regionDir,
+                        DimensionKind.MOD));
+            }
+        }
+        return dimensions;
     }
 
     private static List<WorldDimension> discoverModDimensions(Path worldFolder) throws IOException {

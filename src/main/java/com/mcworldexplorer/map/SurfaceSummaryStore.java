@@ -15,6 +15,7 @@ final class SurfaceSummaryStore implements AutoCloseable {
     private static final int MAX_PAGE_BYTES = 1 << 20;
     private final WorldInfo world;
     private final String generation;
+    private final String levelDatStamp;
     private final BooleanSupplier current;
     private final LinkedHashMap<PageKey, Page> pages = new LinkedHashMap<>(4, .75f, true);
     private final Path directory;
@@ -39,7 +40,11 @@ final class SurfaceSummaryStore implements AutoCloseable {
         }
     }
     SurfaceSummaryStore(WorldInfo world, BooleanSupplier current) throws IOException {
+        this(world, MapTileGenerator.levelDatStamp(world.getFolderPath().toRealPath()), current);
+    }
+    SurfaceSummaryStore(WorldInfo world, String levelDatStamp, BooleanSupplier current) throws IOException {
         this.world = world; this.current = current; this.generation = MapCacheStorage.generation(world);
+        this.levelDatStamp = Objects.requireNonNull(levelDatStamp, "levelDatStamp");
         this.directory = MapCacheStorage.root(world).resolve("summaries");
     }
     private Page page(SurfaceSummaryCache.Key key) throws IOException {
@@ -51,9 +56,11 @@ final class SurfaceSummaryStore implements AutoCloseable {
         if (page != null) return page;
         String stableRules = key.rulesVersion();
         if (stableRules.endsWith("/" + generation)) stableRules = stableRules.substring(0, stableRules.length() - generation.length() - 1);
+        String levelDatSuffix = "/ld=" + levelDatStamp;
+        if (stableRules.endsWith(levelDatSuffix)) stableRules = stableRules.substring(0, stableRules.length() - levelDatSuffix.length());
         String address = key.world() + "/" + key.dimension() + "/" + key.layer().cacheKey() + "/" + stableRules
                 + "/" + Math.floorDiv(key.x(), 8) + "/" + Math.floorDiv(key.z(), 8);
-        String identity = address + "/" + generation + "/" + key.source();
+        String identity = address + "/" + generation + levelDatSuffix + "/" + key.source();
         Path path = directory.resolve(WorldCachePaths.textHash(address) + ".gz");
         if (pages.size() >= 2) {
             var it = pages.entrySet().iterator(); var old = it.next().getValue(); it.remove(); flush(old);
@@ -131,12 +138,12 @@ final class SurfaceSummaryStore implements AutoCloseable {
         if (page.dirtySlots == 0 || disabled.get() || !current.getAsBoolean()) return;
         page.slots.keySet().removeIf(slot -> (page.dirtySlots & (1L << slot)) == 0);
         long retained = page.retainedBytes();
-        var ownerWorld = world; var ownerGeneration = generation;
+        var ownerWorld = world; var ownerGeneration = generation; var ownerLevelDatStamp = levelDatStamp;
         var ownerCurrent = current; var ownerDisabled = disabled;
-        try { MapPersistence.submit(retained, () -> flushOwned(page, ownerWorld, ownerGeneration, ownerCurrent, ownerDisabled)); }
+        try { MapPersistence.submit(retained, () -> flushOwned(page, ownerWorld, ownerGeneration, ownerLevelDatStamp, ownerCurrent, ownerDisabled)); }
         catch (MapPersistence.LimitExceeded limit) { disabled.set(true); MapCacheStorageNotice.unavailable(world); MapPersistence.failed(MapTileCacheResult.SaveState.ENCODING_LIMIT); }
     }
-    private static void flushOwned(Page page, WorldInfo world, String generation, BooleanSupplier current,
+    private static void flushOwned(Page page, WorldInfo world, String generation, String levelDatStamp, BooleanSupplier current,
                                    java.util.concurrent.atomic.AtomicBoolean disabled) throws IOException {
         if (page.dirtySlots == 0 || disabled.get() || !current.getAsBoolean()) return;
         try (var encoding = MapPersistence.acquire()) {
@@ -144,6 +151,8 @@ final class SurfaceSummaryStore implements AutoCloseable {
             if (!current.getAsBoolean() || !generation.equals(MapCacheStorage.generation(world))) return;
             if (!page.source.equals(RegionHeaderIndex.readSignature(page.source.path())))
                 throw new IOException("Source changed before summary commit");
+            if (!levelDatStamp.equals(MapTileGenerator.levelDatStamp(world.getFolderPath().toRealPath())))
+                throw new IOException("level.dat changed before summary commit");
             // Merge concurrent successful slots rather than overwriting the other task's page.
             Page merged = new Page(page.path, page.identity, page.source); read(merged);
             if (merged.slots.keySet().containsAll(page.slots.keySet())) { page.dirtySlots = 0; return; }

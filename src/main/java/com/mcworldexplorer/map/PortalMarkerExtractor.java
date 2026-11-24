@@ -12,7 +12,9 @@ import java.util.List;
 import java.util.Set;
 
 public final class PortalMarkerExtractor {
-    private static final String PORTAL_BLOCK = "minecraft:nether_portal";
+    private static final Set<String> PORTAL_BLOCKS = Set.of(
+            "minecraft:nether_portal",
+            "minecraft:portal");
 
     public List<MapMarker> extract(
             ParsedChunkSections parsed,
@@ -25,7 +27,14 @@ public final class PortalMarkerExtractor {
         }
         Set<BlockPosition> portalBlocks = new HashSet<>();
         for (ChunkSectionView section : parsed.sections()) {
-            if (!section.contains(PORTAL_BLOCK)) {
+            boolean hasPortal = false;
+            for (String portalName : PORTAL_BLOCKS) {
+                if (section.contains(portalName)) {
+                    hasPortal = true;
+                    break;
+                }
+            }
+            if (!hasPortal) {
                 continue;
             }
             int sectionMinY = section.sectionY() * 16;
@@ -41,7 +50,7 @@ public final class PortalMarkerExtractor {
             for (int localY = minLocalY; localY <= maxLocalY; localY++) {
                 for (int localZ = 0; localZ < 16; localZ++) {
                     for (int localX = 0; localX < 16; localX++) {
-                        if (PORTAL_BLOCK.equals(section.blockName(localX, localY, localZ))) {
+                        if (PORTAL_BLOCKS.contains(section.blockName(localX, localY, localZ))) {
                             portalBlocks.add(new BlockPosition(
                                     chunkX * 16 + localX,
                                     sectionMinY + localY,

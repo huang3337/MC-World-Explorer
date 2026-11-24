@@ -1,5 +1,6 @@
 package com.mcworldexplorer.preview;
 
+import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.region.RegionChunkData;
 
 import java.io.InputStream;
@@ -8,16 +9,23 @@ import java.util.Optional;
 
 public final class SurfaceSampler {
     public ChunkSurface sample(RegionChunkData chunkData) throws SurfaceSamplingException {
-        return sample(chunkData, PreviewLayer.surfaceOverview());
+        return sample(chunkData, PreviewLayer.surfaceOverview(), SavedLegacyIdMap.vanillaOnly());
     }
 
     public ChunkSurface sample(
             RegionChunkData chunkData,
             PreviewLayer layer) throws SurfaceSamplingException {
+        return sample(chunkData, layer, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    public ChunkSurface sample(
+            RegionChunkData chunkData,
+            PreviewLayer layer,
+            SavedLegacyIdMap legacyIdMap) throws SurfaceSamplingException {
         if (chunkData == null) {
             throw new IllegalArgumentException("chunkData must not be null");
         }
-        return sample(ParsedChunkSections.read(chunkData), layer);
+        return sample(ParsedChunkSections.read(chunkData, legacyIdMap), layer);
     }
 
     public ChunkSurface sample(
@@ -41,19 +49,33 @@ public final class SurfaceSampler {
     }
 
     ChunkSurface sample(InputStream input) throws SurfaceSamplingException {
-        return sample(input, PreviewLayer.surfaceOverview());
+        return sample(input, PreviewLayer.surfaceOverview(), SavedLegacyIdMap.vanillaOnly());
+    }
+
+    ChunkSurface sample(InputStream input, SavedLegacyIdMap legacyIdMap) throws SurfaceSamplingException {
+        return sample(input, PreviewLayer.surfaceOverview(), legacyIdMap);
     }
 
     ChunkSurface sample(InputStream input, PreviewLayer layer) throws SurfaceSamplingException {
-        return sample(ParsedChunkSections.read(input), layer);
+        return sample(input, layer, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    ChunkSurface sample(InputStream input, PreviewLayer layer, SavedLegacyIdMap legacyIdMap)
+            throws SurfaceSamplingException {
+        return sample(ParsedChunkSections.read(input, legacyIdMap), layer);
     }
 
     Optional<DimensionHeightRange> sectionRange(RegionChunkData chunkData)
             throws SurfaceSamplingException {
+        return sectionRange(chunkData, SavedLegacyIdMap.vanillaOnly());
+    }
+
+    Optional<DimensionHeightRange> sectionRange(RegionChunkData chunkData, SavedLegacyIdMap legacyIdMap)
+            throws SurfaceSamplingException {
         if (chunkData == null) {
             throw new IllegalArgumentException("chunkData must not be null");
         }
-        return ParsedChunkSections.read(chunkData).sectionRange();
+        return ParsedChunkSections.read(chunkData, legacyIdMap).sectionRange();
     }
 
     Optional<DimensionHeightRange> sectionRange(InputStream input)
@@ -114,7 +136,7 @@ public final class SurfaceSampler {
         for (ChunkSectionView section : parsed.sections()) {
             long start = 16L * section.sectionY() - layer.minY();
             if (start < rows.length && start + 16 > 0) {
-                Arrays.fill(rows, (int)Math.max(0, start), (int)Math.min(rows.length, start + 16), section);
+                Arrays.fill(rows, (int) Math.max(0, start), (int) Math.min(rows.length, start + 16), section);
             }
         }
         for (int localZ = 0; localZ < 16; localZ++) {

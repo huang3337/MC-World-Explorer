@@ -39,4 +39,27 @@ class BlockClassifierTest {
                 BlockClassifier.classify(new BlockState(
                         "example:clear_water", Map.of())).kind());
     }
+
+    @Test
+    void classifiesPreFlatteningFluidsFoliagePortalsAndSixteenColorWool() {
+        assertEquals(RenderLayer.FLUID,
+                BlockClassifier.classify(new BlockState("minecraft:flowing_water", Map.of())).layer());
+        assertEquals(0x3F76E4,
+                BlockClassifier.classify(new BlockState("minecraft:flowing_water", Map.of())).rgb());
+        assertEquals(RenderLayer.FLUID,
+                BlockClassifier.classify(new BlockState("minecraft:flowing_lava", Map.of())).layer());
+        assertEquals(RenderLayer.TRANSLUCENT,
+                BlockClassifier.classify(new BlockState("minecraft:portal", Map.of())).layer());
+        assertEquals(RenderLayer.CUTOUT,
+                BlockClassifier.classify(new BlockState("minecraft:leaves", Map.of())).layer());
+
+        var redWool = com.mcworldexplorer.voxel.io.VanillaLegacyBlocks.resolve(35, 14, null, true);
+        var blueWool = com.mcworldexplorer.voxel.io.VanillaLegacyBlocks.resolve(35, 11, null, true);
+        assertEquals("minecraft:red_wool", redWool.name());
+        assertEquals("minecraft:blue_wool", blueWool.name());
+        assertTrue(com.mcworldexplorer.preview.BlockColorPalette.resolve(redWool.name()).known());
+        assertTrue(com.mcworldexplorer.preview.BlockColorPalette.resolve(blueWool.name()).known());
+        assertEquals(0xB84A3E, BlockClassifier.classify(redWool).rgb());
+        assertEquals(0x496EA8, BlockClassifier.classify(blueWool).rgb());
+    }
 }

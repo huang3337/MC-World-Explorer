@@ -12,6 +12,12 @@ public final class BlockColorPalette {
         if (name.equals("minecraft:redstone_block")) {
             return known(0xB84A3E);
         }
+        if (containsAny(name, "waterlily", "lily_pad", "sugar_cane", "reeds", "cactus")) {
+            return known(0x4E7F36);
+        }
+        if (containsAny(name, "portal")) {
+            return known(0x7A3EB8);
+        }
         if (containsAny(name, "water", "bubble_column")) {
             return known(0x3F76E4);
         }

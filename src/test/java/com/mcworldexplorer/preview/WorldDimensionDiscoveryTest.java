@@ -58,4 +58,48 @@ class WorldDimensionDiscoveryTest {
         assertEquals(List.of(DimensionKind.OVERWORLD,DimensionKind.NETHER,DimensionKind.END,DimensionKind.MOD),dimensions.stream().map(WorldDimension::kind).toList());
         assertEquals(world.resolve("dimensions/minecraft/overworld/region"),dimensions.getFirst().regionDirectory());
     }
+
+    @Test
+    void discoversLegacyNumericModDimensionsAndAlignsWithPlayerDimensionIds() throws IOException {
+        Path world = Files.createDirectory(tempDir.resolve("legacy-mods"));
+        Files.createDirectories(world.resolve("region"));
+        Files.createDirectories(world.resolve("DIM0/region"));
+        Files.createDirectories(world.resolve("DIM-1/region"));
+        Files.createDirectories(world.resolve("DIM1/region"));
+        Files.createDirectories(world.resolve("DIM7/region"));
+        Files.createDirectories(world.resolve("DIM-42/region"));
+        Files.createDirectories(world.resolve("DIM" + Integer.MIN_VALUE + "/region"));
+        Files.createDirectories(world.resolve("DIM00/region")); // leading zero -> ignored
+        Files.createDirectories(world.resolve("DIM2147483648/region")); // > Integer.MAX_VALUE -> ignored
+        Files.createDirectories(world.resolve("DIM99")); // no region subdir -> ignored
+        Files.createDirectories(world.resolve("DIMabc/region")); // non-integer -> ignored
+
+        List<WorldDimension> dimensions = WorldDimensionDiscovery.discover(new WorldInfo(world));
+
+        assertEquals(List.of(
+                WorldDimension.OVERWORLD_ID,
+                WorldDimension.NETHER_ID,
+                WorldDimension.END_ID,
+                "legacy:dim_" + Integer.MIN_VALUE,
+                "legacy:dim_-42",
+                "legacy:dim_7"),
+                dimensions.stream().map(WorldDimension::id).toList());
+        assertEquals(DimensionKind.MOD, dimensions.get(3).kind());
+        assertEquals("DIM" + Integer.MIN_VALUE, dimensions.get(3).displayName());
+        assertEquals(DimensionKind.MOD, dimensions.get(4).kind());
+        assertEquals("DIM-42", dimensions.get(4).displayName());
+        assertEquals(DimensionKind.MOD, dimensions.get(5).kind());
+        assertEquals("DIM7", dimensions.get(5).displayName());
+
+        assertEquals("legacy:dim_7", WorldDimension.normalizeId("7"));
+        assertEquals("legacy:dim_7", WorldDimension.normalizeId("DIM7"));
+        assertEquals("legacy:dim_-42", WorldDimension.normalizeId("-42"));
+        assertEquals("legacy:dim_-42", WorldDimension.normalizeId("DIM-42"));
+        assertEquals("legacy:dim_" + Integer.MIN_VALUE, WorldDimension.normalizeId(Integer.toString(Integer.MIN_VALUE)));
+        assertEquals("DIM00", WorldDimension.normalizeId("DIM00"));
+        assertEquals("DIM2147483648", WorldDimension.normalizeId("DIM2147483648"));
+        assertEquals(WorldDimension.OVERWORLD_ID, WorldDimension.normalizeId("0"));
+        assertEquals(WorldDimension.NETHER_ID, WorldDimension.normalizeId("-1"));
+        assertEquals(WorldDimension.END_ID, WorldDimension.normalizeId("1"));
+    }
 }

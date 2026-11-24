@@ -86,6 +86,20 @@ class MapTileCacheTest {
     }
 
     @Test
+    void invalidatesWhenLevelDatChanges() throws IOException {
+        Fixture fixture = fixture();
+        MapTileCache cache = new MapTileCache();
+        cache.store(fixture.world, fixture.dimension, fixture.key, image());
+        assertTrue(cache.findReusable(
+                fixture.world, fixture.dimension, fixture.key).isPresent());
+
+        Files.writeString(fixture.world.getFolderPath().resolve("level.dat"), "updated-fml-table");
+
+        assertTrue(cache.findReusable(
+                fixture.world, fixture.dimension, fixture.key).isEmpty());
+    }
+
+    @Test
     void ignoresChangesOutsideTileBounds() throws IOException {
         Fixture fixture = fixture();
         MapTileCache cache = new MapTileCache();

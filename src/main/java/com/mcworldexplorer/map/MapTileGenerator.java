@@ -1,5 +1,6 @@
 package com.mcworldexplorer.map;
 
+import com.mcworldexplorer.nbt.SavedLegacyIdMap;
 import com.mcworldexplorer.preview.ParsedChunkSections;
 import com.mcworldexplorer.preview.SurfaceSampler;
 import com.mcworldexplorer.preview.WorldDimension;
@@ -68,6 +69,8 @@ public final class MapTileGenerator {
         long epoch = summaries.epoch();
         checkCancelled(epoch, monitor);
         Path worldIdentity = world.getFolderPath().toRealPath();
+        String levelDatStamp = levelDatStamp(worldIdentity);
+        SavedLegacyIdMap legacyIdMap = SavedLegacyIdMap.readFromWorld(worldIdentity);
         String generation = persistent ? MapCacheStorage.generation(world) : "memory";
         MapTileBounds bounds = key.bounds();
         int minX = Math.toIntExact(Math.floorDiv(bounds.minX(), 16));
@@ -136,7 +139,7 @@ public final class MapTileGenerator {
         long markerBytes = 0;
         monitor.onProgress(completed, total);
         try (Readers readers = new Readers();
-             SurfaceSummaryStore store = persistent ? new SurfaceSummaryStore(world, () -> summaries.isCurrent(epoch)) : null) {
+             SurfaceSummaryStore store = persistent ? new SurfaceSummaryStore(world, levelDatStamp, () -> summaries.isCurrent(epoch)) : null) {
             for (ChunkCoordinate coordinate : chunks) {
                 checkCancelled(epoch, monitor);
                 int x = coordinate.x(), z = coordinate.z();
@@ -148,7 +151,8 @@ public final class MapTileGenerator {
                         throw new IOException("Invalid Region location at " + x + ", " + z);
                     }
                     var summaryKey = new SurfaceSummaryCache.Key(worldIdentity, dimension.id(), x, z,
-                            key.layer(), coordinate.index().signature(), "surface-v1/" + key.renderVersion() + "/" + generation);
+                            key.layer(), coordinate.index().signature(),
+                            "surface-v1/" + key.renderVersion() + "/ld=" + levelDatStamp + "/" + generation);
                     ChunkSurfaceSummary summary = summaries.get(summaryKey, epoch, monitor, () -> {
                         if (store != null) {
                             var restored = store.find(summaryKey);
@@ -158,7 +162,7 @@ public final class MapTileGenerator {
                         var reader = readers.get(coordinate.index().signature().path());
                         var data = reader.readChunk(Math.floorMod(x, 32), Math.floorMod(z, 32))
                                 .orElseThrow(() -> new IOException("Indexed chunk disappeared at " + x + ", " + z));
-                        var parsed = ParsedChunkSections.read(data);
+                        var parsed = ParsedChunkSections.read(data, legacyIdMap);
                         var surface = surfaceSampler.sample(parsed, key.layer());
                         List<MapMarker> extracted = List.of();
                         String diagnostic = "";
@@ -208,6 +212,9 @@ public final class MapTileGenerator {
         }
         for (Path path : absentRegions) {
             if (Files.exists(path)) throw new IOException("Region appeared during map sampling: " + path);
+        }
+        if (!levelDatStamp.equals(levelDatStamp(worldIdentity))) {
+            throw new IOException("level.dat changed during map sampling: " + worldIdentity.resolve("level.dat"));
         }
         checkCancelled(epoch, monitor);
         if (monitor.isObsolete()) throw new CancellationException("Terrain reused; obsolete raster discarded");
@@ -281,6 +288,18 @@ public final class MapTileGenerator {
         if (!regionDirectory.startsWith(worldDirectory)) {
             throw new IllegalArgumentException("dimension Region directory must stay inside the world directory");
         }
+    }
+
+    static String levelDatStamp(Path worldDirectory) throws IOException {
+        Path levelDat = worldDirectory.resolve("level.dat");
+        if (!Files.isRegularFile(levelDat, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            return "absent";
+        }
+        var attributes = Files.readAttributes(
+                levelDat,
+                java.nio.file.attribute.BasicFileAttributes.class,
+                java.nio.file.LinkOption.NOFOLLOW_LINKS);
+        return attributes.size() + ":" + attributes.lastModifiedTime().toMillis();
     }
 
     private record ChunkCoordinate(int x, int z, RegionHeaderIndex index) { }

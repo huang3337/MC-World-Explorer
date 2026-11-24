@@ -1,9 +1,10 @@
 # Issue 编号登记与记录索引
 
-更新于 2026-11-19。按源文件名排序，同一前缀内编号递增。
+更新于 2026-11-24。按源文件名排序，同一前缀内编号递增。
 
 ## 对齐结果
 
+- 2026-11-24，0.7.6 预扁平化兼容审查的 5 项问题已修复归档，2 项高、3 项中。现有 147 个前缀、239 个已用编号，其中 148 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-19，二维渲染排查的 2 项问题已修复归档，1 项高、1 项中。现有 145 个前缀、234 个已用编号，其中 143 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-19，文档收尾审查归档 4 项低严重程度的代码精简。登记 143 个前缀、232 个编号，141 个有正文或最终条目，91 个缺失编号继续占用。
 - 2026-11-19，0.7.5 工作区已修复[世界出生点](resolved/V0.7.5/LevelDatReader.java.md)、[玩家目录](resolved/V0.7.5/PlayerDataReader.java.md)及[紧凑方块状态](resolved/V0.7.5/ChunkNbtDecoder.java.md)。[新版客户端颜色绑定](resolved/V0.7.5/ClientBlockColors.java.md)已通过两个真实选区的像素回归。该轮登记 142 个前缀、228 个编号，其中 137 个有正文或最终审查条目，91 个正文缺失。
@@ -77,6 +78,7 @@
 | `MainController.java` | `CONTROLLER` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016 | `ISSUE-CONTROLLER-016` | `ISSUE-CONTROLLER-017` | [V0.1.1：001–009](resolved/V0.1.1/MainController.java.md)；[V0.2：010–011](resolved/V0.2/MainController.java.md)；[V0.2.1：012–014](resolved/V0.2.1/MainController.java.md)；[V0.7：015–016](resolved/V0.7/MainController.java.md) |
 | `MapCacheStorage.java` | `MAPCACHESTORAGE` | 001 | `ISSUE-MAPCACHESTORAGE-001` | `ISSUE-MAPCACHESTORAGE-002` | [V0.7.5：001](resolved/V0.7.5/MapCacheStorage.java.md) |
 | `MapRenderDevice.java` | `MAPRENDERDEVICE` | 001 | `ISSUE-MAPRENDERDEVICE-001` | `ISSUE-MAPRENDERDEVICE-002` | [V0.7.5：001](resolved/V0.7.5/MapRenderDevice.java.md) |
+| `MapTileCache.java` | `MAPTILECACHE` | 001 | `ISSUE-MAPTILECACHE-001` | `ISSUE-MAPTILECACHE-002` | [V0.7.6：001](resolved/V0.7.6/MapTileCache.java.md) |
 | `MapTileGenerator.java` | `MAPGEN` | 001 | `ISSUE-MAPGEN-001` | `ISSUE-MAPGEN-002` | [V0.3：001](resolved/V0.3/MapTileGenerator.java.md) |
 | `MapTileRenderer.java` | `MAPTILERENDER` | 001 | `ISSUE-MAPTILERENDER-001` | `ISSUE-MAPTILERENDER-002` | [V0.7.5：001](resolved/V0.7.5/MapTileRenderer.java.md) |
 | `MapTileScheduler.java` | `MAPSCHED` | 001,002 | `ISSUE-MAPSCHED-002` | `ISSUE-MAPSCHED-003` | [V0.3：001–002](resolved/V0.3/MapTileScheduler.java.md) |
@@ -163,18 +165,19 @@
 | `VoxelTargetIndexTest.java` | `TARGETTEST` | — | — | `ISSUE-TARGETTEST-001` | 尚未登记问题 |
 | `WorkspaceLayoutTest.java` | `WORKSPACETEST` | 001 | `ISSUE-WORKSPACETEST-001` | `ISSUE-WORKSPACETEST-002` | [V0.7.1：001](resolved/V0.7.1/WorkspaceLayoutTest.java.md) |
 | `WorldDataPacksTest.java` | `WORLDDATAPACKSTEST` | — | — | `ISSUE-WORLDDATAPACKSTEST-001` | 尚未登记问题 |
-| `WorldDimensionDiscovery.java` | `DISCOVERY` | 001,002,003 | `ISSUE-DISCOVERY-003` | `ISSUE-DISCOVERY-004` | [V0.2.1：001–002](resolved/V0.2.1/WorldDimensionDiscovery.java.md)；[正文缺失登记](#缺失正文登记) |
+| `WorldDimension.java` | `WORLDDIM` | 001 | `ISSUE-WORLDDIM-001` | `ISSUE-WORLDDIM-002` | [V0.7.6：001](resolved/V0.7.6/WorldDimension.java.md) |
+| `WorldDimensionDiscovery.java` | `DISCOVERY` | 001,002,003,004 | `ISSUE-DISCOVERY-004` | `ISSUE-DISCOVERY-005` | [V0.7.6：004](resolved/V0.7.6/WorldDimensionDiscovery.java.md)；[V0.2.1：001–002](resolved/V0.2.1/WorldDimensionDiscovery.java.md)；[正文缺失登记](#缺失正文登记) |
 | `WorldInfo.java` | `WORLDINFO` | 001,002,003,004,005 | `ISSUE-WORLDINFO-005` | `ISSUE-WORLDINFO-006` | [V0.1.1：001–005](resolved/V0.1.1/WorldInfo.java.md) |
 | `WorldListCell.java` | `LISTCELL` | 001,002,003 | `ISSUE-LISTCELL-003` | `ISSUE-LISTCELL-004` | [V0.1.1：001–003](resolved/V0.1.1/WorldListCell.java.md) |
 | `WorldScanner.java` | `SCANNER` | 001,002,003,004,005,006 | `ISSUE-SCANNER-006` | `ISSUE-SCANNER-007` | [V0.1.1：001–006](resolved/V0.1.1/WorldScanner.java.md) |
 | `WorldTreeCell.java` | `TREECELL` | 001,002,003,004 | `ISSUE-TREECELL-004` | `ISSUE-TREECELL-005` | [V0.1.1：001–004](resolved/V0.1.1/WorldTreeCell.java.md) |
 | `build-v04-trials.ps1` | `V04PACKAGE` | 001 | `ISSUE-V04PACKAGE-001` | `ISSUE-V04PACKAGE-002` | [V0.4：001](resolved/V0.4/build-v04-trials.ps1.md) |
-| `build.gradle` | `BUILD` | 001,002,003 | `ISSUE-BUILD-003` | `ISSUE-BUILD-004` | [V0.2.1：001](resolved/V0.2.1/build.gradle.md)；[正文缺失登记](#缺失正文登记) |
+| `build.gradle` | `BUILD` | 001,002,003,004 | `ISSUE-BUILD-004` | `ISSUE-BUILD-005` | [V0.7.6：004](resolved/V0.7.6/build.gradle.md)；[V0.2.1：001](resolved/V0.2.1/build.gradle.md)；[正文缺失登记](#缺失正文登记) |
 | `main.fxml` | `FXML` | 001,002,003,004,005 | `ISSUE-FXML-005` | `ISSUE-FXML-006` | [V0.1.1：001–004](resolved/V0.1.1/main.fxml.md)；[V0.7：005](resolved/V0.7/main.fxml.md) |
 | `map-view.fxml` | `MAPFXML` | 001,002 | `ISSUE-MAPFXML-002` | `ISSUE-MAPFXML-003` | [V0.7：001](resolved/V0.7/map-view.fxml.md)；[V0.7.1：002](resolved/V0.7.1/map-view.fxml.md) |
 | `measure-v04.ps1` | `V04MEASURE` | 001 | `ISSUE-V04MEASURE-001` | `ISSUE-V04MEASURE-002` | [V0.4：001](resolved/V0.4/measure-v04.ps1.md) |
 | `measure-v05.ps1` | `V05-SCRIPT` | 001,002 | `ISSUE-V05-SCRIPT-002` | `ISSUE-V05-SCRIPT-003` | [V0.5：001–002](resolved/V0.5/measure-v05.ps1.md) |
-| `package-windows.ps1` | `PACKAGEWINDOWS` | 001,002 | `ISSUE-PACKAGEWINDOWS-002` | `ISSUE-PACKAGEWINDOWS-003` | [V0.7.4：001–002](resolved/V0.7.4/REVIEW_SUMMARY.md) |
+| `package-windows.ps1` | `PACKAGEWINDOWS` | 001,002,003 | `ISSUE-PACKAGEWINDOWS-003` | `ISSUE-PACKAGEWINDOWS-004` | [V0.7.6：003](resolved/V0.7.6/package-windows.ps1.md)；[V0.7.4：001–002](resolved/V0.7.4/REVIEW_SUMMARY.md) |
 | `styles.css` | `CSS` | 001 | `ISSUE-CSS-001` | `ISSUE-CSS-002` | [正文缺失登记](#缺失正文登记) |
 
 ## 缺失正文登记
