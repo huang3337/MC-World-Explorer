@@ -87,8 +87,9 @@ final class BuiltinResourcePacks {
         synchronized(CACHE){if(CACHE.size()>=8)CACHE.remove(CACHE.keySet().iterator().next());CACHE.put(instance,result);}
         return result;
     }
-    static Set<String> owners(ZipFile zip)throws IOException {return owners(text(zip,"fabric.mod.json"),text(zip,"META-INF/neoforge.mods.toml"),text(zip,"META-INF/mods.toml"));}
-    static Set<String> owners(String fabric,String neo,String forge)throws IOException {
+    static Set<String> owners(ZipFile zip)throws IOException {return owners(text(zip,"fabric.mod.json"),text(zip,"META-INF/neoforge.mods.toml"),text(zip,"META-INF/mods.toml"),text(zip,"mcmod.info"));}
+    static Set<String> owners(String fabric,String neo,String forge)throws IOException {return owners(fabric,neo,forge,null);}
+    static Set<String> owners(String fabric,String neo,String forge,String mcmod)throws IOException {
         Set<String> ids=new HashSet<>();if(fabric!=null)try(var reader=new com.google.gson.stream.JsonReader(new StringReader(fabric))) {
             // Descriptions in some locally installed metadata contain raw control characters; only bounded IDs are used.
             reader.setStrictness(Strictness.LENIENT);reader.setNestingLimit(32);var json=JsonParser.parseReader(reader).getAsJsonObject();
@@ -97,7 +98,31 @@ final class BuiltinResourcePacks {
         }catch(RuntimeException invalid){/* An ownerless pack can only be selected by an unambiguous builtin path. */}
         ForgeModMetadata.collect(neo,ids);
         ForgeModMetadata.collect(forge,ids);
+        collectMcmodInfo(mcmod,ids);
         return Set.copyOf(ids);
+    }
+    static void collectMcmodInfo(String mcmod,Set<String> ids) {
+        if(mcmod==null||mcmod.isBlank())return;
+        try(var reader=new com.google.gson.stream.JsonReader(new StringReader(mcmod))) {
+            reader.setStrictness(Strictness.LENIENT);reader.setNestingLimit(32);
+            JsonElement root=JsonParser.parseReader(reader);
+            JsonArray list=null;
+            if(root.isJsonArray())list=root.getAsJsonArray();
+            else if(root.isJsonObject()&&root.getAsJsonObject().has("modList")&&root.getAsJsonObject().get("modList").isJsonArray())
+                list=root.getAsJsonObject().getAsJsonArray("modList");
+            if(list==null)return;
+            int count=0;
+            for(JsonElement item:list){
+                if(++count>256)break;
+                if(!item.isJsonObject())continue;
+                var obj=item.getAsJsonObject();
+                var raw=obj.get("modid");
+                if(raw!=null&&raw.isJsonPrimitive()&&raw.getAsJsonPrimitive().isString()){
+                    String normalized=raw.getAsString().trim().toLowerCase(Locale.ROOT);
+                    addId(ids,normalized);
+                }
+            }
+        }catch(IOException|RuntimeException invalid){/* Unreadable mcmod.info cannot confirm ownership. */}
     }
     static String text(ZipFile zip,String name)throws IOException {var entry=zip.getEntry(name);if(entry==null||entry.isDirectory()||entry.getSize()<0||entry.getSize()>1024*1024)return null;try(var input=zip.getInputStream(entry)){byte[] bytes=input.readNBytes(1024*1024+1);if(bytes.length>1024*1024)throw new IOException("Mod元信息超限");return new String(bytes,StandardCharsets.UTF_8);}}
     private static void addId(Set<String> ids,String value){if(value.length()<=64&&value.matches("[a-z0-9_.-]+"))ids.add(value);}

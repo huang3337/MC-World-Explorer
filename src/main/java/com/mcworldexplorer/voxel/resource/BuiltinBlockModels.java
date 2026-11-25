@@ -39,6 +39,7 @@ final class BuiltinBlockModels implements BlockResourceSource {
 
 
     @Override public int baseResourceFormat(){return source.baseResourceFormat();}
+    @Override public ClientResourceArchive.ProtocolMode baseProtocolMode(){return source.baseProtocolMode();}
     @Override public Optional<String> baseClientVersion(){return source.baseClientVersion();}
     @Override public Optional<Long> worldSeed()throws IOException{return source.worldSeed();}
     @Override public Optional<Integer> biomeBlendRadius()throws IOException{return source.biomeBlendRadius();}

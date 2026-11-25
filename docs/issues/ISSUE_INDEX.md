@@ -4,6 +4,7 @@
 
 ## 对齐结果
 
+- 2026-11-25，0.7.8 预扁平化三维纹理适配审查的 6 项问题已修复归档，4 项高、1 项中、1 项低。现有 153 个前缀、247 个已用编号，其中 156 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-25，0.7.7 旧版客户端准入与着色回退审查的 2 项问题已修复归档，1 项中、1 项低。现有 149 个前缀、241 个已用编号，其中 150 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-24，0.7.6 预扁平化兼容审查的 5 项问题已修复归档，2 项高、3 项中。现有 147 个前缀、239 个已用编号，其中 148 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-19，二维渲染排查的 2 项问题已修复归档，1 项高、1 项中。现有 145 个前缀、234 个已用编号，其中 143 个有正文或最终条目，91 个历史缺失编号继续占用。
@@ -36,7 +37,7 @@
 | `AboutDialog.java` | `ABOUTDIALOG` | — | — | `ISSUE-ABOUTDIALOG-001` | 尚未登记问题 |
 | `App.java` | `APP` | 001,002,003,004,005 | `ISSUE-APP-005` | `ISSUE-APP-006` | [V0.1.1：001–005](resolved/V0.1.1/App.java.md) |
 | `BlockClassifier.java` | `V05-CLASS` | 001 | `ISSUE-V05-CLASS-001` | `ISSUE-V05-CLASS-002` | [V0.5：001](resolved/V0.5/BlockClassifier.java.md) |
-| `BlockModelResolver.java` | `BMODEL` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018,019,020,021,022,023,024,025,026,027,028,029,030,031 | `ISSUE-BMODEL-031` | `ISSUE-BMODEL-032` | [V0.7.2：001–003](resolved/V0.7.2/BlockModelResolver.java.md)；[V0.7.3：004–007](resolved/V0.7.3/BlockModelResolver.java.md)；[正文缺失登记](#缺失正文登记) |
+| `BlockModelResolver.java` | `BMODEL` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018,019,020,021,022,023,024,025,026,027,028,029,030,031,032 | `ISSUE-BMODEL-032` | `ISSUE-BMODEL-033` | [V0.7.8：032](resolved/V0.7.8/BlockModelResolver.java.md)；[V0.7.2：001–003](resolved/V0.7.2/BlockModelResolver.java.md)；[V0.7.3：004–007](resolved/V0.7.3/BlockModelResolver.java.md)；[正文缺失登记](#缺失正文登记) |
 | `BlockModelResolverTest.java` | `BLOCKMODELRESOLVERTEST` | — | — | `ISSUE-BLOCKMODELRESOLVERTEST-001` | 尚未登记问题 |
 | `BlockResourceDiagnostic.java` | `BLOCKRESOURCEDIAGNOSTIC` | — | — | `ISSUE-BLOCKRESOURCEDIAGNOSTIC-001` | 尚未登记问题 |
 | `BlockResourceDiagnosticTest.java` | `BLOCKRESOURCEDIAGNOSTICTEST` | — | — | `ISSUE-BLOCKRESOURCEDIAGNOSTICTEST-001` | 尚未登记问题 |
@@ -55,6 +56,7 @@
 | `ClientBlockRegistration.java` | `CBLKREG` | 001,002,003 | `ISSUE-CBLKREG-003` | `ISSUE-CBLKREG-004` | [正文缺失登记](#缺失正文登记) |
 | `ClientResourceArchive.java` | `CLIENTRES` | 001 | `ISSUE-CLIENTRES-001` | `ISSUE-CLIENTRES-002` | [正文缺失登记](#缺失正文登记) |
 | `ClientResourceArchiveTest.java` | `CLIENTRESOURCEARCHIVETEST` | — | — | `ISSUE-CLIENTRESOURCEARCHIVETEST-001` | 尚未登记问题 |
+| `ClientResourceLocator.java` | `CLIENTLOC` | 001 | `ISSUE-CLIENTLOC-001` | `ISSUE-CLIENTLOC-002` | [V0.7.8：001](resolved/V0.7.8/ClientResourceLocator.java.md) |
 | `CoreIsolationTest.java` | `COREISOLATIONTEST` | — | — | `ISSUE-COREISOLATIONTEST-001` | 尚未登记问题 |
 | `DimensionHeightResolver.java` | `HEIGHT` | 001,002 | `ISSUE-HEIGHT-002` | `ISSUE-HEIGHT-003` | [V0.2.1：001–002](resolved/V0.2.1/DimensionHeightResolver.java.md) |
 | `ExternalModelPlugin.java` | `EXTERNALMODELPLUGIN` | 001 | `ISSUE-EXTERNALMODELPLUGIN-001` | `ISSUE-EXTERNALMODELPLUGIN-002` | [V0.7.4：001](resolved/V0.7.4/REVIEW_SUMMARY.md) |
@@ -66,13 +68,15 @@
 | `GameModelDefinitionContractTest.java` | `GAMEMODELDEFINITIONCONTRACTTEST` | — | — | `ISSUE-GAMEMODELDEFINITIONCONTRACTTEST-001` | 尚未登记问题 |
 | `GeometryTransform.java` | `GEOMETRYTRANSFORM` | — | — | `ISSUE-GEOMETRYTRANSFORM-001` | 尚未登记问题 |
 | `GlfwViewerOrbitController.java` | `GLFWNAV` | — | — | `ISSUE-GLFWNAV-001` | 尚未登记问题 |
-| `InstanceResourceLocator.java` | `IRLOC` | 001,002,003,004 | `ISSUE-IRLOC-004` | `ISSUE-IRLOC-005` | [V0.7.3：001](resolved/V0.7.3/InstanceResourceLocator.java.md)；[正文缺失登记](#缺失正文登记) |
+| `InstanceResourceLocator.java` | `IRLOC` | 001,002,003,004,005 | `ISSUE-IRLOC-005` | `ISSUE-IRLOC-006` | [V0.7.8：005](resolved/V0.7.8/InstanceResourceLocator.java.md)；[V0.7.3：001](resolved/V0.7.3/InstanceResourceLocator.java.md)；[正文缺失登记](#缺失正文登记) |
 | `InstanceResourceSource.java` | `IRSRC` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015 | `ISSUE-IRSRC-015` | `ISSUE-IRSRC-016` | [V0.7.3：001](resolved/V0.7.3/InstanceResourceSource.java.md)；[正文缺失登记](#缺失正文登记) |
 | `InstanceResourceSourceTest.java` | `IRSRC_TEST` | — | — | `ISSUE-IRSRC_TEST-001` | 尚未登记问题 |
 | `JavaFxCameraTransform.java` | `JFXCAM` | 001 | `ISSUE-JFXCAM-001` | `ISSUE-JFXCAM-002` | [V0.4：001](resolved/V0.4/JavaFxCameraTransform.java.md) |
 | `JavaFxOrbitController.java` | `JFXORBIT` | 001 | `ISSUE-JFXORBIT-001` | `ISSUE-JFXORBIT-002` | [V0.4：001](resolved/V0.4/JavaFxOrbitController.java.md) |
 | `LauncherResourceLibraries.java` | `LAUNCHLIB` | 001,002 | `ISSUE-LAUNCHLIB-002` | `ISSUE-LAUNCHLIB-003` | [正文缺失登记](#缺失正文登记) |
 | `LayeredResourceSource.java` | `LAYERED` | 001 | `ISSUE-LAYERED-001` | `ISSUE-LAYERED-002` | [V0.7.7：001](resolved/V0.7.7/LayeredResourceSource.java.md) |
+| `LegacyFlatTextureModels.java` | `FLATMODEL` | 001 | `ISSUE-FLATMODEL-001` | `ISSUE-FLATMODEL-002` | [V0.7.8：001](resolved/V0.7.8/LegacyFlatTextureModels.java.md) |
+| `LegacyJsonStateMapper.java` | `LEGACYMAP` | 001 | `ISSUE-LEGACYMAP-001` | `ISSUE-LEGACYMAP-002` | [V0.7.8：001](resolved/V0.7.8/LegacyJsonStateMapper.java.md) |
 | `LevelDatReader.java` | `LEVELDAT` | 001,002,003,004,005,006,007,008 | `ISSUE-LEVELDAT-008` | `ISSUE-LEVELDAT-009` | [V0.7.5：007–008](resolved/V0.7.5/LevelDatReader.java.md)、[V0.1.1：001–006](resolved/V0.1.1/LevelDatReader.java.md) |
 | `LwjglV04Renderer.java` | `LWJGLRENDER` | 001 | `ISSUE-LWJGLRENDER-001` | `ISSUE-LWJGLRENDER-002` | [V0.4：001](resolved/V0.4/LwjglV04Renderer.java.md) |
 | `LwjglV05Launcher.java` | `V05-MEM` | 001 | `ISSUE-V05-MEM-001` | `ISSUE-V05-MEM-002` | [V0.5：001](resolved/V0.5/LwjglV05Launcher.java.md) |
@@ -128,6 +132,7 @@
 | `RootModelTransform.java` | `ROOTTRANS` | 001 | `ISSUE-ROOTTRANS-001` | `ISSUE-ROOTTRANS-002` | [正文缺失登记](#缺失正文登记) |
 | `RootModelTransformTest.java` | `ROOTMODELTRANSFORMTEST` | — | — | `ISSUE-ROOTMODELTRANSFORMTEST-001` | 尚未登记问题 |
 | `SavedBiomeColors.java` | `SBCOLOR` | 001 | `ISSUE-SBCOLOR-001` | `ISSUE-SBCOLOR-002` | [正文缺失登记](#缺失正文登记) |
+| `SavedFluid.java` | `SAVEDFLUID` | 001 | `ISSUE-SAVEDFLUID-001` | `ISSUE-SAVEDFLUID-002` | [V0.7.8：001](resolved/V0.7.8/SavedFluid.java.md) |
 | `SavedTargetIntegrationTest.java` | `SAVTARGETTEST` | 001 | `ISSUE-SAVTARGETTEST-001` | `ISSUE-SAVTARGETTEST-002` | [正文缺失登记](#缺失正文登记) |
 | `ShaderProgram.java` | `SHADER` | 001 | `ISSUE-SHADER-001` | `ISSUE-SHADER-002` | [V0.4：001](resolved/V0.4/ShaderProgram.java.md) |
 | `StandardBlockTintTest.java` | `TINTSTDTEST` | — | — | `ISSUE-TINTSTDTEST-001` | 尚未登记问题 |

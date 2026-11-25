@@ -44,7 +44,7 @@ final class ClientBlockColors {
             if (VanillaTintLayers.hasRegisteredProfile(version)) {
                 throw unsupported("标准颜色协议指纹未匹配此已登记客户端：" + version);
             }
-            if (source.baseResourceFormat() >= 4 && !version.isBlank()) {
+            if (source.baseResourceFormat() >= 1 && !version.isBlank()) {
                 layers = VanillaTintLayers.genericFallback(version, source.baseResourceFormat());
                 bindings = Map.of();
                 baseTextures = VanillaTintLayers.verifiedBaseTextures();

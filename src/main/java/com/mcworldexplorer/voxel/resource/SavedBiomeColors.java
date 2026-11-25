@@ -98,7 +98,7 @@ final class SavedBiomeColors {
     private static Optional<BlockResourceSource.DimensionHeight> legacyDimensionHeight(
             BlockResourceSource source, ResourceLocation dimension) throws IOException {
         int format = source.baseResourceFormat();
-        if (format < 4 || !source.baseDataRegistry("dimension_type").equals(Optional.of(false))) {
+        if (format < 1 || !source.baseDataRegistry("dimension_type").equals(Optional.of(false))) {
             return Optional.empty();
         }
         String id = dimension.toString();
@@ -158,7 +158,7 @@ final class SavedBiomeColors {
         try {id=ResourceLocation.parse(key.biome());} catch(IllegalArgumentException invalid){throw invalid("保存群系ID无效");}
         var jsonOpt=data.read(new ResourceLocation(id.namespace(),"worldgen/biome/"+id.path()+".json"));
         if(jsonOpt.isEmpty()){
-            if(source!=null && source.baseResourceFormat()>=4
+            if(source!=null && source.baseResourceFormat()>=1
                     && source.baseDataRegistry("worldgen/biome").equals(Optional.of(false))
                     && id.namespace().equals("minecraft")){
                 var climate=com.mcworldexplorer.voxel.data.VanillaLegacyBiomes.climate(id.toString());

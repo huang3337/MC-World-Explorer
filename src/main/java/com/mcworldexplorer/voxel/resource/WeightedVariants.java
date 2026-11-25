@@ -11,7 +11,7 @@ import java.util.TreeMap;
 final class WeightedVariants {
     enum Draw { LEGACY, BOUNDED }
     static Draw protocol(int resourceFormat) {
-        if (resourceFormat >= 4 && resourceFormat <= 36) return Draw.LEGACY;
+        if (resourceFormat >= 1 && resourceFormat <= 36) return Draw.LEGACY;
         if (resourceFormat >= 37 && resourceFormat <= 97) return Draw.BOUNDED;
         return null;
     }

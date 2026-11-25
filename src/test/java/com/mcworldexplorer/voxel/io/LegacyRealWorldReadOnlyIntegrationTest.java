@@ -73,8 +73,9 @@ class LegacyRealWorldReadOnlyIntegrationTest {
 
         var resourceCheck = new ClientResourceLocator().locate(
                 sampleWorld, world.getVersionName(), Optional.empty(), List.of(), CancellationSignal.NONE);
-        assertEquals(ClientResourceLocator.Status.INVALID_VERSION, resourceCheck.status());
-        assertTrue(resourceCheck.message().contains("预扁平化旧版存档"));
+        assertTrue(resourceCheck.status() == ClientResourceLocator.Status.FOUND
+                        || resourceCheck.status() == ClientResourceLocator.Status.MISSING,
+                "Expected FOUND (when inside a 1.7.10 instance) or MISSING (when standalone), got: " + resourceCheck.status());
 
         PreviewCenter center = PreviewCenterResolver.resolve(world);
         long tileX = Math.floorDiv(center.x(), 256);
@@ -119,6 +120,57 @@ class LegacyRealWorldReadOnlyIntegrationTest {
 
         Map<Path, FileFingerprint> after = snapshotWorldFiles(sampleWorld);
         assertEquals(before, after, "Sample world files must be 100% unmodified after read-only inspection");
+    }
+
+    @Test
+    void buildsTextured3DSceneFromLocal1710InstanceReadOnly() throws Exception {
+        String configured = System.getProperty("mcwe.legacy1710World", System.getenv("MCWORLD_LEGACY_1710_WORLD"));
+        Assumptions.assumeTrue(configured != null && !configured.isBlank(),
+                "Set MCWORLD_LEGACY_1710_WORLD or -Dmcwe.legacy1710World to run real 1.7.10 textured verification");
+        Path sampleWorld = Path.of(configured);
+        Assumptions.assumeTrue(Files.isDirectory(sampleWorld),
+                "Configured 1.7.10 Forge sample save directory does not exist");
+
+        WorldInfo world = LevelDatReader.readLevelDat(sampleWorld);
+        String explicitJarEnv = System.getProperty("mcwe.legacy1710Jar", System.getenv("MCWORLD_LEGACY_1710_JAR"));
+        Optional<Path> explicitJar = (explicitJarEnv == null || explicitJarEnv.isBlank())
+                ? Optional.empty() : Optional.of(Path.of(explicitJarEnv));
+
+        var located = new ClientResourceLocator().locate(
+                sampleWorld, world.getVersionName(), explicitJar, List.of(), CancellationSignal.NONE);
+        Assumptions.assumeTrue(located.status() == ClientResourceLocator.Status.FOUND && located.path().isPresent(),
+                "No 1.7.10 client JAR located for the configured save: " + located.message());
+        Path clientJar = located.path().orElseThrow();
+
+        Map<Path, FileFingerprint> beforeWorld = snapshotWorldFiles(sampleWorld);
+        FileFingerprint beforeJar = fingerprint(clientJar);
+
+        PreviewCenter center = PreviewCenterResolver.resolve(world);
+        int centerChunkX = Math.floorDiv(center.x(), 16);
+        int centerChunkZ = Math.floorDiv(center.z(), 16);
+        ChunkRectangle target = ChunkRectangle.target(centerChunkX, centerChunkZ, centerChunkX, centerChunkZ);
+        VoxelAreaLoadResult area = new VoxelAreaLoader().load(
+                new VoxelAreaRequest(sampleWorld, WorldDimension.OVERWORLD_ID, target),
+                CancellationSignal.NONE);
+
+        try (var instanceSource = com.mcworldexplorer.voxel.resource.InstanceResourceSource.open(
+                sampleWorld, clientJar, world.getVersionName(), null, CancellationSignal.NONE, msg -> {})) {
+            assertEquals(com.mcworldexplorer.voxel.resource.ClientResourceArchive.ProtocolMode.LEGACY_FLAT_TEXTURE,
+                    instanceSource.baseProtocolMode());
+            var textureSet = com.mcworldexplorer.voxel.resource.BlockTextureSet.load(
+                    instanceSource, area, CancellationSignal.NONE);
+            assertTrue(textureSet.atlas().width() > 0 && textureSet.atlas().height() > 0,
+                    "Expected non-empty texture atlas for 1.7.10 instance");
+
+            VoxelSceneResult texturedScene = new VoxelSceneBuilder(textureSet).build(area, CancellationSignal.NONE);
+            VoxelSceneSnapshot snapshot = texturedScene.snapshot().orElseThrow();
+            assertTrue(snapshot.blockCount() > 0, "Textured 1.7.10 3D scene must contain non-air blocks");
+            assertTrue(snapshot.faceCount() > 0, "Textured 1.7.10 3D scene must generate visible faces");
+            assertTrue(snapshot.atlas().isPresent(), "Textured 1.7.10 3D scene must carry a baked texture atlas");
+        }
+
+        assertEquals(beforeWorld, snapshotWorldFiles(sampleWorld), "Sample world files must remain unmodified");
+        assertEquals(beforeJar, fingerprint(clientJar), "Client JAR must remain unmodified");
     }
 
     private static Map<Path, FileFingerprint> snapshotWorldFiles(Path worldFolder) throws IOException {

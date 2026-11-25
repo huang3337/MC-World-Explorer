@@ -69,11 +69,16 @@ class ClientResourceLocatorTest {
             assertEquals(INVALID_VERSION, result.status());
             assertEquals(0, result.checkedCandidates());
         }
-        for (String legacyVersion : List.of(com.mcworldexplorer.nbt.LevelDatReader.LEGACY_PRE_1_9_VERSION, "1.7.10", "1.12.2")) {
-            var result = locator.locate(home, legacyVersion, Optional.empty(), List.of(home), CancellationSignal.NONE);
+        for (String pre16 : List.of("1.2.5", "1.5.2")) {
+            var result = locator.locate(home, pre16, Optional.empty(), List.of(home), CancellationSignal.NONE);
             assertEquals(INVALID_VERSION, result.status());
             assertEquals(0, result.checkedCandidates());
-            assertTrue(result.message().contains("预扁平化旧版存档"));
+            assertTrue(result.message().contains("1.6 之前旧版存档"));
+        }
+        for (String legacyVersion : List.of(com.mcworldexplorer.nbt.LevelDatReader.LEGACY_PRE_1_9_VERSION, "1.7.10", "1.12.2")) {
+            var result = locator.locate(home, legacyVersion, Optional.empty(), List.of(home), CancellationSignal.NONE);
+            assertEquals(MISSING, result.status());
+            assertTrue(result.message().contains("简化颜色底座"));
         }
     }
 

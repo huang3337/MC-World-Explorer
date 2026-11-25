@@ -132,11 +132,79 @@ public final class BlockModelResolver {
             if(baseDepth>=MAX_PARENT_DEPTH)throw fail(Reason.LIMIT_EXCEEDED,"状态/组合原型引用超过 32 层");
             if(!stateChain.add(reference))throw fail(Reason.REFERENCE_CYCLE,"状态原型引用循环："+state.name());
             entered=true;
-            ResourceLocation block = id(state.name());
+            if (rootModel == null && archive.baseProtocolMode() == ClientResourceArchive.ProtocolMode.LEGACY_FLAT_TEXTURE) {
+                Optional<List<Part>> flat = LegacyFlatTextureModels.resolve(state, archive, sources);
+                if (flat.isEmpty()) {
+                    throw fail(Reason.UNSUPPORTED_MODEL,
+                            "1.6–1.7 平面纹理模式未覆盖此方块几何/贴图（不执行游戏或 Mod 字节码），保留原始身份并回退简化颜色");
+                }
+                List<Part> flatParts = flat.get();
+                Part first = flatParts.isEmpty()
+                        ? new Part(id(state.name()), 0, 0, false, List.of(), null)
+                        : flatParts.getFirst();
+                var allFaces = flatParts.stream().flatMap(part -> part.faces().stream()).toList();
+                return new Result(Reason.RESOLVED, "已解析（1.6–1.7 静态平面纹理）",
+                        Optional.of(new Model(first.id(), first.xRotation(), first.yRotation(), first.uvLock(), allFaces, false, flatParts)),
+                        sources, archive.fingerprint(), context.dependencies(), context.loaders);
+            }
+            BlockState effectiveState = state;
+            ResourceLocation block;
+            if (rootModel == null && archive.baseProtocolMode() == ClientResourceArchive.ProtocolMode.LEGACY_JSON_MODEL) {
+                var mapped = LegacyJsonStateMapper.map(state);
+                if (mapped == null) throw fail(Reason.INVALID_MODEL, "非法方块资源 ID：" + state.name());
+                block = mapped.blockstateId();
+                effectiveState = mapped.state();
+                if (block.namespace().equals("minecraft")
+                        && Set.of("air", "cave_air", "void_air", "barrier", "structure_void", "water", "lava", "end_portal").contains(block.path())
+                        && archive.readJson(ResourceLocation.Kind.BLOCKSTATE, block).isEmpty()) {
+                    var builtinParts = ((BuiltinBlockModels) archive).resolve(effectiveState);
+                    if (builtinParts.isPresent()) {
+                        List<Part> resolvedBuiltin = builtinParts.get();
+                        for (Part part : resolvedBuiltin) {
+                            for (Face face : part.faces()) {
+                                Source ref = new Source(ResourceLocation.Kind.TEXTURE, face.texture());
+                                if (!sources.contains(ref)) sources.add(ref);
+                            }
+                        }
+                        Part first = resolvedBuiltin.isEmpty()
+                                ? new Part(block, 0, 0, false, List.of(), null)
+                                : resolvedBuiltin.getFirst();
+                        var allFaces = resolvedBuiltin.stream().flatMap(part -> part.faces().stream()).toList();
+                        return new Result(Reason.RESOLVED, "已解析（1.8–1.12.2 内置特殊几何）",
+                                Optional.of(new Model(first.id(), first.xRotation(), first.yRotation(), first.uvLock(), allFaces, false, resolvedBuiltin)),
+                                sources, archive.fingerprint(), context.dependencies(), context.loaders);
+                    }
+                }
+            } else {
+                block = id(state.name());
+            }
             JsonObject root;JsonObject ruleDefinition=null;
             if(rootModel!=null){
                 root=new JsonObject();var selected=new JsonObject();selected.addProperty("model",rootModel.toString());var variants=new JsonObject();variants.add("",selected);root.add("variants",variants);
             }else root=read(ResourceLocation.Kind.BLOCKSTATE,block,sources);
+            if (rootModel == null && archive.baseProtocolMode() == ClientResourceArchive.ProtocolMode.LEGACY_JSON_MODEL
+                    && ForgeBlockstateV1.isForgeV1(root)) {
+                ForgeBlockstateV1.Plan plan;
+                try {
+                    plan = ForgeBlockstateV1.parse(root, effectiveState);
+                } catch (ModelRule.Failure invalid) {
+                    throw fail(invalid.reason(), invalid.getMessage());
+                }
+                List<Part> forgeParts = new ArrayList<>();
+                for (var item : plan.models()) {
+                    forgeParts.addAll(resolveParts(item.model(), null, effectiveState, item.x(), item.y(), item.uvLock(),
+                            0, new LinkedHashSet<>(), sources, item.textures(), context));
+                    if (forgeParts.stream().mapToInt(p -> p.faces().size()).sum() > 8192)
+                        throw fail(Reason.LIMIT_EXCEEDED, "Forge V1 组合模型面数超过 8192");
+                }
+                if (forgeParts.isEmpty()) forgeParts.add(new Part(block, 0, 0, false, List.of(), null));
+                Part first = forgeParts.getFirst();
+                var allFaces = forgeParts.stream().flatMap(part -> part.faces().stream()).toList();
+                return new Result(Reason.RESOLVED,
+                        plan.fixedFirstAlternative() ? "已解析（Forge V1）；随机候选固定选择第一项" : "已解析（Forge V1）",
+                        Optional.of(new Model(first.id(), first.xRotation(), first.yRotation(), first.uvLock(), allFaces, plan.fixedFirstAlternative(), forgeParts)),
+                        sources, archive.fingerprint(), context.dependencies(), context.loaders);
+            }
             for(String selector:rules.stateSelectors())if(root.has(selector)) {
                 if(ruleDefinition!=null)throw fail(Reason.INVALID_MODEL,"blockstate规则选择声明冲突");
                 var loader=id(string(root.get(selector)));context.loaders.add(loader);var rule=rules.find(loader).orElse(null);
@@ -150,7 +218,7 @@ public final class BlockModelResolver {
             if (ruleDefinition==null&&root.has("variants")) {
                 JsonObject variants = object(root.get("variants"));
                 if (variants.size() > MAX_STATE_BRANCHES) throw fail(Reason.LIMIT_EXCEEDED, "blockstate 分支过多");
-                for (var entry : variants.entrySet()) if (matches(entry.getKey(), state)) {
+                for (var entry : variants.entrySet()) if (matches(entry.getKey(), effectiveState)) {
                     if (!applications.isEmpty()) throw fail(Reason.AMBIGUOUS_VARIANT, "多个 blockstate 分支匹配");
                     applications.add(entry.getValue());
                 }
@@ -161,7 +229,7 @@ public final class BlockModelResolver {
                 for (var value : multipart) {
                     var item = object(value);
                     fields(item,ModelDefinitionProtocol.Scope.MULTIPART);
-                    if (!item.has("when") || condition(item.get("when"), state, 0))
+                    if (!item.has("when") || condition(item.get("when"), effectiveState, 0))
                         applications.add(item.get("apply"));
                 }
             }
@@ -169,10 +237,10 @@ public final class BlockModelResolver {
                 if(ruleDefinition==null&&root.has("variants"))throw fail(Reason.NO_VARIANT,"没有匹配属性的模型分支");
             }
             List<Part> parts = new ArrayList<>();
-            if(ruleDefinition!=null)parts.addAll(resolveParts(block,ruleDefinition,state,0,0,false,0,new LinkedHashSet<>(),sources,Map.of(),context));
-            boolean fixed=chooseApplications(applications,root.has("multipart"),state,position,capture,compiled);
+            if(ruleDefinition!=null)parts.addAll(resolveParts(block,ruleDefinition,effectiveState,0,0,false,0,new LinkedHashSet<>(),sources,Map.of(),context));
+            boolean fixed=chooseApplications(applications,root.has("multipart"),effectiveState,position,capture,compiled);
             for (JsonElement selected : applications) {
-                parts.addAll(application(selected,state,0,new LinkedHashSet<>(),sources,Map.of(),context));
+                parts.addAll(application(selected,effectiveState,0,new LinkedHashSet<>(),sources,Map.of(),context));
                 if(parts.stream().mapToInt(part->part.faces().size()).sum()>8192)throw fail(Reason.LIMIT_EXCEEDED,"组合模型面数超过 8192");
             }
             if(parts.isEmpty())parts.add(new Part(block,0,0,false,List.of(),null));
@@ -255,7 +323,12 @@ public final class BlockModelResolver {
     private List<Part> application(JsonElement application,BlockState state,int depth,Set<ResourceLocation> chain,List<Source> sources,Map<String,TextureBinding> textures,ResolutionContext context)throws IOException,Failure {
         if(application==null)throw fail(Reason.INVALID_MODEL,"部件缺少apply");
         var variant=object(application);fields(variant,ModelDefinitionProtocol.Scope.VARIANT);
-        var model=id(string(variant.get("model")));int x=variantRotation(variant,"x"),y=variantRotation(variant,"y");
+        var model=id(string(variant.get("model")));
+        if (archive.baseProtocolMode() == ClientResourceArchive.ProtocolMode.LEGACY_JSON_MODEL
+                && !model.path().startsWith("block/") && !model.path().startsWith("item/") && !model.path().startsWith("builtin/")) {
+            model = new ResourceLocation(model.namespace(), "block/" + model.path());
+        }
+        int x=variantRotation(variant,"x"),y=variantRotation(variant,"y");
         if(variant.has("weight")&&integer(variant.get("weight"))<=0)throw fail(Reason.INVALID_MODEL,"weight必须为正整数");
         int z = dispatchZ(variant);
         var parts = resolveParts(model,null,state,x,y,compatibleBoolean(variant,"uvlock",false),depth,chain,sources,textures,context);
@@ -354,6 +427,7 @@ public final class BlockModelResolver {
 
                     public Optional<String> baseClientVersion(){return archive.baseClientVersion();}
                     public int baseResourceFormat(){return archive.baseResourceFormat();}
+                    public ClientResourceArchive.ProtocolMode baseProtocolMode(){return archive.baseProtocolMode();}
                     public List<String> dataLayers(ResourceLocation id)throws IOException{
                         sources.add(new Source(ResourceLocation.Kind.RAW_DATA,id));
                         return archive.dataLayers(id);
@@ -713,6 +787,8 @@ public final class BlockModelResolver {
 
     private boolean matches(String selector, BlockState state) throws Failure {
         if (selector.isEmpty()) return true;
+        if (archive.baseProtocolMode() == ClientResourceArchive.ProtocolMode.LEGACY_JSON_MODEL
+                && selector.equals("normal")) return true;
         Set<String> keys = new HashSet<>();
         boolean matches = true;
         for (String condition : selector.split(",", -1)) {
@@ -734,7 +810,7 @@ public final class BlockModelResolver {
         if (expression.indexOf('!') < 0) return alternatives(expression, actual);
         int format = archive.baseResourceFormat();
         boolean multiple = expression.indexOf('|') >= 0;
-        if (multiple && format < 4)
+        if (multiple && format < 1)
             throw fail(Reason.UNSUPPORTED_MODEL, "基础客户端的 multipart 多值否定语义未核对");
         // Older clients negate the whole disjunction. Newer clients negate individual terms.
         boolean groupNegation = format <= 51 && expression.startsWith("!");

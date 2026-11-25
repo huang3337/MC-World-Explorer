@@ -29,6 +29,9 @@ public final class LayeredResourceSource implements BlockResourceSource {
         }
         return format;
     }
+    @Override public ClientResourceArchive.ProtocolMode baseProtocolMode(){
+        return sources.getLast().baseProtocolMode();
+    }
     @Override public Optional<String> baseClientVersion(){
         String version=null;
         for(var source:sources){

@@ -23,6 +23,7 @@ public enum SavedFluid {
         if (of(state) == NONE) return 0;
         if(!state.name().equals("minecraft:water") && !state.name().equals("minecraft:lava"))return 8f/9;
         String level = state.properties().get("level");
+        if (level == null) level = state.properties().get("data");
         int amount = 8;
         if (level != null && level.length() == 1 && level.charAt(0) >= '1' && level.charAt(0) <= '7')
             amount -= level.charAt(0) - '0';

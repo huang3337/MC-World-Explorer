@@ -43,19 +43,44 @@ public final class InstanceResourceLocator {
         List<Path> sources=new ArrayList<>();List<String> warnings=new ArrayList<>();List<Layer> layers=new ArrayList<>();
         Path worldPack=realWorld.resolve("resources.zip");if(Files.isRegularFile(worldPack)){sources.add(worldPack);layers.add(new Layer(worldPack,"","world"));}
         if(instance==null)return new Result(Optional.empty(),sources,List.of("未定位存档所属游戏实例，可手动选择实例目录；当前仅使用存档资源与原版"));
-        Path mods=instance.resolve("mods");List<Path> jars=List.of();
+        Path mods=instance.resolve("mods");List<Path> jars=new ArrayList<>();
         Set<Path> linkedJars=new HashSet<>();
-        if(Files.isDirectory(mods))try(var files=Files.list(mods.toRealPath())){
-            jars=files.filter(path->{
-                if(!path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))return false;
-                try {
-                    var attributes=Files.readAttributes(path,BasicFileAttributes.class,LinkOption.NOFOLLOW_LINKS);
-                    if(attributes.isRegularFile())return true;
-                    if(attributes.isDirectory()||!Files.isRegularFile(path))return false;
-                    linkedJars.add(path);
-                    return true;
-                }catch(IOException unreadable){return false;}
-            }).sorted(Comparator.comparing(path->path.getFileName().toString())).limit(MAX_MODS+1L).toList();
+        if(Files.isDirectory(mods)){
+            Path realMods=mods.toRealPath();
+            List<Path> subDirs=new ArrayList<>();
+            try(var files=Files.list(realMods)){
+                for(Path path:files.sorted(Comparator.comparing(p->p.getFileName().toString())).toList()){
+                    check(cancel);
+                    String fileName=path.getFileName().toString();
+                    if(fileName.toLowerCase(Locale.ROOT).endsWith(".jar")){
+                        if(acceptModJar(path,linkedJars)){
+                            jars.add(path);
+                            if(jars.size()>MAX_MODS)break;
+                        }
+                    }else if(fileName.matches("^1\\.[0-9]+(?:\\.[0-9]+)?$")){
+                        try{
+                            var attrs=Files.readAttributes(path,BasicFileAttributes.class,LinkOption.NOFOLLOW_LINKS);
+                            if(attrs.isDirectory()&&!attrs.isSymbolicLink()&&!attrs.isOther()){
+                                Path realSub=path.toRealPath();
+                                if(realSub.startsWith(realMods))subDirs.add(realSub);
+                            }
+                        }catch(IOException ignored){}
+                    }
+                }
+            }
+            for(Path subDir:subDirs){
+                if(jars.size()>MAX_MODS)break;
+                try(var subFiles=Files.list(subDir)){
+                    for(Path path:subFiles.sorted(Comparator.comparing(p->p.getFileName().toString())).toList()){
+                        check(cancel);
+                        if(!path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))continue;
+                        if(acceptModJar(path,linkedJars)){
+                            jars.add(path);
+                            if(jars.size()>MAX_MODS)break;
+                        }
+                    }
+                }catch(IOException ignored){}
+            }
         }
         if(jars.size()>MAX_MODS)warnings.add("Mod 归档超过 1024 项，仅索引前 1024 项");jars=jars.subList(0,Math.min(jars.size(),MAX_MODS));
         Path packs=instance.resolve("resourcepacks");Path options=instance.resolve("options.txt");
@@ -106,6 +131,15 @@ public final class InstanceResourceLocator {
         layers=new ArrayList<>(new LinkedHashSet<>(layers));
         sources=layers.stream().map(Layer::path).distinct().toList();
         return new Result(Optional.of(instance.toRealPath()),new ArrayList<>(new LinkedHashSet<>(sources)),warnings,layers,launch.inputs(),launch.gameVersion(),launch.platform(),launch.problem());
+    }
+    private static boolean acceptModJar(Path path,Set<Path> linkedJars){
+        try {
+            var attributes=Files.readAttributes(path,BasicFileAttributes.class,LinkOption.NOFOLLOW_LINKS);
+            if(attributes.isRegularFile())return true;
+            if(attributes.isDirectory()||!Files.isRegularFile(path))return false;
+            linkedJars.add(path);
+            return true;
+        }catch(IOException unreadable){return false;}
     }
     private static void check(CancellationSignal cancel){if(cancel.isCancelled()||Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException("取消实例资源查找");}
 }

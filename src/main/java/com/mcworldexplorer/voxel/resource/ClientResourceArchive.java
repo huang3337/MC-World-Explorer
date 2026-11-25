@@ -37,6 +37,12 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
     public static final long MAX_SESSION_READ_BYTES = 64L * 1024 * 1024;
     private static final java.util.regex.Pattern LEGACY_113_VERSION =
             java.util.regex.Pattern.compile("^1\\.13(?:\\.[12])?(?:[._+-].*)?$");
+    private static final java.util.regex.Pattern LEGACY_18_TO_112_VERSION =
+            java.util.regex.Pattern.compile("^1\\.(?:[89]|1[0-2])(?:\\.[0-9]+)?(?:[._+-].*)?$");
+    private static final java.util.regex.Pattern LEGACY_16_TO_17_VERSION =
+            java.util.regex.Pattern.compile("^1\\.[67](?:\\.[0-9]+)?(?:[._+-].*)?$");
+
+    public enum ProtocolMode { MODERN, LEGACY_JSON_MODEL, LEGACY_FLAT_TEXTURE }
 
     public record Metadata(String versionId,int worldVersion,int resourcePackVersion,int resourcePackMinor) {
         public Metadata(String versionId,int worldVersion,int resourcePackVersion){this(versionId,worldVersion,resourcePackVersion,0);}
@@ -47,16 +53,18 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
     private final Fingerprint fingerprint;
     private final Object fileKey;
     private final Metadata metadata;
+    private final ProtocolMode protocolMode;
     private long readBytes;
     private boolean closed;
     private final java.util.Map<String,Boolean> registryPresence=new java.util.LinkedHashMap<>(16,.75f,true);
 
     private ClientResourceArchive(ZipFile zip, Fingerprint fingerprint, Object fileKey, Metadata metadata,
-                                  long readBytes) {
+                                  ProtocolMode protocolMode, long readBytes) {
         this.zip = zip;
         this.fingerprint = fingerprint;
         this.fileKey = fileKey;
         this.metadata = metadata;
+        this.protocolMode = protocolMode;
         this.readBytes = readBytes;
     }
 
@@ -74,29 +82,63 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
             zip = new ZipFile(path.toFile());
             validateIndex(zip);
             ZipEntry version = zip.getEntry("version.json");
-            byte[] bytes;
+            long metadataBytesRead = 0;
             Metadata metadata;
+            ProtocolMode mode;
             if (version == null || version.isDirectory()) {
-                if (!LEGACY_113_VERSION.matcher(expectedVersion).matches())
+                if (LEGACY_113_VERSION.matcher(expectedVersion).matches()) {
+                    ZipEntry packMeta = zip.getEntry("pack.mcmeta");
+                    if (packMeta == null || packMeta.isDirectory())
+                        throw new ResourceAccessException(INVALID_METADATA, "资源文件缺少 version.json 与 pack.mcmeta");
+                    byte[] bytes = readEntry(zip, packMeta, MAX_METADATA_BYTES);
+                    metadataBytesRead = bytes.length;
+                    metadata = parseLegacyPackMetadata(bytes, expectedVersion, 4, 4, "1.13");
+                    mode = ProtocolMode.MODERN;
+                } else if (LEGACY_18_TO_112_VERSION.matcher(expectedVersion).matches()) {
+                    ZipEntry packMeta = zip.getEntry("pack.mcmeta");
+                    if (packMeta != null && !packMeta.isDirectory()) {
+                        byte[] bytes = readEntry(zip, packMeta, MAX_METADATA_BYTES);
+                        metadataBytesRead = bytes.length;
+                        metadata = parseLegacyPackMetadata(bytes, expectedVersion, 1, 3, "1.8–1.12.2");
+                    } else {
+                        metadata = new Metadata(expectedVersion, -1, defaultLegacyPackFormat(expectedVersion), 0);
+                    }
+                    mode = ProtocolMode.LEGACY_JSON_MODEL;
+                } else if (LEGACY_16_TO_17_VERSION.matcher(expectedVersion).matches()) {
+                    ZipEntry packMeta = zip.getEntry("pack.mcmeta");
+                    if (packMeta != null && !packMeta.isDirectory()) {
+                        byte[] bytes = readEntry(zip, packMeta, MAX_METADATA_BYTES);
+                        metadataBytesRead = bytes.length;
+                        metadata = parseLegacyPackMetadata(bytes, expectedVersion, 1, 1, "1.6.1–1.7.10");
+                    } else {
+                        metadata = new Metadata(expectedVersion, -1, 1, 0);
+                    }
+                    mode = ProtocolMode.LEGACY_FLAT_TEXTURE;
+                } else if (com.mcworldexplorer.nbt.LevelDatReader.LEGACY_PRE_1_9_VERSION.equals(expectedVersion)) {
+                    boolean hasBlockstates = hasRequiredEntry(zip, "assets/minecraft/blockstates/stone.json");
+                    mode = hasBlockstates ? ProtocolMode.LEGACY_JSON_MODEL : ProtocolMode.LEGACY_FLAT_TEXTURE;
+                    ZipEntry packMeta = zip.getEntry("pack.mcmeta");
+                    if (packMeta != null && !packMeta.isDirectory()) {
+                        byte[] bytes = readEntry(zip, packMeta, MAX_METADATA_BYTES);
+                        metadataBytesRead = bytes.length;
+                        int maxFmt = mode == ProtocolMode.LEGACY_JSON_MODEL ? 3 : 1;
+                        metadata = parseLegacyPackMetadata(bytes, expectedVersion, 1, maxFmt, "Anvil (<1.9)");
+                    } else {
+                        metadata = new Metadata(expectedVersion, -1, 1, 0);
+                    }
+                } else {
                     throw new ResourceAccessException(INVALID_METADATA, "资源文件缺少 version.json");
-                ZipEntry packMeta = zip.getEntry("pack.mcmeta");
-                if (packMeta == null || packMeta.isDirectory())
-                    throw new ResourceAccessException(INVALID_METADATA, "资源文件缺少 version.json 与 pack.mcmeta");
-                bytes = readEntry(zip, packMeta, MAX_METADATA_BYTES);
-                metadata = parseLegacy113PackMetadata(bytes, expectedVersion);
+                }
             } else {
-                bytes = readEntry(zip, version, MAX_METADATA_BYTES);
+                byte[] bytes = readEntry(zip, version, MAX_METADATA_BYTES);
+                metadataBytesRead = bytes.length;
                 metadata = parseMetadata(bytes);
+                mode = ProtocolMode.MODERN;
             }
-            for (String required : new String[]{"assets/minecraft/blockstates/stone.json",
-                    "assets/minecraft/models/block/stone.json", "assets/minecraft/textures/block/stone.png"}) {
-                ZipEntry asset = zip.getEntry(required);
-                if (asset == null || asset.isDirectory() || asset.getSize() < 1)
-                    throw new ResourceAccessException(INVALID_ARCHIVE, "所选文件缺少基础客户端资源");
-            }
+            validateRequiredAssets(zip, mode);
             if (!expectedVersion.equals(metadata.versionId())) throw new ResourceAccessException(VERSION_MISMATCH,
                     "资源版本不匹配：需要 " + expectedVersion + "，实际 " + metadata.versionId());
-            ClientResourceArchive archive = new ClientResourceArchive(zip, fingerprint, attributes.fileKey(), metadata, bytes.length);
+            ClientResourceArchive archive = new ClientResourceArchive(zip, fingerprint, attributes.fileKey(), metadata, mode, metadataBytesRead);
             archive.verifyUnchanged();
             zip = null; // Ownership transfers only after every validation succeeds.
             return archive;
@@ -124,6 +166,8 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
 
     @Override public Optional<String> origin(ResourceLocation.Kind kind,ResourceLocation id){return Optional.of(fingerprint.path().toString());}
     public Metadata metadata() { return metadata; }
+    public ProtocolMode protocolMode() { return protocolMode; }
+    @Override public ProtocolMode baseProtocolMode() { return protocolMode; }
     @Override public int baseResourceFormat(){return metadata.resourcePackVersion();}
     @Override public Optional<String> baseClientVersion(){return Optional.of(metadata.versionId());}
     synchronized long bytesRead(){return readBytes;}
@@ -152,8 +196,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
 
     @Override public synchronized boolean hasBaseTexture(ResourceLocation id) throws IOException {
         validate();
-        ZipEntry entry = zip.getEntry(id.entryName(ResourceLocation.Kind.TEXTURE));
-        return entry != null && !entry.isDirectory();
+        return findEntry(ResourceLocation.Kind.TEXTURE, id) != null;
     }
 
     public synchronized Optional<byte[]> read(ResourceLocation.Kind kind, ResourceLocation id) throws IOException {
@@ -161,7 +204,7 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
         java.util.Objects.requireNonNull(kind, "kind");
         java.util.Objects.requireNonNull(id, "id");
         verifyUnchanged();
-        ZipEntry entry = zip.getEntry(id.entryName(kind));
+        ZipEntry entry = findEntry(kind, id);
         if (entry == null || entry.isDirectory()) return Optional.empty();
         if(entry.getSize()>kind.maxBytes())throw new ResourceAccessException(LIMIT_EXCEEDED,"单个资源条目超过读取上限："+id,ResourceAccessException.Scope.RESOURCE);
         long remaining = MAX_SESSION_READ_BYTES - readBytes;
@@ -178,6 +221,31 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
         readBytes += bytes.length;
         verifyUnchanged();
         return Optional.of(bytes);
+    }
+
+    private ZipEntry findEntry(ResourceLocation.Kind kind, ResourceLocation id) {
+        ZipEntry entry = zip.getEntry(id.entryName(kind));
+        if (entry != null && !entry.isDirectory()) return entry;
+        if (protocolMode != ProtocolMode.MODERN
+                && (kind == ResourceLocation.Kind.TEXTURE || kind == ResourceLocation.Kind.TEXTURE_META)) {
+            Optional<ResourceLocation> alternate = legacyAlternateTexture(id);
+            if (alternate.isPresent()) {
+                ZipEntry fallback = zip.getEntry(alternate.get().entryName(kind));
+                if (fallback != null && !fallback.isDirectory()) return fallback;
+            }
+        }
+        return null;
+    }
+
+    static Optional<ResourceLocation> legacyAlternateTexture(ResourceLocation id) {
+        String path = id.path();
+        if (path.startsWith("block/")) {
+            return Optional.of(new ResourceLocation(id.namespace(), "blocks/" + path.substring(6)));
+        }
+        if (path.startsWith("blocks/")) {
+            return Optional.of(new ResourceLocation(id.namespace(), "block/" + path.substring(7)));
+        }
+        return Optional.empty();
     }
 
     public synchronized Optional<String> readJson(ResourceLocation.Kind kind, ResourceLocation id) throws IOException {
@@ -286,7 +354,44 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
         }
     }
 
-    private static Metadata parseLegacy113PackMetadata(byte[] bytes, String expectedVersion) throws IOException {
+    private static boolean hasRequiredEntry(ZipFile zip, String name) {
+        ZipEntry asset = zip.getEntry(name);
+        return asset != null && !asset.isDirectory() && asset.getSize() >= 1;
+    }
+
+    private static void validateRequiredAssets(ZipFile zip, ProtocolMode mode) throws ResourceAccessException {
+        switch (mode) {
+            case MODERN -> {
+                for (String required : new String[]{"assets/minecraft/blockstates/stone.json",
+                        "assets/minecraft/models/block/stone.json", "assets/minecraft/textures/block/stone.png"}) {
+                    if (!hasRequiredEntry(zip, required))
+                        throw new ResourceAccessException(INVALID_ARCHIVE, "所选文件缺少基础客户端资源");
+                }
+            }
+            case LEGACY_JSON_MODEL -> {
+                for (String required : new String[]{"assets/minecraft/blockstates/stone.json",
+                        "assets/minecraft/models/block/stone.json", "assets/minecraft/textures/blocks/stone.png"}) {
+                    if (!hasRequiredEntry(zip, required))
+                        throw new ResourceAccessException(INVALID_ARCHIVE, "所选 1.8–1.12.2 客户端缺少基础模型或 textures/blocks 资源");
+                }
+            }
+            case LEGACY_FLAT_TEXTURE -> {
+                if (hasRequiredEntry(zip, "assets/minecraft/blockstates/stone.json"))
+                    throw new ResourceAccessException(INVALID_ARCHIVE, "所选客户端包含 blockstates，不匹配 1.6.1–1.7.10 平面纹理模式");
+                if (!hasRequiredEntry(zip, "assets/minecraft/textures/blocks/stone.png"))
+                    throw new ResourceAccessException(INVALID_ARCHIVE, "所选 1.6.1–1.7.10 客户端缺少 assets/minecraft/textures/blocks/stone.png");
+            }
+        }
+    }
+
+    private static int defaultLegacyPackFormat(String version) {
+        if (version.startsWith("1.11") || version.startsWith("1.12")) return 3;
+        if (version.startsWith("1.9") || version.startsWith("1.10")) return 2;
+        return 1;
+    }
+
+    private static Metadata parseLegacyPackMetadata(byte[] bytes, String expectedVersion,
+                                                    int minFormat, int maxFormat, String label) throws IOException {
         try (JsonReader reader = new JsonReader(new StringReader(decodeUtf8(bytes)))) {
             reader.setStrictness(Strictness.STRICT);
             reader.setNestingLimit(MAX_JSON_NESTING);
@@ -311,11 +416,11 @@ public final class ClientResourceArchive implements AutoCloseable, BlockResource
                 } else reader.skipValue();
             }
             reader.endObject();
-            if (reader.peek() != JsonToken.END_DOCUMENT || packFormat != 4)
-                throw new IOException("invalid 1.13 pack.mcmeta format");
-            return new Metadata(expectedVersion, -1, 4, 0);
+            if (reader.peek() != JsonToken.END_DOCUMENT || packFormat < minFormat || packFormat > maxFormat)
+                throw new IOException("invalid legacy pack.mcmeta format: " + packFormat);
+            return new Metadata(expectedVersion, -1, packFormat, 0);
         } catch (IOException | IllegalStateException | NumberFormatException e) {
-            throw new ResourceAccessException(INVALID_METADATA, "1.13 客户端 pack.mcmeta 元数据无效", e);
+            throw new ResourceAccessException(INVALID_METADATA, label + " 客户端 pack.mcmeta 元数据无效", e);
         }
     }
 

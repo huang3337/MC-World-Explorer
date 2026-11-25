@@ -31,6 +31,8 @@ public interface BlockResourceSource {
     default Optional<String> baseClientVersion(){return Optional.empty();}
     /** Resource format of the selected base client, independent of enabled pack overlays. */
     default int baseResourceFormat(){return -1;}
+    /** Protocol generation of the selected base client archive (modern 1.13+, 1.8-1.12.2 JSON, or 1.6.1-1.7.10 flat texture). */
+    default ClientResourceArchive.ProtocolMode baseProtocolMode(){return ClientResourceArchive.ProtocolMode.MODERN;}
     /** Actual saved world seed; absence never implies zero. Included in source identity. */
     default Optional<Long> worldSeed()throws IOException{return Optional.empty();}
     /** Selected instance's biomeBlendRadius (0..7), including the verified game default when absent. */

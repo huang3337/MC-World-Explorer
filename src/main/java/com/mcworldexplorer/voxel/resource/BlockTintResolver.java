@@ -113,7 +113,14 @@ final class BlockTintResolver {
                     if(block==null)throw new ModelRule.Failure(Reason.CONTEXT_REQUIRED,"群系颜色需要实际保存位置；未使用默认色代替");
                     biomes.verifySampler(source);
                     var position=block.position();
-                    if(kind==Kind.DOUBLE_GRASS){String half=state.properties().get("half");if(!Set.of("upper","lower").contains(half==null?"":half))throw invalid("双层植物缺少有效half属性");if(half.equals("upper"))position=new ModelBlockContext.Position(position.x(),Math.subtractExact(position.y(),1),position.z());}
+                    if(kind==Kind.DOUBLE_GRASS){
+                        String half=state.properties().get("half");
+                        if(half==null && state.properties().containsKey("data")){
+                            try{half=(Integer.parseInt(state.properties().get("data"))&8)!=0?"upper":"lower";}catch(NumberFormatException ignored){}
+                        }
+                        if(!Set.of("upper","lower").contains(half==null?"":half))throw invalid("双层植物缺少有效half属性");
+                        if(half.equals("upper"))position=new ModelBlockContext.Position(position.x(),Math.subtractExact(position.y(),1),position.z());
+                    }
                     var inputs=biomeInputs.get(block.dimension());if(inputs==null){inputs=SavedBiomeColors.inputs(source,block.dimension());if(biomeInputs.size()>=8)biomeInputs.clear();biomeInputs.put(block.dimension(),inputs);}
                     rgb=biomes.color(kind.biomeColor,source,id->{sources.add(new Source(ResourceLocation.Kind.RAW_DATA,id));var json=source.readJson(ResourceLocation.Kind.RAW_DATA,id);return json.isEmpty()?Optional.empty():Optional.of(BlockModelResolver.parseResourceDefinition(json.orElseThrow()));},notes::add,block,position,sources,inputs);
                 } else rgb=constantOrState(kind,state);

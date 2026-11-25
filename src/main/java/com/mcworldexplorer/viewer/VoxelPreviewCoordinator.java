@@ -28,7 +28,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class VoxelPreviewCoordinator implements AutoCloseable {
-    public static final String RENDER_VERSION = "v077-model-protocol-1";
+    public static final String RENDER_VERSION = "v078-model-protocol-1";
 
     private final ExecutorService executor;
     private final ViewerSceneCache cache;

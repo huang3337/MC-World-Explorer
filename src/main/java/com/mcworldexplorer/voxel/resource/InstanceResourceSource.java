@@ -283,9 +283,19 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     @Override public Optional<byte[]> read(ResourceLocation.Kind kind,ResourceLocation id)throws IOException {
         check();validate();String entry=id.entryName(kind);
         if(kind==ResourceLocation.Kind.RAW_DATA&&dataProblem!=null)throw new ResourceAccessException(INVALID_METADATA,dataProblem,ResourceAccessException.Scope.RESOURCE);
+        String legacyEntry=null;
+        if(client.protocolMode()!=ClientResourceArchive.ProtocolMode.MODERN
+                &&(kind==ResourceLocation.Kind.TEXTURE||kind==ResourceLocation.Kind.TEXTURE_META)){
+            var alt=ClientResourceArchive.legacyAlternateTexture(id);
+            if(alt.isPresent())legacyEntry=alt.get().entryName(kind);
+        }
         for(var source:kind==ResourceLocation.Kind.RAW_DATA?dataSources:namespaces.getOrDefault(id.namespace(),List.of())) {
             var value=readLayer(source,kind,id,entry);
             if(value.isPresent())return value;
+            if(legacyEntry!=null){
+                value=readLayer(source,kind,id,legacyEntry);
+                if(value.isPresent())return value;
+            }
         }
         var value=client.read(kind,id);if(value.isPresent()){readBytes+=value.orElseThrow().length;if(readBytes>ClientResourceArchive.MAX_SESSION_READ_BYTES)throw limit("组合来源读取超过 64 MiB 会话预算");recordOrigin(kind,id,client.fingerprint().path().toString());}return value;
     }
@@ -345,6 +355,7 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     @Override public Optional<Boolean> baseDataRegistry(String directory)throws IOException{validate();return client.baseDataRegistry(directory);}
     @Override public boolean hasBaseTexture(ResourceLocation id)throws IOException{return client.hasBaseTexture(id);}
     @Override public int baseResourceFormat(){return client.baseResourceFormat();}
+    @Override public ClientResourceArchive.ProtocolMode baseProtocolMode(){return client.baseProtocolMode();}
     @Override public Optional<String> baseClientVersion(){return client.baseClientVersion();}
     @Override public Optional<Long> worldSeed()throws IOException{
         validate();if(dataSelection==null)throw new ResourceAccessException(INVALID_METADATA,"保存世界元数据不可用："+dataProblem);
@@ -388,20 +399,20 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
     }
     private void loadModMetadata()throws IOException {
         validate();if(modIds!=null)return;Set<String> ids=new HashSet<>();Map<String,Integer> ownerCounts=new HashMap<>();Map<String,Set<String>> platforms=new HashMap<>();String selectedLoader=null;
-        for(var source:registrationSources){check();source.stamp().validate();String fabric,neo,forge;
-            if(source.nested().isEmpty()){var zip=handle(source);fabric=metadataZipText(zip,"fabric.mod.json");neo=metadataZipText(zip,"META-INF/neoforge.mods.toml");forge=metadataZipText(zip,"META-INF/mods.toml");}
-            else{Path root=nestedAccess.root(source.stamp().path(),source.nested());fabric=metadataText(root.resolve("fabric.mod.json"));neo=metadataText(root.resolve("META-INF/neoforge.mods.toml"));forge=metadataText(root.resolve("META-INF/mods.toml"));}
-            Set<String> sourceIds=new HashSet<>(BuiltinResourcePacks.owners(null,neo,forge));
+        for(var source:registrationSources){check();source.stamp().validate();String fabric,neo,forge,mcmod;
+            if(source.nested().isEmpty()){var zip=handle(source);fabric=metadataZipText(zip,"fabric.mod.json");neo=metadataZipText(zip,"META-INF/neoforge.mods.toml");forge=metadataZipText(zip,"META-INF/mods.toml");mcmod=metadataZipText(zip,"mcmod.info");}
+            else{Path root=nestedAccess.root(source.stamp().path(),source.nested());fabric=metadataText(root.resolve("fabric.mod.json"));neo=metadataText(root.resolve("META-INF/neoforge.mods.toml"));forge=metadataText(root.resolve("META-INF/mods.toml"));mcmod=metadataText(root.resolve("mcmod.info"));}
+            Set<String> sourceIds=new HashSet<>(BuiltinResourcePacks.owners(null,neo,forge,mcmod));
             if(fabric!=null)try(var reader=new com.google.gson.stream.JsonReader(new java.io.StringReader(fabric))) {
                 reader.setStrictness(com.google.gson.Strictness.LENIENT);reader.setNestingLimit(32);
                 var metadata=com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
                 if(metadata.has("id")){String primary=metadata.get("id").getAsString();if(primary.length()<=64&&primary.matches("[a-z0-9_.-]+"))sourceIds.add(primary);}
             }catch(RuntimeException invalid){/* Unreadable primary metadata cannot confirm ownership. */}
-            for(String platform:List.of("fabric","neoforge","forge"))for(String id:BuiltinResourcePacks.owners(platform.equals("fabric")?fabric:null,platform.equals("neoforge")?neo:null,platform.equals("forge")?forge:null)){
+            for(String platform:List.of("fabric","neoforge","forge"))for(String id:BuiltinResourcePacks.owners(platform.equals("fabric")?fabric:null,platform.equals("neoforge")?neo:null,platform.equals("forge")?forge:null,platform.equals("forge")?mcmod:null)){
                 ids.add(id);platforms.computeIfAbsent(id,ignored->new HashSet<>()).add(platform);
             }
             for(String id:sourceIds)ownerCounts.merge(id,1,Integer::sum);
-            if(ids.size()>8192)throw limit("Mod身份元数据超过8192项");if(neo!=null)selectedLoader="neoforge";else if(forge!=null&&!"neoforge".equals(selectedLoader))selectedLoader="forge";else if(fabric!=null&&selectedLoader==null)selectedLoader="fabric";source.stamp().validate();
+            if(ids.size()>8192)throw limit("Mod身份元数据超过8192项");if(neo!=null)selectedLoader="neoforge";else if((forge!=null||mcmod!=null)&&!"neoforge".equals(selectedLoader))selectedLoader="forge";else if(fabric!=null&&selectedLoader==null)selectedLoader="fabric";source.stamp().validate();
         }platforms.replaceAll((id,values)->Set.copyOf(values));modPlatforms=Map.copyOf(platforms);loader=selectedLoader;modIds=Set.copyOf(ids);modOwnerCounts=Map.copyOf(ownerCounts);
     }
     /** Host-only HUD identity: exact unique installed metadata IDs, never resource-pack or plugin origins. */
@@ -419,10 +430,10 @@ public final class InstanceResourceSource implements BlockResourceSource,AutoClo
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     private Set<String> owners(Descriptor source)throws IOException {
-        source.stamp().validate();String fabric,neo,forge;
-        if(source.nested().isEmpty()){var zip=handle(source);fabric=metadataZipText(zip,"fabric.mod.json");neo=metadataZipText(zip,"META-INF/neoforge.mods.toml");forge=metadataZipText(zip,"META-INF/mods.toml");}
-        else{Path root=nestedAccess.root(source.stamp().path(),source.nested());fabric=metadataText(root.resolve("fabric.mod.json"));neo=metadataText(root.resolve("META-INF/neoforge.mods.toml"));forge=metadataText(root.resolve("META-INF/mods.toml"));}
-        source.stamp().validate();return BuiltinResourcePacks.owners(fabric,neo,forge);
+        source.stamp().validate();String fabric,neo,forge,mcmod;
+        if(source.nested().isEmpty()){var zip=handle(source);fabric=metadataZipText(zip,"fabric.mod.json");neo=metadataZipText(zip,"META-INF/neoforge.mods.toml");forge=metadataZipText(zip,"META-INF/mods.toml");mcmod=metadataZipText(zip,"mcmod.info");}
+        else{Path root=nestedAccess.root(source.stamp().path(),source.nested());fabric=metadataText(root.resolve("fabric.mod.json"));neo=metadataText(root.resolve("META-INF/neoforge.mods.toml"));forge=metadataText(root.resolve("META-INF/mods.toml"));mcmod=metadataText(root.resolve("mcmod.info"));}
+        source.stamp().validate();return BuiltinResourcePacks.owners(fabric,neo,forge,mcmod);
     }
     private String metadataZipText(ZipFile zip,String name)throws IOException {var entry=zip.getEntry(name);if(entry==null||entry.isDirectory())return null;try(var input=zip.getInputStream(entry)){return new String(bytes(input,entry.getSize(),1024*1024),StandardCharsets.UTF_8);}}
     private String metadataText(Path file)throws IOException {if(!Files.isRegularFile(file))return null;if(Files.size(file)>1024*1024)throw new IOException("Mod元数据超过预算");try(var input=Files.newInputStream(file)){return new String(bytes(input,Files.size(file),1024*1024),StandardCharsets.UTF_8);}}
