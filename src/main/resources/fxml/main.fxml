@@ -3,9 +3,10 @@
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<SplitPane fx:id="workspaceSplitPane" dividerPositions="0.23" styleClass="workspace"
-           xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+<StackPane fx:id="appRoot" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
            fx:controller="com.mcworldexplorer.ui.MainController">
+    <children>
+        <SplitPane fx:id="workspaceSplitPane" dividerPositions="0.23" styleClass="workspace">
     <items>
         <VBox fx:id="worldSidebar" minWidth="180.0" prefWidth="240.0" maxWidth="340.0"
               styleClass="world-sidebar" SplitPane.resizableWithParent="false">
@@ -63,8 +64,12 @@
                     </ToggleButton>
                     <Button fx:id="settingsButton" text="设置" mnemonicParsing="false" minWidth="-Infinity"
                             onAction="#handleSettings" styleClass="quiet-button"/>
-                    <Button fx:id="aboutButton" text="关于" mnemonicParsing="false" minWidth="-Infinity"
-                            onAction="#handleAbout" styleClass="quiet-button"/>
+                    <StackPane alignment="CENTER" maxHeight="-Infinity" maxWidth="-Infinity">
+                        <Button fx:id="aboutButton" text="关于" mnemonicParsing="false" minWidth="-Infinity"
+                                onAction="#handleAbout" styleClass="quiet-button"/>
+                        <Region fx:id="aboutUpdateBadge" visible="false" managed="false" mouseTransparent="true"
+                                styleClass="update-badge-dot" StackPane.alignment="TOP_RIGHT"/>
+                    </StackPane>
                 </HBox>
                 <fx:include fx:id="mapViewer" source="map-view.fxml" VBox.vgrow="ALWAYS"/>
                 <fx:define>
@@ -134,4 +139,7 @@
             </children>
         </VBox>
     </items>
-</SplitPane>
+        </SplitPane>
+        <StackPane fx:id="modalOverlay" visible="false" managed="false" styleClass="modal-overlay"/>
+    </children>
+</StackPane>

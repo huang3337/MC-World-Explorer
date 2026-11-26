@@ -35,17 +35,18 @@
 
 Windows 下也可双击根目录的 `run-app.bat`。启动器默认使用本机已有的 Gradle 依赖。首次使用需要下载 Gradle，缺少项目依赖时可在提示处按 Y 联网重试，或直接运行 `.\run-app.bat --online`。批处理在 `build/windows-client/` 准备独立客户端，让 Windows 的显卡偏好只关联本项目。配置和缓存仍位于项目根目录。[渲染与重启设置](FAQ.md#render-settings)
 
-JAR 与 Gradle 测试结果位于 `build/core-0.7.8/`，应用版本以构建元数据为准。本体不会构建或预装专用 Mod 插件，也不提供旧探索版本的 SDK 分发包。插件编译与接口限制请按上方开发说明操作。
+JAR 与 Gradle 测试结果位于 `build/core-0.7.9/`，应用版本以构建元数据为准。本体不会构建或预装专用 Mod 插件，也不提供旧探索版本的 SDK 分发包。插件编译与接口限制请按上方开发说明操作。
 
 </details>
 
 <details>
 <summary><strong>版本进度 · 由新到旧</strong></summary>
 
-[当前进度](progress/CURRENT.md)记录接续位置，[版本进度目录](progress/README.md)汇总各阶段。各版功能与限制见 [0.7.5 版本说明](releases/V0.7.5.md)与 [0.7.4 版本说明](releases/V0.7.4.md)。
+[当前进度](progress/CURRENT.md)记录接续位置，[版本进度目录](progress/README.md)汇总各阶段。各版功能与限制见 [0.7.9 版本说明](releases/V0.7.9.md)、[0.7.5 版本说明](releases/V0.7.5.md)与 [0.7.4 版本说明](releases/V0.7.4.md)。
 
 | 版本 | 记录 |
 |---|---|
+| [V0.7.9](progress/V0.7.9.md) | 国内镜像双源检查更新、软件内模态遮罩与旧版数据导入 |
 | [V0.7.8](progress/V0.7.8.md) | 1.8–1.12.2 JSON/Forge V1 与 1.6.1–1.7.10 平面纹理三维适配 |
 | [V0.7.7](progress/V0.7.7.md) | 1.13–1.21.x 客户端准入、旧版群系解码与原版世界着色回退 |
 | [V0.7.6](progress/V0.7.6.md) | 预扁平化存档兼容、Forge 数字 ID 还原与传统维度发现 |

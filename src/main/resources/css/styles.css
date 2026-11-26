@@ -360,3 +360,85 @@
 .section-caption { -fx-font-size: 12px; -fx-text-fill: -mcwe-muted; }
 .empty-state { -fx-padding: 20; -fx-text-fill: -mcwe-muted; -fx-text-alignment: center; }
 .about-avatar { -fx-padding: 1; -fx-background-color: -mcwe-panel; -fx-background-radius: 25; -fx-border-color: -mcwe-edge; -fx-border-width: 1; -fx-border-radius: 25; }
+
+.scroll-pane:focused {
+    -fx-background-insets: 0;
+}
+
+.update-badge-dot {
+    -fx-background-color: -mcwe-accent;
+    -fx-background-radius: 5;
+    -fx-min-width: 8;
+    -fx-pref-width: 8;
+    -fx-max-width: 8;
+    -fx-min-height: 8;
+    -fx-pref-height: 8;
+    -fx-max-height: 8;
+    -fx-translate-x: -2;
+    -fx-translate-y: 2;
+}
+
+.modal-overlay {
+    -fx-background-color: rgba(10, 16, 24, 0.48);
+    -fx-padding: 24;
+}
+
+.modal-card {
+    -fx-background-color: -mcwe-panel;
+    -fx-background-radius: 14;
+    -fx-border-color: -mcwe-edge;
+    -fx-border-width: 1;
+    -fx-border-radius: 14;
+    -fx-effect: dropshadow(gaussian, rgba(9, 19, 34, 0.34), 28, 0, 0, 10);
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.modal-card:focused {
+    -fx-border-color: -mcwe-edge;
+    -fx-background-insets: 0;
+}
+
+.modal-scroll, .modal-scroll:focused, .modal-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.modal-info-box {
+    -fx-background-color: -mcwe-window;
+    -fx-background-radius: 8;
+    -fx-border-color: -mcwe-edge;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-padding: 12;
+}
+
+.update-alert-box {
+    -fx-background-color: -mcwe-selected;
+    -fx-background-radius: 8;
+    -fx-border-color: -mcwe-accent;
+    -fx-border-width: 1 1 1 4;
+    -fx-border-radius: 8;
+    -fx-padding: 12 14;
+}
+
+.update-alert-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -mcwe-selected-text;
+}
+
+.update-alert-body {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -mcwe-ink;
+}
+
+.modal-link {
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+    -fx-text-fill: -mcwe-accent;
+}

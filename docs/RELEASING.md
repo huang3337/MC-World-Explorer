@@ -20,7 +20,7 @@ powershell -ExecutionPolicy Bypass -File tools/package-windows.ps1
 
 已有依赖缓存时可加 `-Offline`。同一源码已完成测试时可加 `-SkipTests`；该开关不产生测试通过证据。输出已存在时，检查后使用 `-Replace`，仅替换该候选包、展开目录与校验文件，不清空 build。
 
-默认输出在 `build/windows-package/`，包含应用 ZIP、SHA-256 与展开目录。输入仅来自当前 `installDist`，不读取用户安装库或仓库外材料。保留自带 Java、LICENSE 和使用说明。打包脚本不启动界面、不上传文件。
+默认输出在 `build/windows-package/`，包含应用 ZIP、SHA-256 与展开目录。输入仅来自当前 `installDist`，不读取用户安装库或仓库外材料。保留自带 Java（含 `jdk.crypto.ec` 以支持便携版 HTTPS 更新检查）、LICENSE 和使用说明。打包脚本不启动界面、不上传文件。
 
 保留上一版展开目录时，可指定独立输出目录，例如 `-OutputName windows-package-0.7.5`。
 

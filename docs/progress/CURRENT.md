@@ -1,14 +1,16 @@
 # 当前状态
 
-更新于 2026-11-25。本页记录 Java 主线的源码、发布、验证与下一步。分轮实测见[0.7.8 记录](V0.7.8.md)、[0.7.7 记录](V0.7.7.md)、[0.7.6 记录](V0.7.6.md)与[0.7.5 记录](V0.7.5.md)，归档问题见[审查索引](../issues/ISSUE_INDEX.md)。
+更新于 2026-11-26。本页记录 Java 主线的源码、发布、验证与下一步。分轮实测见[0.7.9 记录](V0.7.9.md)、[0.7.8 记录](V0.7.8.md)、[0.7.7 记录](V0.7.7.md)、[0.7.6 记录](V0.7.6.md)与[0.7.5 记录](V0.7.5.md)，归档问题见[审查索引](../issues/ISSUE_INDEX.md)。
 
 | 项目 | 状态 |
 |---|---|
-| 当前源码 | **0.7.8**，Java 主线 `main`，未创建 `v0.7.8` 标签或便携包。构建输出位于 `build/core-0.7.8/`，主 JAR SHA-256 为 `920b544698ad5ec8c0c4cfc621e91e176d089d943acf8f208e3a6ad9cfa98836`。补齐 1.8–1.12.2（`LEGACY_JSON_MODEL`、`textures/blocks/*.png`、原版状态映射、内置流体回退与 `forge_marker: 1`）与 1.6.1–1.7.10（`LEGACY_FLAT_TEXTURE` 静态几何/贴图合成、`mods/<mcversion>/*.jar` 与 `mcmod.info`）预扁平化三维纹理适配。[0.7.8 验证记录](V0.7.8.md) |
-| 最新正式发行 | **0.7.5**，Java 主线 `main`，标签 `v0.7.5`。Windows x64 便携包包含插件启停与三维选区加载反馈修复；0.7.6、0.7.7 与 0.7.8 尚未制作便携发行包。[GitHub Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.5) · [0.7.5 版本说明](../releases/V0.7.5.md) · [包指纹与验收](V0.7.5.md#windows-package) |
+| 当前源码 | **0.7.9**，Java 主线 `main`，标签 `v0.7.9`。构建输出位于 `build/core-0.7.9/`，主 JAR SHA-256 为 `302241804dc27f5402a0b9f4f6b332eb5e4619bd3f3e532214481013bb92f863`。新增国内免翻墙双源（Gitee 直连优先、GitHub Web JSON 自动回退）只读检查更新、顶栏「关于」按钮右上角小蓝点提示、统一软件内模态遮罩卡片（重构「关于」卡片消除焦点蓝框、添加作者 B站超链接、常驻直达最新 Release 的双仓库链接与检查更新醒目提示横幅、前往仓库前缓存保留二次确认、新包首启导入旧版数据及设置页常驻补导入口）、修复首帧样式表挂载时序 CSS 告警与打包脚本 `jdk.crypto.ec` 模块补齐。[0.7.9 验证记录](V0.7.9.md) |
+| 最新正式发行 | **0.7.9**，Java 主线 `main`，标签 `v0.7.9`。Windows x64 便携包 `MC-World-Explorer-0.7.9-windows-x64.zip`（43,635,758 字节，SHA-256 `437a8b27080ddba723dfa0495283d5ea6e33c6819bdee98aa14e454cf9781fa0`），合并交付 0.7.6–0.7.8 预扁平化与旧版三维纹理兼容及 0.7.9 双源检查更新与旧版数据迁移能力。[GitHub Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.9) · [Gitee Release](https://gitee.com/huang3337/MC-World-Explorer/releases/latest) · [0.7.9 版本说明](../releases/V0.7.9.md) · [包指纹与核验](V0.7.9.md#windows-package) |
 | 范围 | 只读浏览已保存区块。1.13+ 存档支持二维地图与标准三维资源解析（含 1.13–1.19.2 旧版群系与近似着色回退）；1.6.1–1.12.2 预扁平化存档支持二维完整地图、旧版客户端/实例只读三维纹理（1.8–1.12.2 JSON/Forge V1 与 1.6.1–1.7.10 原版静态几何贴图）及缺失资源时简化颜色底座回退；1.2.1–1.5.2 存档使用三维简化颜色底座。设置页可调整二维渲染、JVM 最大堆、扫描并发与三维缓存。[设置说明](../FAQ.md#render-settings) · [资源解析范围](../MODEL_PROTOCOL_CAPABILITIES.md) |
 
 ## 已验证
+
+- **双源检查更新、软件内模态遮罩与旧版数据导入（0.7.9）。** 覆盖 Gitee 直连优先与 GitHub Web JSON 自动静默回退（含无 `html_url` 真实字段解析、`404`/空响应/超时/超限/深嵌套回退、直连与系统代理双路容错及域名白名单校验，实机联调成功识别线上 `v0.7.5`）、`LegacyDataImporter` 只读复制合并及同目录/嵌套/符号链接拦截、`PortableSettings` 首启判定、顶栏「关于」按钮垂直居中对齐、首帧零 `CssStyleHelper` 警告、「关于」卡片双仓库 `/releases/latest` 常驻展示与醒目提示横幅生命周期，以及 `main.fxml`/`styles.css`/`tools/package-windows.ps1`（`jdk.crypto.ec`）契约校验。默认离线回归共 795 项中 **687** 项通过、**108** 项按条件跳过、0 失败，`verifyCoreIsolation` 通过。[0.7.9 验证记录](V0.7.9.md#regression)
 
 - **预扁平化三维纹理适配（1.6.1–1.12.2）。** 0.7.8 覆盖 1.6.1–1.12.2 及 `Anvil (<1.9)` 客户端 JAR 自动匹配/绑定、`LEGACY_JSON_MODEL`（1.8–1.12.2）与 `LEGACY_FLAT_TEXTURE`（1.6.1–1.7.10）只读归档校验、复数路径 `textures/blocks/*.png` 双向受控解析、`mods/<mcversion>/*.jar` 扫描与 `mcmod.info` 解析、1.8–1.12.2 原版状态映射、内置流体回退与 `forge_marker: 1` 声明式解析，以及 1.6.1–1.7.10 原版静态几何贴图合成与无多面歧义简单 Mod 同名贴图近似/未知 Mod 降级诊断。默认离线回归 168 套共 780 项中 **672** 项通过、**108** 项按条件跳过、0 失败；显式启用本机 1.7.10 Forge 实例只读校验后 **674** 项通过、**106** 项按条件跳过、0 失败，纹理图集与可见面构建成功且存档/客户端文件零修改，`verifyCoreIsolation` 通过。[0.7.8 验证记录](V0.7.8.md#regression)
 

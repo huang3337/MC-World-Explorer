@@ -3,6 +3,7 @@ package com.mcworldexplorer.ui;
 import com.mcworldexplorer.ClientRuntime;
 import com.mcworldexplorer.WindowsGraphics;
 import com.mcworldexplorer.map.MapTileScheduler;
+import com.mcworldexplorer.storage.LegacyDataImporter;
 import com.mcworldexplorer.storage.PortableSettings;
 import com.mcworldexplorer.storage.RuntimePreferences;
 import com.mcworldexplorer.viewer.ViewerPerformanceProfile;
@@ -26,7 +27,13 @@ import java.util.function.Consumer;
 final class SettingsDialog {
     static void show(Stage owner, PortableSettings store, MapViewerController map, Path root, boolean scanning,
                      Consumer<Path> useDirectory) throws IOException {
+        show(owner, store, map, root, scanning, useDirectory, () -> { });
+    }
+
+    static void show(Stage owner, PortableSettings store, MapViewerController map, Path root, boolean scanning,
+                     Consumer<Path> useDirectory, Runnable onLegacyImported) throws IOException {
         var prefs = store.loadRuntimePreferences();
+        boolean checkUpdatesEnabled = store.isCheckUpdatesOnStartup();
         Dialog<Void> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.setTitle("设置");
@@ -114,10 +121,51 @@ final class SettingsDialog {
             File chosen = chooser.showDialog(pane.getScene().getWindow());
             if (chosen != null) directory.setText(chosen.toPath().toAbsolutePath().normalize().toString());
         });
+        var checkUpdates = new CheckBox("启动时自动检查更新");
+        checkUpdates.setId("checkUpdatesOnStartup");
+        checkUpdates.setSelected(checkUpdatesEnabled);
+        Button importLegacy = new Button("从旧版目录导入数据…");
+        importLegacy.setId("importLegacyDataButton");
+        importLegacy.setDisable(scanning);
+        Label importNote = note("从旧版 MC World Explorer 目录只读复制设置、地点标记、插件与地图缓存。");
+        importLegacy.setOnAction(event -> {
+            DirectoryChooser chooser = new DirectoryChooser();
+            chooser.setTitle("选择旧版 MC World Explorer 根目录");
+            File chosen = chooser.showDialog(pane.getScene().getWindow());
+            if (chosen == null) return;
+            try {
+                var result = LegacyDataImporter.importFrom(
+                        chosen.toPath().toAbsolutePath().normalize(), LegacyDataImporter.Options.ALL);
+                var importedPrefs = store.loadRuntimePreferences();
+                boolean importedDark = store.usesDarkTheme();
+                var importedProfile = store.loadViewerPerformanceProfile()
+                        .map(ViewerPerformanceProfile::fromSetting)
+                        .orElse(map.currentProfile());
+                heap.getSelectionModel().select(
+                        Math.max(0, RuntimePreferences.HEAP_OPTIONS.indexOf(importedPrefs.heapMiB())));
+                workers.getSelectionModel().select(Math.max(0, importedPrefs.scanWorkers() - 1));
+                profile.setValue(importedProfile);
+                theme.getSelectionModel().select(importedDark ? 1 : 0);
+                store.loadCustomSavesPath().ifPresent(p -> directory.setText(p.toString()));
+                checkUpdates.setSelected(store.isCheckUpdatesOnStartup());
+                if (!pipeline.getItems().isEmpty()) {
+                    pipeline.getItems().stream()
+                            .filter(model -> model.id().equals(importedPrefs.mapAdapter()))
+                            .findFirst()
+                            .ifPresentOrElse(pipeline::setValue, () -> pipeline.setValue(null));
+                }
+                importNote.setText("已导入 " + result.configFilesCopied() + " 项配置与 " + result.cacheFilesCopied() + " 项缓存。");
+                error.setText("");
+                onLegacyImported.run();
+            } catch (IOException | RuntimeException failure) {
+                error.setText("导入失败：" + failure.getMessage());
+            }
+        });
         Button resources = new Button("资源与插件…");
         resources.setOnAction(event -> map.openResourceSettings(false));
         VBox tools = section(labelFor("界面外观", theme), theme, labelFor("存档库目录", directory),
-                directory, browse, new Separator(), resources, note("查看当前存档的客户端资源、实例绑定和已安装插件。"));
+                directory, browse, new Separator(), checkUpdates, importLegacy, importNote,
+                new Separator(), resources, note("查看当前存档的客户端资源、实例绑定和已安装插件。"));
         var tabs = new TabPane(tab("渲染", render), tab("内存", memory), tab("常用", tools));
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         var content = new VBox(8, tabs, error);
@@ -139,7 +187,7 @@ final class SettingsDialog {
             Path chosen = directory.getText().isEmpty() ? null : Path.of(directory.getText());
             Path changed = java.util.Objects.equals(root, chosen) ? null : chosen;
             try {
-                store.savePreferences(selected, dark, profile.getValue().settingValue(), changed);
+                store.savePreferences(selected, dark, profile.getValue().settingValue(), changed, checkUpdates.isSelected());
             } catch (IOException failure) {
                 error.setText("保存失败：" + failure.getMessage());
                 event.consume();

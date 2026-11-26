@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.mcworldexplorer'
-version = '0.7.8'
+version = '0.7.9'
 
 repositories {
     maven { url 'https://maven.aliyun.com/repository/public/' }
@@ -28,6 +28,7 @@ application {
 }
 tasks.named('run', JavaExec) {
     jvmArgs(
+        '-Djava.net.useSystemProxies=true',
         '--add-exports=javafx.graphics/com.sun.prism=ALL-UNNAMED',
         '--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED',
         '--add-opens=javafx.graphics/com.sun.prism.d3d=ALL-UNNAMED'
@@ -127,7 +128,7 @@ test {
 }
 
 // Use a fresh output tree so postponed classes cannot survive incremental compilation.
-layout.buildDirectory = layout.projectDirectory.dir('build/core-0.7.8')
+layout.buildDirectory = layout.projectDirectory.dir('build/core-0.7.9')
 
 // Both repository sources and the actual host archive must remain independent of deferred work.
 tasks.register('verifyCoreIsolation') {

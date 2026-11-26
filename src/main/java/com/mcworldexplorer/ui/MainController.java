@@ -5,16 +5,22 @@ import com.mcworldexplorer.preview.PreviewGenerationResult;
 import com.mcworldexplorer.preview.PreviewLayer;
 import com.mcworldexplorer.preview.PreviewRequest;
 import com.mcworldexplorer.preview.WorldDimension;
+import com.mcworldexplorer.storage.LegacyDataImporter;
 import com.mcworldexplorer.storage.PortableSettings;
+import com.mcworldexplorer.update.AllowedExternalUrls;
+import com.mcworldexplorer.update.AppVersion;
+import com.mcworldexplorer.update.UpdateCheckClient;
 import com.mcworldexplorer.world.WorldInfo;
 import com.mcworldexplorer.world.WorldScanner;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
+import javafx.event.Event;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.RadioMenuItem;
@@ -25,6 +31,8 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -63,6 +71,7 @@ public class MainController {
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     private final PortableSettings portableSettings = new PortableSettings();
+    private final UpdateCheckClient updateCheckClient = new UpdateCheckClient();
     private Path selectedRootPath;
     private String pendingScanWarning;
     private String libraryNotice = "";
@@ -72,10 +81,14 @@ public class MainController {
     private Task<WorldScanner.ScanResult> activeScan;
     private double sidebarPosition = 0.23;
     private Consumer<String> documentOpener = address -> { throw new IllegalStateException("浏览器服务尚未初始化"); };
-    private Dialog<Void> aboutDialog;
+    private volatile UpdateCheckClient.CheckResult latestUpdateResult;
 
     public void setDocumentOpener(Consumer<String> opener) {
         documentOpener = Objects.requireNonNull(opener);
+    }
+
+    private void openAllowedExternalUrl(String url) {
+        documentOpener.accept(AllowedExternalUrls.requireAllowed(url));
     }
 
     @FXML
@@ -83,7 +96,7 @@ public class MainController {
         var owner = (javafx.stage.Stage) workspaceSplitPane.getScene().getWindow();
         try {
             SettingsDialog.show(owner, portableSettings, mapViewerController, selectedRootPath, activeScan != null,
-                    this::useLibraryRoot);
+                    this::useLibraryRoot, this::refreshAfterLegacyImport);
         } catch (IOException failure) {
             var alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR,
                     "无法读取设置：" + failure.getMessage());
@@ -94,15 +107,190 @@ public class MainController {
 
     @FXML
     private void handleAbout() {
-        if (aboutDialog != null) {
-            aboutDialog.getDialogPane().getScene().getWindow().requestFocus();
-            return;
-        }
-        aboutDialog = AboutDialog.create(workspaceSplitPane.getScene().getWindow(), documentOpener);
-        aboutDialog.setOnHidden(event -> aboutDialog = null);
-        aboutDialog.show();
+        showAboutModal();
     }
 
+    private void showAboutModal() {
+        VBox[] holder = new VBox[1];
+        VBox card = AboutDialog.createAboutCard(
+                this::openAllowedExternalUrl,
+                this::ignoreUpdateVersion,
+                this::runManualUpdateCheck,
+                (repoLabel, targetUrl) -> showRepoConfirmModal(repoLabel, targetUrl, () -> showModalCard(holder[0])),
+                this::closeModalOverlay);
+        holder[0] = card;
+        showModalCard(card);
+    }
+
+    private void showRepoConfirmModal(String repoLabel, String targetUrl, Runnable onBack) {
+        VBox confirmCard = AboutDialog.createRepoConfirmCard(
+                repoLabel,
+                targetUrl,
+                onBack,
+                url -> {
+                    openAllowedExternalUrl(url);
+                    closeModalOverlay();
+                });
+        showModalCard(confirmCard);
+    }
+
+    private void showFirstRunImportModal() {
+        var scene = appRoot == null ? null : appRoot.getScene();
+        var owner = scene == null ? null : scene.getWindow();
+        VBox importCard = AboutDialog.createFirstRunImportCard(
+                owner,
+                result -> {
+                    refreshAfterLegacyImport();
+                    closeModalOverlay();
+                },
+                () -> {
+                    try {
+                        portableSettings.markFirstRunCompleted();
+                    } catch (IOException e) {
+                        LOGGER.warn("Failed to persist first-run completion state", e);
+                    }
+                    closeModalOverlay();
+                });
+        showModalCard(importCard);
+    }
+
+    private void showModalCard(Node card) {
+        if (modalOverlay == null) return;
+        modalOverlay.getChildren().setAll(card);
+        modalOverlay.setManaged(true);
+        modalOverlay.setVisible(true);
+        Platform.runLater(() -> {
+            Node primary = card.lookup("#aboutCheckUpdateButton");
+            if (primary == null) primary = card.lookup("#repoConfirmOpenButton");
+            if (primary == null) primary = card.lookup("#firstRunChooseImportButton");
+            if (primary != null) {
+                primary.requestFocus();
+            } else {
+                card.requestFocus();
+            }
+        });
+    }
+
+    private void closeModalOverlay() {
+        if (modalOverlay == null) return;
+        modalOverlay.getChildren().clear();
+        modalOverlay.setVisible(false);
+        modalOverlay.setManaged(false);
+        if (workspaceSplitPane != null) {
+            Platform.runLater(workspaceSplitPane::requestFocus);
+        }
+    }
+
+    private UpdateCheckClient.CheckResult runManualUpdateCheck() {
+        AppVersion current = AppVersion.currentVersion().orElse(null);
+        if (current == null) {
+            return UpdateCheckClient.CheckResult.failed("无法解析当前版本信息，请直接前往仓库查看。");
+        }
+        UpdateCheckClient.CheckResult result = updateCheckClient.checkForUpdate(current);
+        latestUpdateResult = result;
+        try {
+            portableSettings.saveLastUpdateCheckEpochMs(System.currentTimeMillis());
+        } catch (IOException e) {
+            LOGGER.debug("Failed to record last update check timestamp", e);
+        }
+        Platform.runLater(this::refreshUpdateBadge);
+        return result;
+    }
+
+    private void ignoreUpdateVersion(String normalizedVersion) {
+        try {
+            portableSettings.saveIgnoredUpdateVersion(normalizedVersion);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to save ignored update version", e);
+        }
+        refreshUpdateBadge();
+    }
+
+    private void refreshUpdateBadge() {
+        if (aboutUpdateBadge == null) return;
+        boolean show = false;
+        UpdateCheckClient.CheckResult result = latestUpdateResult;
+        if (result != null
+                && result.status() == UpdateCheckClient.Status.UPDATE_AVAILABLE
+                && result.release() != null) {
+            String ignored = "";
+            try {
+                ignored = portableSettings.loadIgnoredUpdateVersion();
+            } catch (IOException ignoredError) {
+                // Keep showing badge if settings cannot be read.
+            }
+            show = !result.release().version().normalized().equals(ignored);
+        }
+        aboutUpdateBadge.setManaged(show);
+        aboutUpdateBadge.setVisible(show);
+    }
+
+    private void startSilentUpdateCheckIfDue() {
+        AppVersion current = AppVersion.currentVersion().orElse(null);
+        if (current == null) return;
+        Thread checker = new Thread(() -> {
+            try {
+                if (!portableSettings.isCheckUpdatesOnStartup()) {
+                    return;
+                }
+                long now = System.currentTimeMillis();
+                long last = portableSettings.loadLastUpdateCheckEpochMs();
+                if (last > 0 && now - last < PortableSettings.UPDATE_CHECK_COOLDOWN_MS) {
+                    return;
+                }
+                UpdateCheckClient.CheckResult result = updateCheckClient.checkForUpdate(current);
+                portableSettings.saveLastUpdateCheckEpochMs(now);
+                if (result.status() == UpdateCheckClient.Status.UPDATE_AVAILABLE && result.release() != null) {
+                    latestUpdateResult = result;
+                    Platform.runLater(this::refreshUpdateBadge);
+                }
+            } catch (IOException | RuntimeException ignored) {
+                // Startup update checks are strictly silent on offline/error conditions.
+            }
+        }, "startup-update-check");
+        checker.setDaemon(true);
+        checker.start();
+    }
+
+    private void refreshAfterLegacyImport() {
+        try {
+            portableSettings.markFirstRunCompleted();
+        } catch (IOException e) {
+            LOGGER.warn("Failed to mark first run completed after import", e);
+        }
+        try {
+            var prefs = portableSettings.loadRuntimePreferences();
+            boolean dark = portableSettings.usesDarkTheme();
+            var profile = portableSettings.loadViewerPerformanceProfile()
+                    .map(com.mcworldexplorer.viewer.ViewerPerformanceProfile::fromSetting)
+                    .orElseGet(() -> mapViewerController != null
+                            ? mapViewerController.currentProfile()
+                            : com.mcworldexplorer.viewer.ViewerPerformanceProfile.BASIC);
+            if (mapViewerController != null) {
+                mapViewerController.reloadAfterLegacyImport(prefs.scanWorkers(), dark, profile);
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Failed to reload appearance and preferences after legacy import", e);
+        }
+        try {
+            Path importedRoot = portableSettings.loadCustomSavesPath()
+                    .orElseGet(WorldScanner::getDefaultGameRoot);
+            if (importedRoot != null && Files.exists(importedRoot)) {
+                useLibraryRoot(importedRoot);
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Failed to reload saves root after legacy import", e);
+        }
+    }
+
+    @FXML
+    private StackPane appRoot;
+    @FXML
+    private StackPane modalOverlay;
+    @FXML
+    private Button aboutButton;
+    @FXML
+    private Region aboutUpdateBadge;
     @FXML
     private SplitPane workspaceSplitPane;
     @FXML
@@ -160,7 +348,7 @@ public class MainController {
             activeScan.cancel();
             activeScan = null;
         }
-        if (aboutDialog != null) aboutDialog.close();
+        closeModalOverlay();
         if (mapViewerController != null) {
             mapViewerController.shutdown();
         }
@@ -168,6 +356,36 @@ public class MainController {
 
     @FXML
     public void initialize() {
+        if (modalOverlay != null) {
+            modalOverlay.setOnMouseClicked(Event::consume);
+            modalOverlay.setOnMousePressed(Event::consume);
+            modalOverlay.setOnMouseReleased(Event::consume);
+            modalOverlay.setOnScroll(Event::consume);
+            modalOverlay.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.ESCAPE && !modalOverlay.getChildren().isEmpty()) {
+                    Node activeCard = modalOverlay.getChildren().getFirst();
+                    if ("aboutModalCard".equals(activeCard.getId())) {
+                        closeModalOverlay();
+                        event.consume();
+                    } else if ("repoConfirmModalCard".equals(activeCard.getId())) {
+                        Node back = activeCard.lookup("#repoConfirmBackButton");
+                        if (back instanceof Button backButton) {
+                            backButton.fire();
+                            event.consume();
+                        }
+                    }
+                }
+            });
+        }
+        workspaceSplitPane.addEventFilter(Event.ANY, event -> {
+            if (modalOverlay != null && modalOverlay.isVisible()
+                    && (event instanceof KeyEvent
+                    || event instanceof javafx.scene.input.MouseEvent
+                    || event instanceof javafx.scene.input.ScrollEvent)) {
+                event.consume();
+            }
+        });
+        mapViewerController.attachSceneHost(appRoot);
         mapViewerController.attachDetailsPane(detailsPane);
         detailsPane.setOpacity(0);
         detailsPane.managedProperty().bind(detailsPane.visibleProperty());
@@ -197,6 +415,16 @@ public class MainController {
         worldSearch.textProperty().addListener((observable, oldText, text) -> updateWorldTree());
         sortByName.selectedProperty().addListener((observable, previous, selected) -> updateWorldTree());
         loadWorlds();
+        Platform.runLater(() -> {
+            try {
+                if (portableSettings.shouldShowFirstRunImport()) {
+                    showFirstRunImportModal();
+                }
+            } catch (IOException e) {
+                LOGGER.debug("Skipping first-run import check due to I/O error", e);
+            }
+        });
+        startSilentUpdateCheckIfDue();
     }
 
     private void loadWorlds() {

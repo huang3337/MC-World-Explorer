@@ -1,9 +1,10 @@
 # Issue 编号登记与记录索引
 
-更新于 2026-11-25。按源文件名排序，同一前缀内编号递增。
+更新于 2026-11-26。按源文件名排序，同一前缀内编号递增。
 
 ## 对齐结果
 
+- 2026-11-26，0.7.9 双源检查更新、软件内模态遮罩与旧版数据导入审查的 7 项问题已修复归档，5 项高、2 项中。现有 156 个前缀、254 个已用编号，其中 163 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-25，0.7.8 预扁平化三维纹理适配审查的 6 项问题已修复归档，4 项高、1 项中、1 项低。现有 153 个前缀、247 个已用编号，其中 156 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-25，0.7.7 旧版客户端准入与着色回退审查的 2 项问题已修复归档，1 项中、1 项低。现有 149 个前缀、241 个已用编号，其中 150 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-24，0.7.6 预扁平化兼容审查的 5 项问题已修复归档，2 项高、3 项中。现有 147 个前缀、239 个已用编号，其中 148 个有正文或最终条目，91 个历史缺失编号继续占用。
@@ -34,7 +35,7 @@
 
 | 源文件 | 编号前缀 | 已使用编号 | 最后使用 | 下一编号 | 记录对齐 |
 |---|---|---|---|---|---|
-| `AboutDialog.java` | `ABOUTDIALOG` | — | — | `ISSUE-ABOUTDIALOG-001` | 尚未登记问题 |
+| `AboutDialog.java` | `ABOUTDIALOG` | 001 | `ISSUE-ABOUTDIALOG-001` | `ISSUE-ABOUTDIALOG-002` | [V0.7.9：001](resolved/V0.7.9/AboutDialog.java.md) |
 | `App.java` | `APP` | 001,002,003,004,005 | `ISSUE-APP-005` | `ISSUE-APP-006` | [V0.1.1：001–005](resolved/V0.1.1/App.java.md) |
 | `BlockClassifier.java` | `V05-CLASS` | 001 | `ISSUE-V05-CLASS-001` | `ISSUE-V05-CLASS-002` | [V0.5：001](resolved/V0.5/BlockClassifier.java.md) |
 | `BlockModelResolver.java` | `BMODEL` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018,019,020,021,022,023,024,025,026,027,028,029,030,031,032 | `ISSUE-BMODEL-032` | `ISSUE-BMODEL-033` | [V0.7.8：032](resolved/V0.7.8/BlockModelResolver.java.md)；[V0.7.2：001–003](resolved/V0.7.2/BlockModelResolver.java.md)；[V0.7.3：004–007](resolved/V0.7.3/BlockModelResolver.java.md)；[正文缺失登记](#缺失正文登记) |
@@ -81,7 +82,7 @@
 | `LwjglV04Renderer.java` | `LWJGLRENDER` | 001 | `ISSUE-LWJGLRENDER-001` | `ISSUE-LWJGLRENDER-002` | [V0.4：001](resolved/V0.4/LwjglV04Renderer.java.md) |
 | `LwjglV05Launcher.java` | `V05-MEM` | 001 | `ISSUE-V05-MEM-001` | `ISSUE-V05-MEM-002` | [V0.5：001](resolved/V0.5/LwjglV05Launcher.java.md) |
 | `LwjglViewerWindow.java` | `LWJWIN` | — | — | `ISSUE-LWJWIN-001` | 尚未登记问题 |
-| `MainController.java` | `CONTROLLER` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016 | `ISSUE-CONTROLLER-016` | `ISSUE-CONTROLLER-017` | [V0.1.1：001–009](resolved/V0.1.1/MainController.java.md)；[V0.2：010–011](resolved/V0.2/MainController.java.md)；[V0.2.1：012–014](resolved/V0.2.1/MainController.java.md)；[V0.7：015–016](resolved/V0.7/MainController.java.md) |
+| `MainController.java` | `CONTROLLER` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017 | `ISSUE-CONTROLLER-017` | `ISSUE-CONTROLLER-018` | [V0.7.9：017](resolved/V0.7.9/MainController.java.md)；[V0.1.1：001–009](resolved/V0.1.1/MainController.java.md)；[V0.2：010–011](resolved/V0.2/MainController.java.md)；[V0.2.1：012–014](resolved/V0.2.1/MainController.java.md)；[V0.7：015–016](resolved/V0.7/MainController.java.md) |
 | `MapCacheStorage.java` | `MAPCACHESTORAGE` | 001 | `ISSUE-MAPCACHESTORAGE-001` | `ISSUE-MAPCACHESTORAGE-002` | [V0.7.5：001](resolved/V0.7.5/MapCacheStorage.java.md) |
 | `MapRenderDevice.java` | `MAPRENDERDEVICE` | 001 | `ISSUE-MAPRENDERDEVICE-001` | `ISSUE-MAPRENDERDEVICE-002` | [V0.7.5：001](resolved/V0.7.5/MapRenderDevice.java.md) |
 | `MapTileCache.java` | `MAPTILECACHE` | 001 | `ISSUE-MAPTILECACHE-001` | `ISSUE-MAPTILECACHE-002` | [V0.7.6：001](resolved/V0.7.6/MapTileCache.java.md) |
@@ -134,12 +135,14 @@
 | `SavedBiomeColors.java` | `SBCOLOR` | 001 | `ISSUE-SBCOLOR-001` | `ISSUE-SBCOLOR-002` | [正文缺失登记](#缺失正文登记) |
 | `SavedFluid.java` | `SAVEDFLUID` | 001 | `ISSUE-SAVEDFLUID-001` | `ISSUE-SAVEDFLUID-002` | [V0.7.8：001](resolved/V0.7.8/SavedFluid.java.md) |
 | `SavedTargetIntegrationTest.java` | `SAVTARGETTEST` | 001 | `ISSUE-SAVTARGETTEST-001` | `ISSUE-SAVTARGETTEST-002` | [正文缺失登记](#缺失正文登记) |
+| `SettingsDialog.java` | `SETTINGSDIALOG` | 001 | `ISSUE-SETTINGSDIALOG-001` | `ISSUE-SETTINGSDIALOG-002` | [V0.7.9：001](resolved/V0.7.9/SettingsDialog.java.md) |
 | `ShaderProgram.java` | `SHADER` | 001 | `ISSUE-SHADER-001` | `ISSUE-SHADER-002` | [V0.4：001](resolved/V0.4/ShaderProgram.java.md) |
 | `StandardBlockTintTest.java` | `TINTSTDTEST` | — | — | `ISSUE-TINTSTDTEST-001` | 尚未登记问题 |
 | `StandardTintBoundaryTest.java` | `TINTBNDTEST` | — | — | `ISSUE-TINTBNDTEST-001` | 尚未登记问题 |
 | `TextureAtlas.java` | `ATLAS` | 001,002 | `ISSUE-ATLAS-002` | `ISSUE-ATLAS-003` | [V0.7.3：001](resolved/V0.7.3/TextureAtlas.java.md)；[正文缺失登记](#缺失正文登记) |
 | `UnboundModelTintTest.java` | `UTINT` | — | — | `ISSUE-UTINT-001` | 尚未登记问题 |
 | `UnboundTintResourceIntegrationTest.java` | `UTINTR` | — | — | `ISSUE-UTINTR-001` | 尚未登记问题 |
+| `UpdateCheckClient.java` | `UPDATECLIENT` | 001,002 | `ISSUE-UPDATECLIENT-002` | `ISSUE-UPDATECLIENT-003` | [V0.7.9：001–002](resolved/V0.7.9/UpdateCheckClient.java.md) |
 | `UvTiling.java` | `UVTILE` | 001 | `ISSUE-UVTILE-001` | `ISSUE-UVTILE-002` | [V0.7.3：001](resolved/V0.7.3/UvTiling.java.md) |
 | `V04Arguments.java` | `V04ARGS` | 001,002 | `ISSUE-V04ARGS-002` | `ISSUE-V04ARGS-003` | [V0.4：001–002](resolved/V0.4/V04Arguments.java.md) |
 | `V05ReportWriter.java` | `V05-REPORT` | 001 | `ISSUE-V05-REPORT-001` | `ISSUE-V05-REPORT-002` | [V0.5：001](resolved/V0.5/V05ReportWriter.java.md) |
@@ -171,6 +174,7 @@
 | `VoxelSceneSnapshot.java` | `SCENESNAP` | — | — | `ISSUE-SCENESNAP-001` | 尚未登记问题 |
 | `VoxelTargetIndex.java` | `TARGETIDX` | 001,002,003,004 | `ISSUE-TARGETIDX-004` | `ISSUE-TARGETIDX-005` | [V0.7.4：004](resolved/V0.7.4/REVIEW_SUMMARY.md)；[正文缺失登记](#缺失正文登记) |
 | `VoxelTargetIndexTest.java` | `TARGETTEST` | — | — | `ISSUE-TARGETTEST-001` | 尚未登记问题 |
+| `WorkspaceAppearance.java` | `APPEARANCE` | 001 | `ISSUE-APPEARANCE-001` | `ISSUE-APPEARANCE-002` | [V0.7.9：001](resolved/V0.7.9/WorkspaceAppearance.java.md) |
 | `WorkspaceLayoutTest.java` | `WORKSPACETEST` | 001 | `ISSUE-WORKSPACETEST-001` | `ISSUE-WORKSPACETEST-002` | [V0.7.1：001](resolved/V0.7.1/WorkspaceLayoutTest.java.md) |
 | `WorldDataPacksTest.java` | `WORLDDATAPACKSTEST` | — | — | `ISSUE-WORLDDATAPACKSTEST-001` | 尚未登记问题 |
 | `WorldDimension.java` | `WORLDDIM` | 001 | `ISSUE-WORLDDIM-001` | `ISSUE-WORLDDIM-002` | [V0.7.6：001](resolved/V0.7.6/WorldDimension.java.md) |
@@ -181,7 +185,7 @@
 | `WorldTreeCell.java` | `TREECELL` | 001,002,003,004 | `ISSUE-TREECELL-004` | `ISSUE-TREECELL-005` | [V0.1.1：001–004](resolved/V0.1.1/WorldTreeCell.java.md) |
 | `build-v04-trials.ps1` | `V04PACKAGE` | 001 | `ISSUE-V04PACKAGE-001` | `ISSUE-V04PACKAGE-002` | [V0.4：001](resolved/V0.4/build-v04-trials.ps1.md) |
 | `build.gradle` | `BUILD` | 001,002,003,004 | `ISSUE-BUILD-004` | `ISSUE-BUILD-005` | [V0.7.6：004](resolved/V0.7.6/build.gradle.md)；[V0.2.1：001](resolved/V0.2.1/build.gradle.md)；[正文缺失登记](#缺失正文登记) |
-| `main.fxml` | `FXML` | 001,002,003,004,005 | `ISSUE-FXML-005` | `ISSUE-FXML-006` | [V0.1.1：001–004](resolved/V0.1.1/main.fxml.md)；[V0.7：005](resolved/V0.7/main.fxml.md) |
+| `main.fxml` | `FXML` | 001,002,003,004,005,006 | `ISSUE-FXML-006` | `ISSUE-FXML-007` | [V0.7.9：006](resolved/V0.7.9/main.fxml.md)；[V0.1.1：001–004](resolved/V0.1.1/main.fxml.md)；[V0.7：005](resolved/V0.7/main.fxml.md) |
 | `map-view.fxml` | `MAPFXML` | 001,002 | `ISSUE-MAPFXML-002` | `ISSUE-MAPFXML-003` | [V0.7：001](resolved/V0.7/map-view.fxml.md)；[V0.7.1：002](resolved/V0.7.1/map-view.fxml.md) |
 | `measure-v04.ps1` | `V04MEASURE` | 001 | `ISSUE-V04MEASURE-001` | `ISSUE-V04MEASURE-002` | [V0.4：001](resolved/V0.4/measure-v04.ps1.md) |
 | `measure-v05.ps1` | `V05-SCRIPT` | 001,002 | `ISSUE-V05-SCRIPT-002` | `ISSUE-V05-SCRIPT-003` | [V0.5：001–002](resolved/V0.5/measure-v05.ps1.md) |

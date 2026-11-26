@@ -11,6 +11,9 @@ public final class Launcher {
     }
 
     public static void main(String[] args) {
+        if (System.getProperty("java.net.useSystemProxies") == null) {
+            System.setProperty("java.net.useSystemProxies", "true");
+        }
         try {
             PortablePaths.initialize();
         } catch (IOException | RuntimeException e) {

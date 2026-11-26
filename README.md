@@ -3,7 +3,7 @@
 <h1 align="center">MC World Explorer</h1>
 
 <p align="center">在游戏外打开 Minecraft Java 版存档，沿着二维地图找路，再走进选中的三维场景。</p>
-<p align="center"><a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><strong>下载 Windows x64 便携版</strong></a> · <a href="docs/README.md">使用文档</a> · <a href="docs/PLUGIN_DEVELOPMENT.md#agent-prompt">AI 扩展构建提示词</a> · <a href="docs/releases/V0.7.5.md">0.7.5 版本说明</a></p>
+<p align="center"><a href="https://gitee.com/huang3337/MC-World-Explorer/releases/latest"><strong>国内镜像下载（Gitee）</strong></a> · <a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><strong>GitHub 下载</strong></a> · <a href="docs/README.md">使用文档</a> · <a href="docs/PLUGIN_DEVELOPMENT.md#agent-prompt">AI 扩展构建提示词</a> · <a href="docs/releases/V0.7.9.md">0.7.9 版本说明</a></p>
 
 ## 从河湾找到村庄
 
@@ -85,7 +85,7 @@ MCWE 只读浏览已保存的区块。配置、缓存、日志和导出位于便
 
 ## 版本支持范围
 
-支持只读浏览 Minecraft Java 版 **Anvil（`.mca`，1.2.1 起）** 存档（含原版维度、数据包自定义维度及传统 `DIM<整数>` 维度；当前最新便携发行包为 `0.7.5`，`0.7.6–0.7.8` 新增的预扁平化与旧版纹理适配位于当前源码，将在下一便携发行版中提供）：
+支持只读浏览 Minecraft Java 版 **Anvil（`.mca`，1.2.1 起）** 存档（含原版维度、数据包自定义维度及传统 `DIM<整数>` 维度）：
 
 | Java 版区间 | 二维地图与高度带 | 三维预览与资源表现 |
 |---|---|---|

@@ -412,6 +412,10 @@ public final class MapViewerController {
         clear();
     }
 
+    void attachSceneHost(javafx.scene.Node rootHost) {
+        WorkspaceAppearance.attachSceneHost(rootHost, darkThemeItem);
+    }
+
     void attachDetailsPane(ScrollPane details) {
         // Draw above the viewport and below its interactive overlays.
         var overlay = new StackPane(details);
@@ -770,6 +774,13 @@ public final class MapViewerController {
         applyingSavedPreferences = true;
         try { viewerProfileComboBox.setValue(profile); }
         finally { applyingSavedPreferences = false; }
+    }
+
+    void reloadAfterLegacyImport(int workers, boolean dark, ViewerPerformanceProfile profile) {
+        applySavedPreferences(workers, dark, profile);
+        if (savedPlaces != null) {
+            savedPlaces.refresh();
+        }
     }
 
     @FXML

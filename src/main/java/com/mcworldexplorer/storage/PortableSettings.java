@@ -16,6 +16,12 @@ public final class PortableSettings {
     private static final String CUSTOM_SAVES_PATH = "custom_saves_path";
     private static final String VIEWER_PERFORMANCE_PROFILE = "viewer_performance_profile";
     private static final String APPEARANCE = "appearance";
+    private static final String CHECK_UPDATES_ON_STARTUP = "check_updates_on_startup";
+    private static final String LAST_UPDATE_CHECK_EPOCH_MS = "last_update_check_epoch_ms";
+    private static final String IGNORED_UPDATE_VERSION = "ignored_update_version";
+    private static final String FIRST_RUN_COMPLETED = "first_run_completed";
+
+    public static final long UPDATE_CHECK_COOLDOWN_MS = 12L * 60L * 60L * 1000L;
 
     public RuntimePreferences loadRuntimePreferences() throws IOException {
         return RuntimePreferences.read(loadProperties());
@@ -49,12 +55,94 @@ public final class PortableSettings {
 
     public void savePreferences(RuntimePreferences runtime, boolean dark, String profile, Path changedRoot)
             throws IOException {
+        savePreferences(runtime, dark, profile, changedRoot, null);
+    }
+
+    public void savePreferences(RuntimePreferences runtime, boolean dark, String profile, Path changedRoot,
+                                Boolean checkUpdatesOnStartup) throws IOException {
         update(values -> {
             runtime.write(values);
             values.setProperty(APPEARANCE, dark ? "dark" : "light");
             values.setProperty(VIEWER_PERFORMANCE_PROFILE, profile);
             if (changedRoot != null) values.setProperty(CUSTOM_SAVES_PATH, changedRoot.toAbsolutePath().normalize().toString());
+            if (checkUpdatesOnStartup != null) {
+                values.setProperty(CHECK_UPDATES_ON_STARTUP, Boolean.toString(checkUpdatesOnStartup));
+            }
         });
+    }
+
+    public boolean isCheckUpdatesOnStartup() throws IOException {
+        String value = loadProperties().getProperty(CHECK_UPDATES_ON_STARTUP);
+        return value == null || !"false".equalsIgnoreCase(value.strip());
+    }
+
+    public void saveCheckUpdatesOnStartup(boolean enabled) throws IOException {
+        update(values -> values.setProperty(CHECK_UPDATES_ON_STARTUP, Boolean.toString(enabled)));
+    }
+
+    public long loadLastUpdateCheckEpochMs() throws IOException {
+        String value = loadProperties().getProperty(LAST_UPDATE_CHECK_EPOCH_MS);
+        if (value == null || value.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Math.max(0L, Long.parseLong(value.strip()));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    public void saveLastUpdateCheckEpochMs(long epochMs) throws IOException {
+        update(values -> values.setProperty(LAST_UPDATE_CHECK_EPOCH_MS, Long.toString(Math.max(0L, epochMs))));
+    }
+
+    public String loadIgnoredUpdateVersion() throws IOException {
+        String value = loadProperties().getProperty(IGNORED_UPDATE_VERSION);
+        return value == null ? "" : value.strip();
+    }
+
+    public void saveIgnoredUpdateVersion(String version) throws IOException {
+        update(values -> {
+            if (version == null || version.isBlank()) {
+                values.remove(IGNORED_UPDATE_VERSION);
+            } else {
+                values.setProperty(IGNORED_UPDATE_VERSION, version.strip());
+            }
+        });
+    }
+
+    public boolean shouldShowFirstRunImport() throws IOException {
+        return shouldShowFirstRunImport(PortablePaths.applicationRoot());
+    }
+
+    public static boolean shouldShowFirstRunImport(Path appRoot) throws IOException {
+        if ("true".equalsIgnoreCase(System.getProperty("mcwe.skipFirstRunImport"))) {
+            return false;
+        }
+        if (appRoot == null) {
+            return false;
+        }
+        Path normalized = appRoot.toAbsolutePath().normalize();
+        // Exclude development project root checkouts from triggering the fresh-package prompt.
+        if (Files.isRegularFile(normalized.resolve("build.gradle"))
+                && Files.isRegularFile(normalized.resolve("settings.gradle"))) {
+            return false;
+        }
+        Path file = normalized.resolve("config").resolve(SETTINGS_FILE_NAME);
+        if (!Files.isRegularFile(file)) {
+            return true;
+        }
+        Properties props = new Properties();
+        try (InputStream input = Files.newInputStream(file)) {
+            props.load(input);
+        } catch (IllegalArgumentException invalid) {
+            return false;
+        }
+        return "false".equalsIgnoreCase(props.getProperty(FIRST_RUN_COMPLETED, "").strip());
+    }
+
+    public void markFirstRunCompleted() throws IOException {
+        update(values -> values.setProperty(FIRST_RUN_COMPLETED, "true"));
     }
 
     public boolean usesDarkTheme() throws IOException {

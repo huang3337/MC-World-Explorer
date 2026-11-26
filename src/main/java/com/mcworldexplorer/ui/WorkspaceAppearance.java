@@ -30,7 +30,18 @@ final class WorkspaceAppearance {
             LOGGER.warn("Could not read appearance preference", failure);
         }
         (initiallyDark ? dark : light).setSelected(true);
-        host.sceneProperty().addListener((observable, previous, scene) -> {
+        attachSceneHost(host, dark);
+        light.setOnAction(event -> select(host.getScene(), light, false, settings));
+        dark.setOnAction(event -> select(host.getScene(), dark, true, settings));
+    }
+
+    /**
+     * Attaches stylesheet initialization to a top-level root node so {@code styles.css} is registered
+     * when {@code new Scene(root)} runs, before {@code SplitPaneSkin} attaches nested children mid-CSS-pass.
+     */
+    static void attachSceneHost(Node host, RadioMenuItem dark) {
+        if (host == null) return;
+        java.util.function.Consumer<Scene> configureScene = scene -> {
             if (scene == null) return;
             if (!scene.getStylesheets().contains(BASE)) scene.getStylesheets().add(BASE);
             // Owned JavaFX dialogs follow the scene's stylesheets, including live changes.
@@ -38,13 +49,18 @@ final class WorkspaceAppearance {
             var available = Font.getFamilies();
             for (String family : List.of("Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei")) {
                 if (available.contains(family)) {
-                    scene.getRoot().setStyle("-fx-font-family: '" + family + "';");
+                    String fontStyle = "-fx-font-family: '" + family + "';";
+                    if (!fontStyle.equals(scene.getRoot().getStyle())) {
+                        scene.getRoot().setStyle(fontStyle);
+                    }
                     break;
                 }
             }
-        });
-        light.setOnAction(event -> select(host.getScene(), light, false, settings));
-        dark.setOnAction(event -> select(host.getScene(), dark, true, settings));
+        };
+        if (host.getScene() != null) {
+            configureScene.accept(host.getScene());
+        }
+        host.sceneProperty().addListener((observable, previous, scene) -> configureScene.accept(scene));
     }
 
     private static void select(Scene scene, RadioMenuItem selected, boolean dark, PortableSettings settings) {

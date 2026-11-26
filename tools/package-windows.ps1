@@ -43,7 +43,7 @@ $buildRoot = Join-Path $projectRoot 'build'
 if (Test-Path -LiteralPath $buildRoot) {
     if ((Get-Item -LiteralPath $buildRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Refusing linked build directory.' }
 }
-foreach ($tree in @((Join-Path $buildRoot 'core-0.7.8'), $outputRoot)) {
+foreach ($tree in @((Join-Path $buildRoot 'core-0.7.9'), $outputRoot)) {
     if (Test-Path -LiteralPath $tree) {
         if ((Get-Item -LiteralPath $tree -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Refusing linked tree: $tree" }
         if (Get-ChildItem -LiteralPath $tree -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw "Refusing linked contents: $tree" }
@@ -69,8 +69,8 @@ try {
     & (Join-Path $projectRoot 'gradlew.bat') @gradleArgs
     if ($LASTEXITCODE -ne 0) { throw "Gradle failed ($LASTEXITCODE)." }
 
-    $inputDir = Join-Path $projectRoot 'build\core-0.7.8\install\MC-World-Explorer\lib'
-    $expected = Get-Content -LiteralPath (Join-Path $buildRoot 'core-0.7.8\packaging\runtime-files.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $inputDir = Join-Path $projectRoot 'build\core-0.7.9\install\MC-World-Explorer\lib'
+    $expected = Get-Content -LiteralPath (Join-Path $buildRoot 'core-0.7.9\packaging\runtime-files.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     if (Get-ChildItem -LiteralPath $inputDir -Directory -Force) { throw 'Unexpected nested directory in distribution inputs.' }
     $actual = @(Get-ChildItem -LiteralPath $inputDir -File -Force)
     $names = @($expected.PSObject.Properties.Name | Sort-Object)
@@ -111,8 +111,8 @@ try {
         --vendor 'MC World Explorer' --description 'Read-only Minecraft world explorer' `
         --input $inputDir --main-jar $mainJar.Name --main-class 'com.mcworldexplorer.Launcher' `
         --icon (Join-Path $PSScriptRoot 'windows\mc-world-explorer.ico') --dest $outputRoot `
-        --add-modules 'java.se,jdk.unsupported' --jlink-options '--strip-debug --no-header-files --no-man-pages' `
-        --java-options '-Dfile.encoding=UTF-8'
+        --add-modules 'java.se,jdk.unsupported,jdk.crypto.ec' --jlink-options '--strip-debug --no-header-files --no-man-pages' `
+        --java-options '-Dfile.encoding=UTF-8' --java-options '-Djava.net.useSystemProxies=true'
     if ($LASTEXITCODE -ne 0) { throw "jpackage failed ($LASTEXITCODE)." }
     if (-not (Test-Path -LiteralPath (Join-Path $appImage 'runtime\bin\java.exe') -PathType Leaf)) {
         throw 'The packaged runtime must retain java.exe for isolated plugin workers.'

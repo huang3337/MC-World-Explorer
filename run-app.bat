@@ -25,7 +25,7 @@ if not "%launchResult%"=="0" goto failed
 
 :launch
 set "client=%~dp0build\windows-client"
-"%client%\runtime\bin\MCWE.exe" --module-path "%client%\fx" --add-modules javafx.controls,javafx.fxml --add-exports=javafx.graphics/com.sun.prism=ALL-UNNAMED --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.prism.d3d=ALL-UNNAMED "-Dmcwe.projectDir=%CD%" -cp "%client%\app\*" com.mcworldexplorer.Launcher
+"%client%\runtime\bin\MCWE.exe" --module-path "%client%\fx" --add-modules javafx.controls,javafx.fxml --add-exports=javafx.graphics/com.sun.prism=ALL-UNNAMED --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.prism.d3d=ALL-UNNAMED -Djava.net.useSystemProxies=true "-Dmcwe.projectDir=%CD%" -cp "%client%\app\*" com.mcworldexplorer.Launcher
 set "launchResult=%errorlevel%"
 if "%launchResult%"=="0" goto done
 :failed
