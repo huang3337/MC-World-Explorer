@@ -3,7 +3,7 @@
 <h1 align="center">MC World Explorer</h1>
 
 <p align="center">在游戏外打开 Minecraft Java 版存档，沿着二维地图找路，再走进选中的三维场景。</p>
-<p align="center"><a href="https://gitee.com/huang3337/MC-World-Explorer/releases/latest"><strong>国内镜像下载（Gitee）</strong></a> · <a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><strong>GitHub 下载</strong></a> · <a href="docs/README.md">使用文档</a> · <a href="docs/PLUGIN_DEVELOPMENT.md#agent-prompt">AI 扩展构建提示词</a> · <a href="docs/releases/V0.7.9.md">0.7.9 版本说明</a></p>
+<p align="center"><a href="https://gitee.com/huang3337/MC-World-Explorer/releases/latest"><strong>国内镜像下载（Gitee）</strong></a> · <a href="https://github.com/huang3337/MC-World-Explorer/releases/latest"><strong>GitHub 下载</strong></a> · <a href="docs/README.md">使用文档</a> · <a href="docs/SDK_GUIDE.md">开发者 SDK</a> · <a href="docs/PLUGIN_DEVELOPMENT.md#agent-prompt">AI 扩展构建提示词</a> · <a href="docs/releases/V0.8.1.md">0.8.1 版本说明</a></p>
 
 ## 从河湾找到村庄
 
@@ -66,6 +66,12 @@
 1. 在包含该方块的三维选区打开「资源与插件 → 解析诊断」，导出 JSON，记下想修的方块 ID。
 2. 把提示词直接发给能读本地文件、运行 JDK 21 的 Agent，附上诊断 JSON，告诉它便携版和游戏实例的位置。它可以在独立目录里核对资源、编译并交付插件 JAR。程序内也可点「插件开发说明 → 复制全文」获取提示词和接口说明。[复制扩展构建提示词](docs/PLUGIN_DEVELOPMENT.md#agent-prompt)
 3. 拿到 JAR 后，在「资源与插件 → 插件 → 安装插件…」安装，勾选后点「应用启停更改」。重新生成**同一选区**，对比目标方块的外观和诊断。缺少的纹理需要先补齐资源，依赖游戏运行时的效果则受当前接口限制。
+
+## 在 Java 项目中接入无 UI 开发者 SDK
+
+核心只读引擎已独立拆分为纯 Java 21 模块 `:mc-world-explorer-sdk`（零 JavaFX 与 OpenGL 依赖），可在命令行工具、存档转换器或服务端批处理程序中直接读取 `1.2.1 – 26.x` Anvil 存档、生成三维体素网格、导出标准 Wavefront `.obj` / `.mtl` / `_atlas.png`（支持无客户端纯色导出及带客户端/实例资源的群系着色与双层遮罩烘焙），或无头渲染二维俯视 PNG 地图。
+
+支持通过 JitPack（Gradle / Maven）按版本标签引入，也可直接使用 Release 附带的独立 SDK JAR。依赖坐标、内置安全边界与完整调用示例见 [SDK 使用指南](docs/SDK_GUIDE.md)。
 
 ## 查看显卡，调整内存
 

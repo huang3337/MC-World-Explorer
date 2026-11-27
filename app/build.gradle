@@ -1,0 +1,161 @@
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+layout.buildDirectory = rootProject.layout.projectDirectory.dir('build/core-0.8.1/app')
+
+base {
+    archivesName = 'MC-World-Explorer'
+}
+
+javafx {
+    version = '21'
+    modules = [ 'javafx.controls', 'javafx.fxml' ]
+}
+
+application {
+    mainClass = 'com.mcworldexplorer.Launcher'
+    applicationName = 'MC-World-Explorer'
+}
+
+tasks.named('run', JavaExec) {
+    workingDir = rootProject.projectDir
+    jvmArgs(
+        '-Djava.net.useSystemProxies=true',
+        '--add-exports=javafx.graphics/com.sun.prism=ALL-UNNAMED',
+        '--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED',
+        '--add-opens=javafx.graphics/com.sun.prism.d3d=ALL-UNNAMED'
+    )
+    // The development launcher can apply the portable heap choice before it creates the client JVM.
+    doFirst {
+        def config = rootProject.layout.projectDirectory.file('config/settings.properties').asFile
+        if (config.isFile()) {
+            def preferences = new Properties()
+            try {
+                config.withInputStream { preferences.load(it) }
+                def mib = preferences.getProperty('heap_mib')
+                if (mib in ['1024', '2048', '4096']) maxHeapSize = mib + 'm'
+            } catch (IOException | IllegalArgumentException invalid) {
+                logger.warn('无法读取客户端堆设置，将使用启动器默认值。')
+            }
+        }
+    }
+}
+
+// Windows assigns GPU preferences to an executable path. Keep the project client independent of the shared JDK.
+tasks.register('prepareWindowsClient', Sync) {
+    dependsOn tasks.named('jar')
+    into rootProject.layout.projectDirectory.dir('build/windows-client')
+    def jdk = javaToolchains.launcherFor(java.toolchain).map { it.metadata.installationPath }
+    from(jdk) {
+        include 'bin/java.exe', 'bin/*.dll', 'bin/server/**', 'conf/**', 'lib/**', 'legal/**', 'release'
+        exclude 'lib/src.zip', 'lib/ct.sym', '**/*.pdb'
+        into 'runtime'
+    }
+    // Windows GPU preferences belong to MCWE.exe; isolated plugins launch runtime/bin/java.exe.
+    from(jdk.map { it.file('bin/java.exe') }) {
+        into 'runtime/bin'
+        rename { 'MCWE.exe' }
+    }
+    from(tasks.named('jar')) { into 'app' }
+    from(configurations.runtimeClasspath) {
+        eachFile { f -> f.path = (f.name.startsWith('javafx-') ? 'fx/' : 'app/') + f.name }
+    }
+    doLast {
+        for (launcher in ['MCWE.exe', 'java.exe']) {
+            if (!new File(destinationDir, "runtime/bin/$launcher").isFile()) {
+                throw new GradleException("Windows client is missing runtime/bin/$launcher")
+            }
+        }
+    }
+}
+
+evaluationDependsOn(':mc-world-explorer-sdk')
+
+dependencies {
+    implementation project(':mc-world-explorer-sdk')
+    implementation 'org.kordamp.ikonli:ikonli-javafx:12.4.0'
+    implementation 'org.kordamp.ikonli:ikonli-feather-pack:12.4.0'
+    implementation 'com.google.code.gson:gson:2.13.2'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+    implementation platform('org.lwjgl:lwjgl-bom:3.4.1')
+    implementation 'org.lwjgl:lwjgl'
+    implementation 'org.lwjgl:lwjgl-glfw'
+    implementation 'org.lwjgl:lwjgl-opengl'
+    implementation 'org.joml:joml:1.10.5'
+    runtimeOnly 'org.lwjgl:lwjgl::natives-windows'
+    runtimeOnly 'org.lwjgl:lwjgl-glfw::natives-windows'
+    runtimeOnly 'org.lwjgl:lwjgl-opengl::natives-windows'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.6'
+
+    testImplementation project(':mc-world-explorer-sdk').sourceSets.test.output
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+}
+
+tasks.named('compileTestJava') {
+    dependsOn ':mc-world-explorer-sdk:testClasses'
+}
+
+tasks.register('runV04JavaFx', JavaExec) {
+    group = 'application'
+    description = 'Runs the isolated V0.4 JavaFX 3D feasibility trial'
+    workingDir = rootProject.projectDir
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mcworldexplorer.experimental.v04.render.javafx.JavaFxV04Launcher'
+}
+
+tasks.register('runV04Lwjgl', JavaExec) {
+    group = 'application'
+    description = 'Runs the isolated V0.4 LWJGL/OpenGL feasibility trial'
+    workingDir = rootProject.projectDir
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mcworldexplorer.experimental.v04.render.lwjgl.LwjglV04Launcher'
+}
+
+tasks.register('runV05Lwjgl', JavaExec) {
+    group = 'application'
+    description = 'Runs the isolated V0.5 LWJGL/OpenGL internal validation'
+    workingDir = rootProject.projectDir
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mcworldexplorer.experimental.v05.LwjglV05Launcher'
+}
+
+// Offline documentation and approved artwork only; no plugin implementation or template is bundled.
+tasks.named('processResources') {
+    from(rootProject.file('docs/PLUGIN_DEVELOPMENT.md')) { into 'help' }
+    from(rootProject.file('docs/assets/mc-world-explorer.png')) { into 'images' }
+}
+
+['check', 'installDist', 'distZip', 'distTar'].each { name ->
+    tasks.named(name) { dependsOn rootProject.tasks.named('verifyCoreIsolation') }
+}
+
+// Exact inputs for the reusable Windows packager, independent of old output directories.
+tasks.register('prepareWindowsPackaging') {
+    group = 'distribution'
+    dependsOn tasks.named('installDist')
+    inputs.files(configurations.runtimeClasspath)
+    inputs.file(tasks.named('jar').flatMap { it.archiveFile })
+    def manifest = layout.buildDirectory.file('packaging/runtime-files.json')
+    outputs.file(manifest)
+    doLast {
+        def files = configurations.runtimeClasspath.files + tasks.named('jar').get().archiveFile.get().asFile
+        if (files.collect { it.name }.toSet().size() != files.size())
+            throw new GradleException('Packaging inputs have duplicate file names')
+        def hashes = files.sort { it.name }.collectEntries { input ->
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+            input.withInputStream { stream ->
+                byte[] buffer = new byte[65536]
+                int count
+                while ((count = stream.read(buffer)) != -1) digest.update(buffer, 0, count)
+            }
+            [(input.name): digest.digest().encodeHex().toString()]
+        }
+        def target = manifest.get().asFile
+        target.parentFile.mkdirs()
+        target.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(hashes)), 'UTF-8')
+    }
+}

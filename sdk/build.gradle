@@ -1,0 +1,72 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+layout.buildDirectory = rootProject.layout.projectDirectory.dir('build/core-0.8.1/sdk')
+
+base {
+    archivesName = 'mc-world-explorer-sdk'
+}
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.named('javadoc', Javadoc) {
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+dependencies {
+    api 'net.kyori:adventure-nbt:4.17.0'
+    implementation 'com.google.code.gson:gson:2.13.2'
+    implementation 'org.joml:joml:1.10.5'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+    testRuntimeOnly 'ch.qos.logback:logback-classic:1.5.6'
+}
+
+// Single source of truth for /mcwe-build.properties shared by both SDK and desktop app.
+def buildMetadata = layout.buildDirectory.dir('generated/build-metadata')
+tasks.register('generateBuildMetadata') {
+    inputs.property('version', project.version.toString())
+    outputs.dir(buildMetadata)
+    doLast {
+        def target = buildMetadata.get().file('mcwe-build.properties').asFile
+        target.parentFile.mkdirs()
+        target.text = "version=${project.version}\n"
+    }
+}
+sourceSets.main.resources.srcDir(buildMetadata)
+tasks.named('processResources') { dependsOn tasks.named('generateBuildMetadata') }
+tasks.named('sourcesJar') { dependsOn tasks.named('generateBuildMetadata') }
+
+tasks.named('check') {
+    dependsOn rootProject.tasks.named('verifyCoreIsolation')
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifactId = 'mc-world-explorer-sdk'
+            pom {
+                name = 'MC World Explorer SDK'
+                description = 'Headless read-only Minecraft Java Edition world reader, 2D map renderer, and 3D voxel mesh / Wavefront OBJ exporter.'
+                url = 'https://github.com/huang3337/MC-World-Explorer'
+                licenses {
+                    license {
+                        name = 'GNU General Public License v3.0'
+                        url = 'https://www.gnu.org/licenses/gpl-3.0.html'
+                    }
+                }
+            }
+        }
+    }
+}
