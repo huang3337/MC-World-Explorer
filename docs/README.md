@@ -20,6 +20,7 @@
 
 | 文档 | 用途 |
 |---|---|
+| [SDK 使用指南](SDK_GUIDE.md) | 无 UI 核心库 `:mc-world-explorer-sdk` 的引入方式、三维 OBJ 导出与二维 PNG 导出示例 |
 | [插件开发说明](PLUGIN_DEVELOPMENT.md) | [可直接发给 Agent 的扩展构建提示词](PLUGIN_DEVELOPMENT.md#agent-prompt)、core.1 接口、编译示例和安装验证 |
 | [界面设计规范](UI_DESIGN_GUIDE.md) | 主界面与资源、诊断、插件分区约定 |
 | [构建与发布准备](RELEASING.md) | 可复用的 Windows 打包方式与发布前核对 |
@@ -35,17 +36,18 @@
 
 Windows 下也可双击根目录的 `run-app.bat`。启动器默认使用本机已有的 Gradle 依赖。首次使用需要下载 Gradle，缺少项目依赖时可在提示处按 Y 联网重试，或直接运行 `.\run-app.bat --online`。批处理在 `build/windows-client/` 准备独立客户端，让 Windows 的显卡偏好只关联本项目。配置和缓存仍位于项目根目录。[渲染与重启设置](FAQ.md#render-settings)
 
-JAR 与 Gradle 测试结果位于 `build/core-0.8.0/`，应用版本以构建元数据为准。本体不会构建或预装专用 Mod 插件，也不提供旧探索版本的 SDK 分发包。插件编译与接口限制请按上方开发说明操作。
+JAR、SDK 构件与 Gradle 测试结果位于 `build/core-0.8.1/`，应用与 SDK 版本以构建元数据为准。本体不会构建或预装专用 Mod 插件，也不恢复旧探索版本的专用插件生成器。无 UI 开发者 SDK 用法见 [SDK 使用指南](SDK_GUIDE.md)，插件编译与接口限制见上方开发说明。
 
 </details>
 
 <details>
 <summary><strong>版本进度 · 由新到旧</strong></summary>
 
-[当前进度](progress/CURRENT.md)记录接续位置，[版本进度目录](progress/README.md)汇总各阶段。各版功能与限制见 [0.7.9 版本说明](releases/V0.7.9.md)、[0.7.5 版本说明](releases/V0.7.5.md)与 [0.7.4 版本说明](releases/V0.7.4.md)。
+[当前进度](progress/CURRENT.md)记录接续位置，[版本进度目录](progress/README.md)汇总各阶段。各版功能与限制见 [0.8.1 版本说明](releases/V0.8.1.md)、[0.7.9 版本说明](releases/V0.7.9.md)、[0.7.5 版本说明](releases/V0.7.5.md)与 [0.7.4 版本说明](releases/V0.7.4.md)。
 
 | 版本 | 记录 |
 |---|---|
+| [V0.8.1](progress/V0.8.1.md) | 物理双模块拆分（SDK + App）与无 UI 开发者 SDK（关联 Issue #1） |
 | [V0.8.0](progress/V0.8.0.md) | GPU 顶点群系着色与双层共面遮罩合成管线升级 |
 | [V0.7.9](progress/V0.7.9.md) | 国内镜像双源检查更新、软件内模态遮罩与旧版数据导入 |
 | [V0.7.8](progress/V0.7.8.md) | 1.8–1.12.2 JSON/Forge V1 与 1.6.1–1.7.10 平面纹理三维适配 |
@@ -74,7 +76,7 @@ JAR 与 Gradle 测试结果位于 `build/core-0.8.0/`，应用版本以构建元
 <details>
 <summary><strong>设计决策</strong></summary>
 
-[决策目录](decisions/README.md)按编号从新到旧整理。当前范围首先核对 [DECISION-024：纯本体交付边界](decisions/DECISION-024.md)，受限数据读取还需结合 DECISION-019、020、022。旧决策说明当时取舍，不能越过当前计划恢复已退出交付的探索路线。
+[决策目录](decisions/README.md)按编号从新到旧整理。当前范围首先核对 [DECISION-025：物理双模块拆分与无 UI SDK](decisions/DECISION-025.md) 与 [DECISION-024：纯本体交付边界](decisions/DECISION-024.md)，受限数据读取还需结合 DECISION-019、020、022。旧决策说明当时取舍，不能越过当前计划恢复已退出交付的探索路线。
 
 </details>
 

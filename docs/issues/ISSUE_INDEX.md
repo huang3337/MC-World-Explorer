@@ -1,9 +1,10 @@
 # Issue 编号登记与记录索引
 
-更新于 2026-11-26。按源文件名排序，同一前缀内编号递增。
+更新于 2026-11-27。按源文件名排序，同一前缀内编号递增。
 
 ## 对齐结果
 
+- 2026-11-27，0.8.1 物理双模块拆分与无 UI 开发者 SDK 审查的 6 项问题已修复归档，1 项严重、4 项高、1 项中。现有 159 个前缀、264 个已用编号，其中 173 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-26，0.8.0 GPU 顶点群系着色与双层共面遮罩管线审查的 4 项问题已修复归档，3 项高、1 项中。现有 156 个前缀、258 个已用编号，其中 167 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-26，0.7.9 双源检查更新、软件内模态遮罩与旧版数据导入审查的 7 项问题已修复归档，5 项高、2 项中。现有 156 个前缀、254 个已用编号，其中 163 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-25，0.7.8 预扁平化三维纹理适配审查的 6 项问题已修复归档，4 项高、1 项中、1 项低。现有 153 个前缀、247 个已用编号，其中 156 个有正文或最终条目，91 个历史缺失编号继续占用。
@@ -86,6 +87,7 @@
 | `MainController.java` | `CONTROLLER` | 001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017 | `ISSUE-CONTROLLER-017` | `ISSUE-CONTROLLER-018` | [V0.7.9：017](resolved/V0.7.9/MainController.java.md)；[V0.1.1：001–009](resolved/V0.1.1/MainController.java.md)；[V0.2：010–011](resolved/V0.2/MainController.java.md)；[V0.2.1：012–014](resolved/V0.2.1/MainController.java.md)；[V0.7：015–016](resolved/V0.7/MainController.java.md) |
 | `MapCacheStorage.java` | `MAPCACHESTORAGE` | 001 | `ISSUE-MAPCACHESTORAGE-001` | `ISSUE-MAPCACHESTORAGE-002` | [V0.7.5：001](resolved/V0.7.5/MapCacheStorage.java.md) |
 | `MapRenderDevice.java` | `MAPRENDERDEVICE` | 001 | `ISSUE-MAPRENDERDEVICE-001` | `ISSUE-MAPRENDERDEVICE-002` | [V0.7.5：001](resolved/V0.7.5/MapRenderDevice.java.md) |
+| `MapRenderRequest.java` | `MAPREQ` | 001 | `ISSUE-MAPREQ-001` | `ISSUE-MAPREQ-002` | [V0.8.1：001](resolved/V0.8.1/MapRenderRequest.java.md) |
 | `MapTileCache.java` | `MAPTILECACHE` | 001 | `ISSUE-MAPTILECACHE-001` | `ISSUE-MAPTILECACHE-002` | [V0.7.6：001](resolved/V0.7.6/MapTileCache.java.md) |
 | `MapTileGenerator.java` | `MAPGEN` | 001 | `ISSUE-MAPGEN-001` | `ISSUE-MAPGEN-002` | [V0.3：001](resolved/V0.3/MapTileGenerator.java.md) |
 | `MapTileRenderer.java` | `MAPTILERENDER` | 001 | `ISSUE-MAPTILERENDER-001` | `ISSUE-MAPTILERENDER-002` | [V0.7.5：001](resolved/V0.7.5/MapTileRenderer.java.md) |
@@ -93,6 +95,7 @@
 | `MapTileService.java` | `MAPSERVICE` | 001 | `ISSUE-MAPSERVICE-001` | `ISSUE-MAPSERVICE-002` | [V0.3：001](resolved/V0.3/MapTileService.java.md) |
 | `MapViewerController.java` | `MAPVIEW` | 001,002,003,004,005,006,007,008,009 | `ISSUE-MAPVIEW-009` | `ISSUE-MAPVIEW-010` | [V0.7.5：009](resolved/V0.7.5/MapViewerController.java.md)； [V0.3：001–002](resolved/V0.3/MapViewerController.java.md)；[V0.3.1：003](resolved/V0.3.1/MapViewerController.java.md)；[V0.7.1：004](resolved/V0.7.1/MapViewerController.java.md)；[V0.7.3：005](resolved/V0.7.3/MapViewerController.java.md)；[V0.7.4：008](resolved/V0.7.4/REVIEW_SUMMARY.md)；[正文缺失登记](#缺失正文登记) |
 | `MapViewport.java` | `VIEWPORT` | 001,002,003 | `ISSUE-VIEWPORT-003` | `ISSUE-VIEWPORT-004` | [V0.3：001–002](resolved/V0.3/MapViewport.java.md)；[V0.7.4：003](resolved/V0.7.4/REVIEW_SUMMARY.md) |
+| `McWorld.java` | `MCWORLD` | 001 | `ISSUE-MCWORLD-001` | `ISSUE-MCWORLD-002` | [V0.8.1：001](resolved/V0.8.1/McWorld.java.md) |
 | `MeshBatch.java` | `V05-BATCH` | 001,002 | `ISSUE-V05-BATCH-002` | `ISSUE-V05-BATCH-003` | [V0.8.0：002](resolved/V0.8.0/MeshBatch.java.md)；[V0.5：001](resolved/V0.5/MeshBatch.java.md) |
 | `MeshWarning.java` | `MESHWARNING` | — | — | `ISSUE-MESHWARNING-001` | 尚未登记问题 |
 | `ModelParts.java` | `MPARTS` | 001 | `ISSUE-MPARTS-001` | `ISSUE-MPARTS-002` | [正文缺失登记](#缺失正文登记) |
@@ -175,6 +178,7 @@
 | `VoxelSceneSnapshot.java` | `SCENESNAP` | — | — | `ISSUE-SCENESNAP-001` | 尚未登记问题 |
 | `VoxelTargetIndex.java` | `TARGETIDX` | 001,002,003,004 | `ISSUE-TARGETIDX-004` | `ISSUE-TARGETIDX-005` | [V0.7.4：004](resolved/V0.7.4/REVIEW_SUMMARY.md)；[正文缺失登记](#缺失正文登记) |
 | `VoxelTargetIndexTest.java` | `TARGETTEST` | — | — | `ISSUE-TARGETTEST-001` | 尚未登记问题 |
+| `WavefrontObjExporter.java` | `OBJEXP` | 001 | `ISSUE-OBJEXP-001` | `ISSUE-OBJEXP-002` | [V0.8.1：001](resolved/V0.8.1/WavefrontObjExporter.java.md) |
 | `WorkspaceAppearance.java` | `APPEARANCE` | 001 | `ISSUE-APPEARANCE-001` | `ISSUE-APPEARANCE-002` | [V0.7.9：001](resolved/V0.7.9/WorkspaceAppearance.java.md) |
 | `WorkspaceLayoutTest.java` | `WORKSPACETEST` | 001 | `ISSUE-WORKSPACETEST-001` | `ISSUE-WORKSPACETEST-002` | [V0.7.1：001](resolved/V0.7.1/WorkspaceLayoutTest.java.md) |
 | `WorldDataPacksTest.java` | `WORLDDATAPACKSTEST` | — | — | `ISSUE-WORLDDATAPACKSTEST-001` | 尚未登记问题 |
@@ -185,12 +189,12 @@
 | `WorldScanner.java` | `SCANNER` | 001,002,003,004,005,006 | `ISSUE-SCANNER-006` | `ISSUE-SCANNER-007` | [V0.1.1：001–006](resolved/V0.1.1/WorldScanner.java.md) |
 | `WorldTreeCell.java` | `TREECELL` | 001,002,003,004 | `ISSUE-TREECELL-004` | `ISSUE-TREECELL-005` | [V0.1.1：001–004](resolved/V0.1.1/WorldTreeCell.java.md) |
 | `build-v04-trials.ps1` | `V04PACKAGE` | 001 | `ISSUE-V04PACKAGE-001` | `ISSUE-V04PACKAGE-002` | [V0.4：001](resolved/V0.4/build-v04-trials.ps1.md) |
-| `build.gradle` | `BUILD` | 001,002,003,004 | `ISSUE-BUILD-004` | `ISSUE-BUILD-005` | [V0.7.6：004](resolved/V0.7.6/build.gradle.md)；[V0.2.1：001](resolved/V0.2.1/build.gradle.md)；[正文缺失登记](#缺失正文登记) |
+| `build.gradle` | `BUILD` | 001,002,003,004,005,006 | `ISSUE-BUILD-006` | `ISSUE-BUILD-007` | [V0.8.1：005–006](resolved/V0.8.1/build.gradle.md)；[V0.7.6：004](resolved/V0.7.6/build.gradle.md)；[V0.2.1：001](resolved/V0.2.1/build.gradle.md)；[正文缺失登记](#缺失正文登记) |
 | `main.fxml` | `FXML` | 001,002,003,004,005,006 | `ISSUE-FXML-006` | `ISSUE-FXML-007` | [V0.7.9：006](resolved/V0.7.9/main.fxml.md)；[V0.1.1：001–004](resolved/V0.1.1/main.fxml.md)；[V0.7：005](resolved/V0.7/main.fxml.md) |
 | `map-view.fxml` | `MAPFXML` | 001,002 | `ISSUE-MAPFXML-002` | `ISSUE-MAPFXML-003` | [V0.7：001](resolved/V0.7/map-view.fxml.md)；[V0.7.1：002](resolved/V0.7.1/map-view.fxml.md) |
 | `measure-v04.ps1` | `V04MEASURE` | 001 | `ISSUE-V04MEASURE-001` | `ISSUE-V04MEASURE-002` | [V0.4：001](resolved/V0.4/measure-v04.ps1.md) |
 | `measure-v05.ps1` | `V05-SCRIPT` | 001,002 | `ISSUE-V05-SCRIPT-002` | `ISSUE-V05-SCRIPT-003` | [V0.5：001–002](resolved/V0.5/measure-v05.ps1.md) |
-| `package-windows.ps1` | `PACKAGEWINDOWS` | 001,002,003 | `ISSUE-PACKAGEWINDOWS-003` | `ISSUE-PACKAGEWINDOWS-004` | [V0.7.6：003](resolved/V0.7.6/package-windows.ps1.md)；[V0.7.4：001–002](resolved/V0.7.4/REVIEW_SUMMARY.md) |
+| `package-windows.ps1` | `PACKAGEWINDOWS` | 001,002,003,004 | `ISSUE-PACKAGEWINDOWS-004` | `ISSUE-PACKAGEWINDOWS-005` | [V0.8.1：004](resolved/V0.8.1/package-windows.ps1.md)；[V0.7.6：003](resolved/V0.7.6/package-windows.ps1.md)；[V0.7.4：001–002](resolved/V0.7.4/REVIEW_SUMMARY.md) |
 | `styles.css` | `CSS` | 001 | `ISSUE-CSS-001` | `ISSUE-CSS-002` | [正文缺失登记](#缺失正文登记) |
 
 ## 缺失正文登记

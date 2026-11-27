@@ -1,0 +1,4 @@
+jdk:
+  - openjdk21
+install:
+  - ./gradlew :mc-world-explorer-sdk:publishToMavenLocal -x test --no-daemon

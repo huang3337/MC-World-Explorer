@@ -2,13 +2,14 @@
 
 [返回文档目录](../README.md) · [当前开发与发布状态](../progress/CURRENT.md)
 
-决策按编号从新到旧排列。当前交付以 DECISION-024 与现行版本计划为准；较早记录保留当时的技术背景，不能解释为当前已实现能力或恢复旧路线的要求。
+决策按编号从新到旧排列。当前交付以 DECISION-025、DECISION-024 与现行版本计划为准；较早记录保留当时的技术背景，不能解释为当前已实现能力或恢复旧路线的要求。
 
 <details>
 <summary><strong>当前交付与受限读取边界</strong></summary>
 
 | 决策 | 内容 |
 |---|---|
+| [DECISION-025](DECISION-025.md) | 0.8.1 物理双模块拆分与无 UI 开发者 SDK 架构 |
 | [DECISION-024](DECISION-024.md) | 0.7.4 纯本体交付边界 |
 | [DECISION-023](DECISION-023.md) | 0.7.4 本体与交互范围 |
 | [DECISION-022](DECISION-022.md) | 加载器数据读取边界 |

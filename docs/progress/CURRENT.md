@@ -1,14 +1,16 @@
 # 当前状态
 
-更新于 2026-11-27。本页记录 Java 主线的源码、发布、验证与下一步。分轮实测见[0.8.0 记录](V0.8.0.md)、[0.7.9 记录](V0.7.9.md)、[0.7.8 记录](V0.7.8.md)、[0.7.7 记录](V0.7.7.md)、[0.7.6 记录](V0.7.6.md)与[0.7.5 记录](V0.7.5.md)，归档问题见[审查索引](../issues/ISSUE_INDEX.md)。
+更新于 2026-11-27。本页记录 Java 主线的源码、发布、验证与下一步。分轮实测见[0.8.1 记录](V0.8.1.md)、[0.8.0 记录](V0.8.0.md)、[0.7.9 记录](V0.7.9.md)、[0.7.8 记录](V0.7.8.md)、[0.7.7 记录](V0.7.7.md)、[0.7.6 记录](V0.7.6.md)与[0.7.5 记录](V0.7.5.md)，归档问题见[审查索引](../issues/ISSUE_INDEX.md)。
 
 | 项目 | 状态 |
 |---|---|
-| 当前源码 | **0.8.0**，Java 主线 `main`，未创建 `v0.8.0` 标签或便携包。构建输出位于 `build/core-0.8.0/`，主 JAR SHA-256 为 `5893249d9fe15c57d0bef4c48be99df893dc578ad12484966498680cc33fd476`。完成 GPU 顶点群系着色与双层共面遮罩合成管线升级：`TextureAtlas` 仅存单份未染色原图并提升容量上限（`MAX_TILES = 2048`、`MAX_SIZE = 4096`），`BlockTintPreparation` 改为稀疏区段位置调色板索引（不再克隆 `__mcwe_tint` 状态），支持 `forge:composite`/`neoforge:composite` 跨 `render_type` 共面双层合并与 `UNBOUND_TINT`/`TINT_UNRESOLVED` 降级诊断区分，`MeshBatch`/`OpenGlMeshResources`/`TranslucentFaces` 与 `/v05/shaders/voxel.{vert,frag}` 统一采用 13 浮点顶点布局与片元 Porter-Duff `source-over` 双层合成，`RENDER_VERSION` 更新为 `v080-vertex-tint-1`。[0.8.0 验证记录](V0.8.0.md) |
-| 最新正式发行 | **0.7.9**，Java 主线 `main`，标签 `v0.7.9`。Windows x64 便携包 `MC-World-Explorer-0.7.9-windows-x64.zip`（43,635,758 字节，SHA-256 `437a8b27080ddba723dfa0495283d5ea6e33c6819bdee98aa14e454cf9781fa0`），合并交付 0.7.6–0.7.8 预扁平化与旧版三维纹理兼容及 0.7.9 双源检查更新与旧版数据迁移能力。[GitHub Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.7.9) · [Gitee Release](https://gitee.com/huang3337/MC-World-Explorer/releases/latest) · [0.7.9 版本说明](../releases/V0.7.9.md) · [包指纹与核验](V0.7.9.md#windows-package) |
+| 当前源码 | **0.8.1**，Java 主线 `main` 与开发分支 `dev`（关联 GitHub Issue #1），标签 `v0.8.1`。采用 Gradle 物理双子模块（`:mc-world-explorer-sdk` + `:mc-world-explorer-app`，[DECISION-025](../decisions/DECISION-025.md)），构建输出位于 `build/core-0.8.1/`：SDK JAR（`mc-world-explorer-sdk-0.8.1.jar`，SHA-256 `59ddb4878e3b2153836ad346bd356515ab7d90a70b675cf5fa6f3d8d00444182`）与应用主 JAR（`MC-World-Explorer-0.8.1.jar`，SHA-256 `c34d34fa557361b5840a45d296881456a680448d7de74a06b8228cdb52593d04`）。新增无 UI 开发者 SDK（`com.mcworldexplorer.sdk`），支持只读存档读取、无客户端纯色三维场景与 `.obj`+`.mtl` 导出、带客户端资源 `0.8.0` 逐顶点群系着色/双层遮罩（含旋转与高分辨率遮罩）Porter-Duff 烘焙 `.obj`+`.mtl`+`_atlas.png` 导出、无头二维 PNG 导出与 GNU GPL v3.0 Maven / JitPack 发布。[0.8.1 验证记录](V0.8.1.md) · [SDK 使用指南](../SDK_GUIDE.md) |
+| 最新正式发行 | **0.8.1**，Java 主线 `main`，标签 `v0.8.1`。Windows x64 便携包 `MC-World-Explorer-0.8.1-windows-x64.zip`（43,683,919 字节，SHA-256 `4ca31718e4479c725f53d032a2c3e2404cf9739c093d48037cfcea9f551727f6`）与独立 SDK 构件（`mc-world-explorer-sdk-0.8.1.jar` / `-sources.jar` / `-javadoc.jar`），合并交付 0.8.0 GPU 顶点群系着色与双层遮罩合成管线升级及 0.8.1 无 UI 开发者 SDK。[GitHub Release](https://github.com/huang3337/MC-World-Explorer/releases/tag/v0.8.1) · [Gitee Release](https://gitee.com/huang3337/MC-World-Explorer/releases/latest) · [0.8.1 版本说明](../releases/V0.8.1.md) · [包指纹与核验](V0.8.1.md#windows-package) |
 | 范围 | 只读浏览已保存区块。1.13+ 存档支持二维地图与标准三维资源解析（含 1.13–1.19.2 旧版群系与近似着色回退，0.8.0 起采用 GPU 顶点群系着色与双层遮罩合成）；1.6.1–1.12.2 预扁平化存档支持二维完整地图、旧版客户端/实例只读三维纹理（1.8–1.12.2 JSON/Forge V1 与 1.6.1–1.7.10 原版静态几何贴图）及缺失资源时简化颜色底座回退；1.2.1–1.5.2 存档使用三维简化颜色底座。设置页可调整二维渲染、JVM 最大堆、扫描并发与三维缓存。[设置说明](../FAQ.md#render-settings) · [资源解析范围](../MODEL_PROTOCOL_CAPABILITIES.md) |
 
 ## 已验证
+
+- **物理双模块拆分与无 UI 开发者 SDK（0.8.1）。** 覆盖 `:mc-world-explorer-sdk` 与 `:mc-world-explorer-app` 物理拆分、`/mcwe-build.properties` 单一元数据归属、`WorldExplorerSdk` / `McWorld` / `SceneBuildRequest` / `MapRenderRequest` / `WavefrontObjExporter` / `ObjExportResult` 全链路回归（合成 Anvil 存档只读校验、无客户端纯色 `.obj`+`.mtl` 导出、带群系着色与高分辨率/旋转双层遮罩 Porter-Duff 烘焙 `_atlas.png` 与翻转 OBJ V 轴校验、临时文件原子替换与取消清理、无头二维 PNG 导出、符号链接与路径穿越防护、极端负坐标越界拦截）、`SdkPurityContractTest` 零桌面端/OpenGL 类路径与字节码契约及 GPL v3.0 POM 许可证校验、Windows x64 便携包 `jpackage` 构建与 6 项代码审查修复归档。离线回归 175 套共 811 项中 **702** 项通过（SDK 578 + App 124）、**109** 项按条件跳过（SDK 61 + App 48）、0 失败；`javadoc`、`sourcesJar`、`publishToMavenLocal`、`assembleSdkDist`、`prepareWindowsClient` 与 `verifyCoreIsolation` 全部通过。[0.8.1 验证记录](V0.8.1.md#regression) · [包指纹与核验](V0.8.1.md#windows-package)
 
 - **GPU 顶点群系着色与双层共面遮罩管线（0.8.0）。** 覆盖 13 浮点统一顶点布局与 `voxel.vert`/`voxel.frag` Porter-Duff `source-over` 双层合成、`TextureAtlas` 去群系染色化与容量上限提升（`2048` 贴图 / `4096×4096`）、`BlockTintPreparation` 稀疏区段调色板解耦与已绑定动态索引预登记、`neoforge:composite` 跨 `render_type` 共面双层合并、`FluidGeometry` 水流染色保留、`FaceMaterialTest` 静态自发光一次合成、`UNBOUND_TINT`/`TINT_UNRESOLVED` 诊断区分，以及 `VertexBiomeTintAtlasScaleTest` 800 种群系 / 500+ 渐变 RGB 零 `TEXTURE_FALLBACK` 压力回归与 4 项代码审查修复归档。默认离线回归 172 套共 801 项中 **692** 项通过、**109** 项按条件跳过、0 失败，`verifyCoreIsolation` 通过；显式启用 `MCWE_R2_NATIVE_TEST=1` 的隐藏窗口 OpenGL 3.3 `TranslucentRenderingTest`（含跨区块半透明排序与双层遮罩单次片元合成像素读回）全部通过。[0.8.0 验证记录](V0.8.0.md#regression)
 
@@ -27,8 +29,9 @@
 
 ## 剩余边界与下一步
 
-- 0.8.0 已完成六维代码审查、全量离线自动化回归与隐藏窗口 OpenGL 3.3 像素读回验证；尚未执行本机多群系大选区原生三维窗口人工目视验收，也未创建 `v0.8.0` 标签或构建 Windows x64 便携包。自 0.8.1 起切换至独立开发分支推进无 UI 开发者 SDK（关联 GitHub Issue #1）。[后续范围](DEFERRED_WORK.md)
-- 0.7.8 已通过本机 1.7.10 Forge 实例自动化只读三维纹理验证；0.7.7 与 0.7.8 尚未执行 1.8–1.19.4 真实客户端样本现场复核、原生窗口人工验收与 Windows 便携包构建，`block-defaults.tsv` 历史数据版本补充留待后续评估。[后续范围](DEFERRED_WORK.md)
+- 0.8.1 已完成双模块拆分、无 UI 开发者 SDK、六维审查修复、全量离线自动化验证、独立 SDK 分发构件与 Windows x64 便携包构建；云端 JitPack 远程拉取留待 `v0.8.1` 标签公开后核验。
+- 0.8.0 已完成六维代码审查、全量离线自动化回归与隐藏窗口 OpenGL 3.3 像素读回验证；尚未单独记录本机多群系大选区原生三维窗口人工目视验收。[后续范围](DEFERRED_WORK.md)
+- 0.7.8 已通过本机 1.7.10 Forge 实例自动化只读三维纹理验证；0.7.7 与 0.7.8 尚未执行 1.8–1.19.4 真实客户端样本现场复核与原生窗口人工验收，`block-defaults.tsv` 历史数据版本补充留待后续评估。[后续范围](DEFERRED_WORK.md)
 - 存档库、命名地点、连线、PNG 导出和浅深主题已有人工检查。窄窗口工具栏收纳与详情动效有本地布局检查，尚无该次联动调整的人工结论。
 - 11 月 12 日固定 S/M/L 指标的未达项保留在版本记录。
 - 爱发电赞助入口属于后续意向，未实现；游戏外生成未探索区块仅作可行性讨论。[后续范围](DEFERRED_WORK.md)

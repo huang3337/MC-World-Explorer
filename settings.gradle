@@ -6,3 +6,8 @@ pluginManagement {
 }
 rootProject.name = 'MC-World-Explorer'
 
+include ':mc-world-explorer-sdk'
+project(':mc-world-explorer-sdk').projectDir = file('sdk')
+
+include ':mc-world-explorer-app'
+project(':mc-world-explorer-app').projectDir = file('app')

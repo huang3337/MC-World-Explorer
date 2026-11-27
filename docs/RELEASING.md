@@ -2,13 +2,24 @@
 
 本文件仅描述构建、检查和发布流程。现行代码版本、提交与发布状态、验证结论统一见 [CURRENT](progress/CURRENT.md)。源码检查点不等于正式发行；提交、推送、标签及 Release 分别单独确认后执行。
 
-## 源码上传前
+## 源码上传与分支合入前
 
 1. 核对 [当前状态](progress/CURRENT.md) 的最终审查、自动测试与已知限制。
-2. 执行 `gradlew.bat test verifyCoreIsolation`。默认不启动人工布局测试；跳过项目不能计作通过。
+2. 执行 `gradlew.bat check assembleSdkDist verifyCoreIsolation`。默认不启动人工布局测试；跳过项目不能计作通过。
 3. 检查 Git 变更与忽略规则。只上传源码、正式工具、测试与文档；不要上传 build、测试存档、缓存、插件安装库、截图日志或仓库外延期材料。
-4. 确认应用没有预装插件，当前代码和包不含延期专用适配。
-5. 完成变更审阅和上述检查后创建提交，再核对版本标签与GitHub Release。
+4. 确认应用没有预装插件，当前代码和包不含延期专用适配，且 `:mc-world-explorer-sdk` 通过零 JavaFX/LWJGL 字节码纯净度校验。
+5. 日常开发在 `dev` 分支实施，完成审阅、测试与文档同步后提交并合入 `main` 分支（关联对应 GitHub Issue，例如在提交说明或 PR 中注明 `Closes #1`），再核对版本标签与 Release。
+
+## SDK 分发产物
+
+构建 `:mc-world-explorer-sdk` 离线分发包与本地 Maven 构件：
+
+```powershell
+.\gradlew.bat assembleSdkDist :mc-world-explorer-sdk:publishToMavenLocal
+```
+
+- `build/core-0.8.1/sdk-dist/` 输出 `mc-world-explorer-sdk-<version>.jar`、`-sources.jar` 与 `-javadoc.jar`，可直接作为 GitHub/Gitee Release 附件分发。
+- 仓库根目录 `jitpack.yml` 配置了 JDK 21 下的 `:mc-world-explorer-sdk:publishToMavenLocal -x test`，版本标签推送后即可由 JitPack 构建并供外部 Gradle/Maven 项目引用（用法见 [SDK 使用指南](SDK_GUIDE.md)）。
 
 ## Windows 包
 
