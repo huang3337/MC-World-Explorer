@@ -198,7 +198,7 @@ class ModalOverlayContractTest {
         String content = Files.readString(script, StandardCharsets.UTF_8);
         assertTrue(content.contains("java.se,jdk.unsupported,jdk.crypto.ec"));
         assertTrue(content.contains("-Djava.net.useSystemProxies=true"));
-        assertTrue(content.contains("core-0.7.9"));
+        assertTrue(content.contains("core-0.8.0"));
     }
 
     @Test

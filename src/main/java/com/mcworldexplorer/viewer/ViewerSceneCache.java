@@ -105,7 +105,12 @@ public final class ViewerSceneCache {
     public static long estimatedBytes(VoxelSceneSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot");
         long vertexBytes = snapshot.chunks().stream().flatMap(chunk -> chunk.batches().stream())
-                .mapToLong(batch -> Math.multiplyExact((long) batch.vertexCount(), (batch.textured() ? 8L : 6L) * Float.BYTES)).sum();
+                .mapToLong(batch -> {
+                    long perVertex = (batch.textured() ? 8L : 6L) * Float.BYTES
+                            + (batch.hasVertexColors() ? Integer.BYTES : 0L)
+                            + (batch.hasOverlays() ? 2L * Float.BYTES + Integer.BYTES : 0L);
+                    return Math.multiplyExact((long) batch.vertexCount(), perVertex);
+                }).sum();
         long indexBytes = Math.multiplyExact((long) snapshot.indexCount(), Integer.BYTES);
         long targets = snapshot.chunks().stream().mapToLong(chunk -> chunk.targets().estimatedBytes()).sum();
         long owners = snapshot.confirmedModIds().stream().mapToLong(id -> 64L + id.length()*2L).sum();

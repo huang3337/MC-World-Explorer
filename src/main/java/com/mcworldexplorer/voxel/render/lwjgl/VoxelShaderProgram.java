@@ -105,6 +105,9 @@ public final class VoxelShaderProgram implements AutoCloseable {
 
     void setVertexMaterial(boolean enabled) {
         glUniform1i(vertexMaterialLocation, enabled ? 1 : 0);
+        if (enabled) {
+            glUniform1i(atlasLocation, 0);
+        }
     }
 
     public void setColor(int rgb, float alpha) {

@@ -4,6 +4,7 @@
 
 ## 对齐结果
 
+- 2026-11-26，0.8.0 GPU 顶点群系着色与双层共面遮罩管线审查的 4 项问题已修复归档，3 项高、1 项中。现有 156 个前缀、258 个已用编号，其中 167 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-26，0.7.9 双源检查更新、软件内模态遮罩与旧版数据导入审查的 7 项问题已修复归档，5 项高、2 项中。现有 156 个前缀、254 个已用编号，其中 163 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-25，0.7.8 预扁平化三维纹理适配审查的 6 项问题已修复归档，4 项高、1 项中、1 项低。现有 153 个前缀、247 个已用编号，其中 156 个有正文或最终条目，91 个历史缺失编号继续占用。
 - 2026-11-25，0.7.7 旧版客户端准入与着色回退审查的 2 项问题已修复归档，1 项中、1 项低。现有 149 个前缀、241 个已用编号，其中 150 个有正文或最终条目，91 个历史缺失编号继续占用。
@@ -43,8 +44,8 @@
 | `BlockResourceDiagnostic.java` | `BLOCKRESOURCEDIAGNOSTIC` | — | — | `ISSUE-BLOCKRESOURCEDIAGNOSTIC-001` | 尚未登记问题 |
 | `BlockResourceDiagnosticTest.java` | `BLOCKRESOURCEDIAGNOSTICTEST` | — | — | `ISSUE-BLOCKRESOURCEDIAGNOSTICTEST-001` | 尚未登记问题 |
 | `BlockResourceSource.java` | `BLOCKRESOURCESOURCE` | — | — | `ISSUE-BLOCKRESOURCESOURCE-001` | 尚未登记问题 |
-| `BlockTextureSet.java` | `TEXTSET` | 001,002,003,004,005,006,007,008,009 | `ISSUE-TEXTSET-009` | `ISSUE-TEXTSET-010` | [V0.7.2：001–003](resolved/V0.7.2/BlockTextureSet.java.md)；[V0.7.3：004–005](resolved/V0.7.3/BlockTextureSet.java.md)；[正文缺失登记](#缺失正文登记) |
-| `BlockTintPreparation.java` | `TINTPREP` | 001 | `ISSUE-TINTPREP-001` | `ISSUE-TINTPREP-002` | [正文缺失登记](#缺失正文登记) |
+| `BlockTextureSet.java` | `TEXTSET` | 001,002,003,004,005,006,007,008,009,010 | `ISSUE-TEXTSET-010` | `ISSUE-TEXTSET-011` | [V0.8.0：010](resolved/V0.8.0/BlockTextureSet.java.md)；[V0.7.2：001–003](resolved/V0.7.2/BlockTextureSet.java.md)；[V0.7.3：004–005](resolved/V0.7.3/BlockTextureSet.java.md)；[正文缺失登记](#缺失正文登记) |
+| `BlockTintPreparation.java` | `TINTPREP` | 001,002 | `ISSUE-TINTPREP-002` | `ISSUE-TINTPREP-003` | [V0.8.0：002](resolved/V0.8.0/BlockTintPreparation.java.md)；[正文缺失登记](#缺失正文登记) |
 | `BlockTintResolver.java` | `TINTRES` | 001 | `ISSUE-TINTRES-001` | `ISSUE-TINTRES-002` | [正文缺失登记](#缺失正文登记) |
 | `BuiltinBlockModels.java` | `BUILTIN` | 001,002 | `ISSUE-BUILTIN-002` | `ISSUE-BUILTIN-003` | [V0.7.2：001–002](resolved/V0.7.2/BuiltinBlockModels.java.md) |
 | `BuiltinModelRules.java` | `BIRULE` | 001,002,003,004,005 | `ISSUE-BIRULE-005` | `ISSUE-BIRULE-006` | [正文缺失登记](#缺失正文登记) |
@@ -92,7 +93,7 @@
 | `MapTileService.java` | `MAPSERVICE` | 001 | `ISSUE-MAPSERVICE-001` | `ISSUE-MAPSERVICE-002` | [V0.3：001](resolved/V0.3/MapTileService.java.md) |
 | `MapViewerController.java` | `MAPVIEW` | 001,002,003,004,005,006,007,008,009 | `ISSUE-MAPVIEW-009` | `ISSUE-MAPVIEW-010` | [V0.7.5：009](resolved/V0.7.5/MapViewerController.java.md)； [V0.3：001–002](resolved/V0.3/MapViewerController.java.md)；[V0.3.1：003](resolved/V0.3.1/MapViewerController.java.md)；[V0.7.1：004](resolved/V0.7.1/MapViewerController.java.md)；[V0.7.3：005](resolved/V0.7.3/MapViewerController.java.md)；[V0.7.4：008](resolved/V0.7.4/REVIEW_SUMMARY.md)；[正文缺失登记](#缺失正文登记) |
 | `MapViewport.java` | `VIEWPORT` | 001,002,003 | `ISSUE-VIEWPORT-003` | `ISSUE-VIEWPORT-004` | [V0.3：001–002](resolved/V0.3/MapViewport.java.md)；[V0.7.4：003](resolved/V0.7.4/REVIEW_SUMMARY.md) |
-| `MeshBatch.java` | `V05-BATCH` | 001 | `ISSUE-V05-BATCH-001` | `ISSUE-V05-BATCH-002` | [V0.5：001](resolved/V0.5/MeshBatch.java.md) |
+| `MeshBatch.java` | `V05-BATCH` | 001,002 | `ISSUE-V05-BATCH-002` | `ISSUE-V05-BATCH-003` | [V0.8.0：002](resolved/V0.8.0/MeshBatch.java.md)；[V0.5：001](resolved/V0.5/MeshBatch.java.md) |
 | `MeshWarning.java` | `MESHWARNING` | — | — | `ISSUE-MESHWARNING-001` | 尚未登记问题 |
 | `ModelParts.java` | `MPARTS` | 001 | `ISSUE-MPARTS-001` | `ISSUE-MPARTS-002` | [正文缺失登记](#缺失正文登记) |
 | `ModelPlugin.java` | `MODELPLUGIN` | — | — | `ISSUE-MODELPLUGIN-001` | 尚未登记问题 |
@@ -138,7 +139,7 @@
 | `SettingsDialog.java` | `SETTINGSDIALOG` | 001 | `ISSUE-SETTINGSDIALOG-001` | `ISSUE-SETTINGSDIALOG-002` | [V0.7.9：001](resolved/V0.7.9/SettingsDialog.java.md) |
 | `ShaderProgram.java` | `SHADER` | 001 | `ISSUE-SHADER-001` | `ISSUE-SHADER-002` | [V0.4：001](resolved/V0.4/ShaderProgram.java.md) |
 | `StandardBlockTintTest.java` | `TINTSTDTEST` | — | — | `ISSUE-TINTSTDTEST-001` | 尚未登记问题 |
-| `StandardTintBoundaryTest.java` | `TINTBNDTEST` | — | — | `ISSUE-TINTBNDTEST-001` | 尚未登记问题 |
+| `StandardTintBoundaryTest.java` | `TINTBNDTEST` | 001 | `ISSUE-TINTBNDTEST-001` | `ISSUE-TINTBNDTEST-002` | [V0.8.0：001](resolved/V0.8.0/StandardTintBoundaryTest.java.md) |
 | `TextureAtlas.java` | `ATLAS` | 001,002 | `ISSUE-ATLAS-002` | `ISSUE-ATLAS-003` | [V0.7.3：001](resolved/V0.7.3/TextureAtlas.java.md)；[正文缺失登记](#缺失正文登记) |
 | `UnboundModelTintTest.java` | `UTINT` | — | — | `ISSUE-UTINT-001` | 尚未登记问题 |
 | `UnboundTintResourceIntegrationTest.java` | `UTINTR` | — | — | `ISSUE-UTINTR-001` | 尚未登记问题 |

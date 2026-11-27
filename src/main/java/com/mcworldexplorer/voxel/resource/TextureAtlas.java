@@ -13,16 +13,17 @@ import java.util.Map;
 /** Nearest-filtered static PNG atlas, with a one-pixel extruded border per tile. */
 public final class TextureAtlas {
     public static final int MAX_IMAGE_SIZE = 1024;
-    public static final int MAX_SIZE = 2048;
-    public static final int MAX_TILES = 1024;
-    private final int width, height;
+    public static final int MAX_SIZE = 4096;
+    public static final int MAX_TILES = 2048;
+    private final int width, height, tileCount;
     private final int[] pixels;
 
-    private TextureAtlas(int width, int height, int[] pixels) {
-        this.width = width; this.height = height; this.pixels = pixels;
+    private TextureAtlas(int width, int height, int tileCount, int[] pixels) {
+        this.width = width; this.height = height; this.tileCount = tileCount; this.pixels = pixels;
     }
     public int width() { return width; }
     public int height() { return height; }
+    public int tileCount() { return tileCount; }
     public int[] pixels() { return pixels.clone(); }
     public long estimatedBytes() { return (long) pixels.length * Integer.BYTES; }
     public record Tile(int x, int y, int width, int height) { }
@@ -119,7 +120,7 @@ public final class TextureAtlas {
             if (w < 1 || h < 1 || w > MAX_IMAGE_SIZE || h > MAX_IMAGE_SIZE || tiles.size() >= MAX_TILES)
                 throw new IOException("纹理图集单项尺寸或数量超限");
             if (x + w + 2 > MAX_SIZE) { x = 0; y += rowHeight; rowHeight = 0; }
-            if (y + h + 2 > MAX_SIZE) throw new IOException("纹理图集超过 2048×2048 容量");
+            if (y + h + 2 > MAX_SIZE) throw new IOException("纹理图集超过 " + MAX_SIZE + "×" + MAX_SIZE + " 容量");
             Tile tile = new Tile(x + 1, y + 1, w, h);
             int[] pixels=new int[w];
             for (int py=-1;py<=h;py++) {
@@ -139,7 +140,7 @@ public final class TextureAtlas {
             int[] snapshot=new int[MAX_SIZE*height];
             for(int row=0;row<height;row++)
                 if(rows[row]!=null) System.arraycopy(rows[row],0,snapshot,row*MAX_SIZE,MAX_SIZE);
-            return new TextureAtlas(MAX_SIZE,height,snapshot);
+            return new TextureAtlas(MAX_SIZE,height,tiles.size(),snapshot);
         }
     }
 }

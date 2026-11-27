@@ -86,9 +86,12 @@ class LegacyClientTintFallbackTest {
             BlockState renderedOldGrass = prepared.renderState(shortGrassOld, 1, 64, 0);
             BlockState renderedLeaves = prepared.renderState(oakLeaves, 2, 64, 0);
 
-            assertEquals("{0=" + (0x1000000 | 0x79C05A) + "}", renderedGrass.properties().get("__mcwe_tint"));
-            assertEquals("{0=" + (0x1000000 | 0x79C05A) + "}", renderedOldGrass.properties().get("__mcwe_tint"));
-            assertEquals("{0=" + (0x1000000 | 0x59AE30) + "}", renderedLeaves.properties().get("__mcwe_tint"));
+            assertFalse(renderedGrass.properties().containsKey("__mcwe_tint"));
+            assertFalse(renderedOldGrass.properties().containsKey("__mcwe_tint"));
+            assertFalse(renderedLeaves.properties().containsKey("__mcwe_tint"));
+            assertEquals(0x79C05A, prepared.surfaceColor(prepared.surfaces(renderedGrass).getFirst(), 0, 64, 0));
+            assertEquals(0x79C05A, prepared.surfaceColor(prepared.surfaces(renderedOldGrass).getFirst(), 1, 64, 0));
+            assertEquals(0x59AE30, prepared.surfaceColor(prepared.surfaces(renderedLeaves).getFirst(), 2, 64, 0));
 
             var notes = prepared.notes(renderedGrass);
             assertTrue(notes.stream().anyMatch(n -> n.contains("通用近似") && n.contains("未经该版本客户端字节码静态注册核对")), notes.toString());
@@ -164,7 +167,8 @@ class LegacyClientTintFallbackTest {
             var prepared = BlockTextureSet.load(source, area, CancellationSignal.NONE);
             BlockState grass = chunk.blockState(0, 64, 0);
             BlockState rendered = prepared.renderState(grass, 0, 64, 0);
-            assertEquals("{0=" + (0x1000000 | 0x66AA44) + "}", rendered.properties().get("__mcwe_tint"));
+            assertFalse(rendered.properties().containsKey("__mcwe_tint"));
+            assertEquals(0x66AA44, prepared.surfaceColor(prepared.surfaces(rendered).getFirst(), 0, 64, 0));
         }
     }
 

@@ -35,15 +35,35 @@ public final class BlockTextureSet {
     private static final int MAX_DIAGNOSTIC_TINT_INDICES = 8;
     public record Surface(Direction direction, List<Float> positions, List<Float> uv,
                           List<Float> normal, Direction cullFace, boolean shade,
-                          RenderLayer layer, int element, boolean fluid) {
-        public Surface(Direction direction,List<Float> positions,List<Float> uv,List<Float> normal,Direction cullFace,
-                       boolean shade,RenderLayer layer,int element) {
-            this(direction,positions,uv,normal,cullFace,shade,layer,element,false);
+                          RenderLayer layer, int element, boolean fluid,
+                          int tintIndex, int staticRgb,
+                          List<Float> overlayUv, int overlayTintIndex, int overlayStaticRgb) {
+        public Surface(Direction direction, List<Float> positions, List<Float> uv, List<Float> normal, Direction cullFace,
+                       boolean shade, RenderLayer layer, int element) {
+            this(direction, positions, uv, normal, cullFace, shade, layer, element, false, -1, 0xFFFFFF, List.of(), -1, 0xFFFFFF);
         }
-        public Surface { positions=List.copyOf(positions);uv=List.copyOf(uv);normal=List.copyOf(normal); }
+        public Surface(Direction direction, List<Float> positions, List<Float> uv, List<Float> normal, Direction cullFace,
+                       boolean shade, RenderLayer layer, int element, boolean fluid) {
+            this(direction, positions, uv, normal, cullFace, shade, layer, element, fluid, -1, 0xFFFFFF, List.of(), -1, 0xFFFFFF);
+        }
+        public Surface {
+            positions = List.copyOf(positions);
+            uv = List.copyOf(uv);
+            normal = List.copyOf(normal);
+            staticRgb &= 0xFFFFFF;
+            overlayUv = List.copyOf(overlayUv);
+            overlayStaticRgb &= 0xFFFFFF;
+        }
+        public boolean hasOverlay() { return !overlayUv.isEmpty(); }
+        public Surface withFluidGeometry(List<Float> newPositions, List<Float> newUv) {
+            return new Surface(direction, newPositions, newUv, normal, cullFace, shade, layer, element, true,
+                    tintIndex, staticRgb, overlayUv, overlayTintIndex, overlayStaticRgb);
+        }
     }
     private record Pending(ModelGeometry.Quad quad, TextureAtlas.Tile tile, boolean shade,
-                           RenderLayer layer, int element, boolean fluid) { }
+                           RenderLayer layer, int element, boolean fluid,
+                           int tintIndex, int staticRgb,
+                           List<Float> overlayQuadUv, TextureAtlas.Tile overlayTile, int overlayTintIndex, int overlayStaticRgb) { }
     // Mesh preparation needs the target blocks and one adjacent block on each side for occlusion.
     record LocalBounds(int minX, int minZ, int maxX, int maxZ) {
         static LocalBounds forNeighbor(ChunkRectangle target, ChunkCoordinate chunk) {
@@ -52,8 +72,10 @@ public final class BlockTextureSet {
         }
     }
     private record PaintKey(ResourceLocation texture, int tint, float opacity, int argb, double brightness) { }
-    private record SurfaceKey(List<Float> positions, List<Float> normal, List<Float> uv, boolean shaded, String renderType) { }
-    private record Painted(ModelGeometry.Quad quad, BufferedImage image, boolean shade, int element, String renderType, boolean fluid) { }
+    private record SurfaceKey(List<Float> positions, List<Float> normal, boolean shaded, boolean fluid) { }
+    private record Painted(ModelGeometry.Quad quad, BufferedImage image, boolean shade, int element, String renderType, boolean fluid,
+                           int tintIndex, int staticRgb,
+                           List<Float> overlayUv, BufferedImage overlayImage, String overlayRenderType, int overlayTintIndex, int overlayStaticRgb) { }
     private final Map<BlockState, List<Surface>> models;
     private final VoxelAreaLoadResult contextArea;
     private final ModelRuleRegistry rules;
@@ -93,13 +115,32 @@ public final class BlockTextureSet {
     }
 
     public List<Surface> surfaces(BlockState state) { return models.get(state); }
+
+    public int tintColor(long x, int y, long z, int tintIndex, int fallbackRgb) {
+        return tintPreparation.color(x, y, z, tintIndex, fallbackRgb & 0xFFFFFF);
+    }
+
+    public int surfaceColor(Surface surface, long x, int y, long z) {
+        return surface.tintIndex() >= 0
+                ? tintPreparation.color(x, y, z, surface.tintIndex(), surface.staticRgb())
+                : surface.staticRgb();
+    }
+
+    public int overlayColor(Surface surface, long x, int y, long z) {
+        if (!surface.hasOverlay()) return -1;
+        return surface.overlayTintIndex() >= 0
+                ? tintPreparation.color(x, y, z, surface.overlayTintIndex(), surface.overlayStaticRgb())
+                : surface.overlayStaticRgb();
+    }
+
     /** Returns the actual prepared identity, including declared context dependencies. */
-    public BlockState renderState(BlockState state,long x,int y,long z) {
-        if(contextArea==null||!contextualNames.contains(state.name()))return tintPreparation.state(weighted.state(state,x,y,z),x,y,z);
-        var context=new ModelBlockContext(contextArea,new ModelBlockContext.Position(x,y,z),CancellationSignal.NONE);
-        state=visualState(state,context.at(0,0,0).entity().orElse(null));
-        state=weighted.state(state,x,y,z);
-        var dependencies=contextDependencies.get(state);return tintPreparation.state(dependencies==null?state:contextKey(state,context,dependencies),x,y,z);
+    public BlockState renderState(BlockState state, long x, int y, long z) {
+        if (contextArea == null || !contextualNames.contains(state.name())) return weighted.state(state, x, y, z);
+        var context = new ModelBlockContext(contextArea, new ModelBlockContext.Position(x, y, z), CancellationSignal.NONE);
+        state = visualState(state, context.at(0, 0, 0).entity().orElse(null));
+        state = weighted.state(state, x, y, z);
+        var dependencies = contextDependencies.get(state);
+        return dependencies == null ? state : contextKey(state, context, dependencies);
     }
     static BlockState contextKey(BlockState state,ModelBlockContext context,BlockModelResolver.Dependencies dependencies) {
         Map<String,String> properties=new TreeMap<>(state.properties());properties.put("__mcwe_context",context.signature(dependencies.neighbors(),dependencies.positionDependent(),dependencies.biomeColorDependent()));
@@ -222,7 +263,7 @@ public final class BlockTextureSet {
                 ((BuiltinBlockModels)archive).note(state,"流体阻挡标签不可用，按相邻静态模型估算："+problem);
         }
         var tints=BlockTintPreparation.prepare((BuiltinBlockModels)archive,area,cancel,states,resolved,dependencies,weighted,rules);
-        var prepared=loadPrepared(archive,states,cancel,rules,resolved,area,dependencies,progress);
+        var prepared=loadPrepared(archive,states,cancel,rules,resolved,area,dependencies,tints,progress);
         prepared.fluidBarriers=flowTag;
         prepared.weighted=weighted;prepared.tintPreparation=tints;return prepared;
     }
@@ -236,11 +277,11 @@ public final class BlockTextureSet {
     public static BlockTextureSet load(BlockResourceSource archive, Collection<BlockState> requested,
                                        CancellationSignal cancel) throws IOException {return load(archive,requested,cancel,ModelRuleRegistry.defaults());}
     public static BlockTextureSet load(BlockResourceSource archive,Collection<BlockState> requested,CancellationSignal cancel,ModelRuleRegistry rules)throws IOException {
-        return loadPrepared(archive,requested,cancel,rules,Map.of(),null,Map.of(),PreparationProgress.NONE);
+        return loadPrepared(archive,requested,cancel,rules,Map.of(),null,Map.of(),new BlockTintPreparation(),PreparationProgress.NONE);
     }
     private static BlockTextureSet loadPrepared(BlockResourceSource archive,Collection<BlockState> requested,CancellationSignal cancel,ModelRuleRegistry rules,
             Map<BlockState,BlockModelResolver.Result> resolved,VoxelAreaLoadResult area,Map<BlockState,BlockModelResolver.Dependencies> contextDependencies,
-            PreparationProgress progress)throws IOException {
+            BlockTintPreparation tintPreparation,PreparationProgress progress)throws IOException {
         Objects.requireNonNull(rules);
         Objects.requireNonNull(archive); Objects.requireNonNull(requested); Objects.requireNonNull(cancel);
         if(!(archive instanceof BuiltinBlockModels))archive=new BuiltinBlockModels(archive,Map.of());
@@ -258,6 +299,7 @@ public final class BlockTextureSet {
         var builder = new TextureAtlas.Builder();
         Map<TextureAtlas.Tile,RenderLayer> alphaLayers=new HashMap<>();
         Map<ResourceLocation, BufferedImage> images = new HashMap<>();
+        Map<BufferedImage, TextureAtlas.Tile> atlasTiles = new IdentityHashMap<>();
         Map<BlockState, List<Pending>> pending = new LinkedHashMap<>();
         Map<BlockState, String> failures = new HashMap<>();
         Map<BlockState,List<String>> notes=new HashMap<>();
@@ -284,6 +326,7 @@ public final class BlockTextureSet {
             try {
                 if(model.faces().size()>faceBudget) throw new PreparationFailure("LIMIT_EXCEEDED","本次模型面准备超过 32768 项预算");
                 Map<SurfaceKey,Painted> painted = new LinkedHashMap<>();
+                List<Painted> extraPainted = new ArrayList<>();
                 Map<PaintKey,BufferedImage> tintedImages=new HashMap<>();
                 Set<Integer> unboundTintIndices = new TreeSet<>();
                 long workingBytes=0;
@@ -297,50 +340,92 @@ public final class BlockTextureSet {
                         check(cancel);
                         var quad=ModelGeometry.bake(face,part);
                         if(quad.normal().stream().allMatch(v->Math.abs(v)<1e-6))continue;
-                        int preparedTint = face.tintIndex();
-                        if (unboundTintIndex(preparedTint)) {
-                            unboundTintIndices.add(preparedTint);
-                            preparedTint = -1;
+                        int rawTint = face.tintIndex();
+                        int cpuTint = -1;
+                        int dynamicTint = -1;
+                        int staticRgb = 0xFFFFFF;
+                        if (rawTint >= EXPLICIT_TINT_MARKER) {
+                            if (bakeLighting) {
+                                cpuTint = rawTint;
+                            } else {
+                                staticRgb = rawTint & 0xFFFFFF;
+                            }
+                        } else if (rawTint >= 0) {
+                            if (tintPreparation.isDynamicIndex(state, rawTint)) {
+                                dynamicTint = rawTint;
+                            } else {
+                                unboundTintIndices.add(rawTint);
+                            }
                         }
                         BufferedImage sourceImage=image(archive,face.texture(),images);
                         long bytes=(long)sourceImage.getWidth()*sourceImage.getHeight()*4;
                         double brightness=bakeLighting?Math.max(face.material().minimumLight(),face.material().shadeDirectionOverride()!=null?overrideBrightness(face.material().shadeDirectionOverride()):face.shade()?directionalBrightness(quad.normal()):1):1;
                         String renderType=face.material().forceTranslucent()?"minecraft:translucent":part.renderType();
                         boolean shaded=bakeLighting?false:face.shade();
-                        var paintKey=new PaintKey(face.texture(),preparedTint,face.opacity(),face.material().argb(),brightness);
-                        BufferedImage tinted=tintedImages.get(paintKey);
-                        if(tinted==null){
+                        var paintKey=new PaintKey(face.texture(),cpuTint,face.opacity(),face.material().argb(),brightness);
+                        BufferedImage preparedImage=tintedImages.get(paintKey);
+                        if(preparedImage==null){
                             if(workingBytes+bytes>32L*1024*1024)throw new PreparationFailure("LIMIT_EXCEEDED","单状态面纹理工作内存超过 32 MiB 预算");
-                            boolean originalColor=preparedTint<0 || (preparedTint & 0xffffff)==0xffffff;
+                            boolean originalColor=cpuTint<0 || (cpuTint & 0xffffff)==0xffffff;
                             if(originalColor && face.material().argb()==-1 && face.opacity()==1 && brightness==1) {
-                                tinted=sourceImage;
+                                preparedImage=sourceImage;
                             } else {
-                                tinted=composite(sourceImage,preparedTint,null,-1);
-                                applyMaterial(tinted,face.material().argb(),face.opacity(),brightness);
+                                preparedImage=composite(sourceImage,cpuTint,null,-1);
+                                applyMaterial(preparedImage,face.material().argb(),face.opacity(),brightness);
                             }
-                            tintedImages.put(paintKey,tinted);workingBytes+=bytes;
+                            tintedImages.put(paintKey,preparedImage);workingBytes+=bytes;
                         }
                         for(var tiled:UvTiling.split(quad)) {
-                        BufferedImage base=tinted;quad=tiled;
-                        var key=new SurfaceKey(quad.positions(),quad.normal(),quad.uv(),shaded,renderType);
-                        var previous=painted.get(key);
-                        if(previous!=null){
-                            long combinedBytes=(long)Math.max(previous.image().getWidth(),base.getWidth())*Math.max(previous.image().getHeight(),base.getHeight())*4;
-                            if(workingBytes+combinedBytes>32L*1024*1024)throw new PreparationFailure("LIMIT_EXCEEDED","单状态面纹理工作内存超过 32 MiB 预算");
-                            base=composite(previous.image(),-1,base,-1);workingBytes+=combinedBytes;
-                        }
-                        painted.put(key,new Painted(quad,base,shaded,previous==null?elementBase+face.layer():previous.element(),renderType,fluid));
-                        if(painted.size()>faceBudget)throw new PreparationFailure("LIMIT_EXCEEDED","UV 展开后的模型面超过本次 32768 面预算");
+                            BufferedImage base=preparedImage;
+                            quad=tiled;
+                            var key=new SurfaceKey(quad.positions(),quad.normal(),shaded,fluid);
+                            var previous=painted.get(key);
+                            if(previous==null){
+                                painted.put(key,new Painted(quad,base,shaded,elementBase+face.layer(),renderType,fluid,
+                                        dynamicTint,staticRgb,List.of(),null,null,-1,0xFFFFFF));
+                            } else if (bakeLighting && previous.overlayImage() == null && previous.tintIndex() < 0 && dynamicTint < 0
+                                    && previous.quad().uv().equals(quad.uv())) {
+                                long combinedBytes=(long)Math.max(previous.image().getWidth(),base.getWidth())*Math.max(previous.image().getHeight(),base.getHeight())*4;
+                                if(workingBytes+combinedBytes>32L*1024*1024)throw new PreparationFailure("LIMIT_EXCEEDED","单状态面纹理工作内存超过 32 MiB 预算");
+                                BufferedImage combined=composite(previous.image(),-1,base,-1);workingBytes+=combinedBytes;
+                                String combinedRenderType = isSolidRenderType(previous.renderType()) && alphaLayer(previous.image()) == RenderLayer.OPAQUE
+                                        ? previous.renderType()
+                                        : isSolidRenderType(renderType) && alphaLayer(base) == RenderLayer.OPAQUE ? renderType
+                                        : "minecraft:translucent".equals(previous.renderType()) || "minecraft:translucent".equals(renderType) ? "minecraft:translucent"
+                                        : previous.renderType() != null ? previous.renderType() : renderType;
+                                painted.put(key,new Painted(quad,combined,shaded,previous.element(),combinedRenderType,fluid,
+                                        -1,0xFFFFFF,List.of(),null,null,-1,0xFFFFFF));
+                            } else if (previous.overlayImage() == null) {
+                                painted.put(key,new Painted(previous.quad(),previous.image(),previous.shade(),previous.element(),
+                                        previous.renderType(),previous.fluid(),previous.tintIndex(),previous.staticRgb(),
+                                        quad.uv(),base,renderType,dynamicTint,staticRgb));
+                            } else {
+                                String extraRenderType = isSolidRenderType(renderType) ? "minecraft:cutout" : renderType;
+                                extraPainted.add(new Painted(quad,base,shaded,-1,extraRenderType,fluid,
+                                        dynamicTint,staticRgb,List.of(),null,null,-1,0xFFFFFF));
+                            }
+                            if(painted.size()+extraPainted.size()>faceBudget)throw new PreparationFailure("LIMIT_EXCEEDED","UV 展开后的模型面超过本次 32768 面预算");
                         }
                     }
                     elementBase+=part.faces().stream().mapToInt(BlockModelResolver.Face::layer).max().orElse(-1)+1;
                 }
-                List<Pending> surfaces=new ArrayList<>();
-                Map<BufferedImage,TextureAtlas.Tile> stateTiles=new IdentityHashMap<>();
-                for(var paint:painted.values()) {
-                    var tile=stateTiles.get(paint.image());
-                    if(tile==null){tile=builder.add(imageKey(paint.image()),paint.image());stateTiles.put(paint.image(),tile);}
-                    surfaces.add(new Pending(paint.quad(),tile,paint.shade(),material(paint.image(),paint.renderType(),tile,alphaLayers),paint.element(),paint.fluid()));
+                List<Pending> surfaces=new ArrayList<>(painted.size()+extraPainted.size());
+                List<Painted> allPainted = new ArrayList<>(painted.values());
+                allPainted.addAll(extraPainted);
+                for(var paint:allPainted) {
+                    var tile=atlasTiles.get(paint.image());
+                    if(tile==null){tile=builder.add(imageKey(paint.image()),paint.image());atlasTiles.put(paint.image(),tile);}
+                    TextureAtlas.Tile overlayTile = null;
+                    if (paint.overlayImage() != null) {
+                        overlayTile = atlasTiles.get(paint.overlayImage());
+                        if (overlayTile == null) {
+                            overlayTile = builder.add(imageKey(paint.overlayImage()), paint.overlayImage());
+                            atlasTiles.put(paint.overlayImage(), overlayTile);
+                        }
+                    }
+                    RenderLayer layer = material(paint.image(), paint.overlayImage(), paint.renderType(), paint.overlayRenderType(), tile, overlayTile, alphaLayers);
+                    surfaces.add(new Pending(paint.quad(),tile,paint.shade(),layer,paint.element(),paint.fluid(),
+                            paint.tintIndex(),paint.staticRgb(),paint.overlayUv(),overlayTile,paint.overlayTintIndex(),paint.overlayStaticRgb()));
                 }
                 faceBudget-=surfaces.size();
                 pending.put(state,surfaces);
@@ -355,9 +440,13 @@ public final class BlockTextureSet {
                     notes.put(state,List.copyOf(stateNotes));
                 }
                 var stateDiagnostics=new ArrayList<BlockResourceDiagnostic>();
-                for(String note:stateNotes)stateDiagnostics.add(BlockResourceDiagnostic.capture(state,
-                    note.equals(unboundNote)?BlockResourceDiagnostic.Severity.DEGRADED:BlockResourceDiagnostic.Severity.INFO,
-                    note.equals(unboundNote)?"UNBOUND_TINT":"MODEL_NOTE",note,archive,result));
+                for(String note:stateNotes) {
+                    boolean isUnbound = note.equals(unboundNote);
+                    boolean unresolvedTint = isUnbound || note.startsWith("颜色未解析：");
+                    stateDiagnostics.add(BlockResourceDiagnostic.capture(state,
+                            unresolvedTint ? BlockResourceDiagnostic.Severity.DEGRADED : BlockResourceDiagnostic.Severity.INFO,
+                            isUnbound ? "UNBOUND_TINT" : unresolvedTint ? "TINT_UNRESOLVED" : "MODEL_NOTE", note, archive, result));
+                }
                 if(!stateDiagnostics.isEmpty())diagnostics.put(state,List.copyOf(stateDiagnostics));
             } catch (ResourceAccessException e) {
                 if(e.scope()!=ResourceAccessException.Scope.RESOURCE&&e.reason()!=ResourceAccessException.Reason.INVALID_METADATA)throw e;
@@ -377,19 +466,26 @@ public final class BlockTextureSet {
         for(var entry:pending.entrySet()) {
             List<Surface> faces=new ArrayList<>();
             for(var p:entry.getValue()) {
-                List<Float> uv=new ArrayList<>(8);
-                for(int i=0;i<4;i++) {
-                    uv.add((p.tile().x()+p.quad().uv().get(i*2)*p.tile().width())/atlas.width());
-                    uv.add((p.tile().y()+p.quad().uv().get(i*2+1)*p.tile().height())/atlas.height());
-                }
+                List<Float> uv = atlasUv(p.quad().uv(), p.tile(), atlas);
+                List<Float> overlayUv = p.overlayTile() == null ? List.of() : atlasUv(p.overlayQuadUv(), p.overlayTile(), atlas);
                 faces.add(new Surface(p.quad().direction(),p.quad().positions(),uv,p.quad().normal(),
-                        p.quad().cull(),p.shade(),p.layer(),p.element(),p.fluid()));
+                        p.quad().cull(),p.shade(),p.layer(),p.element(),p.fluid(),
+                        p.tintIndex(),p.staticRgb(),overlayUv,p.overlayTintIndex(),p.overlayStaticRgb()));
             }
             models.put(entry.getKey(),List.copyOf(faces));
         }
         check(cancel);
         archive.validate();
         return new BlockTextureSet(models, failures, atlas, archive.fingerprint(), limited,notes,area,rules,contextDependencies,diagnostics);
+    }
+
+    private static List<Float> atlasUv(List<Float> quadUv, TextureAtlas.Tile tile, TextureAtlas atlas) {
+        List<Float> uv = new ArrayList<>(8);
+        for (int i = 0; i < 4; i++) {
+            uv.add((tile.x() + quadUv.get(i * 2) * tile.width()) / atlas.width());
+            uv.add((tile.y() + quadUv.get(i * 2 + 1) * tile.height()) / atlas.height());
+        }
+        return uv;
     }
 
     private static final class PreparationFailure extends IOException {
@@ -487,12 +583,27 @@ public final class BlockTextureSet {
             return image.getWidth()+"x"+image.getHeight()+":"+java.util.HexFormat.of().formatHex(digest.digest());
         }catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
     }
-    private static RenderLayer material(BufferedImage image,String renderType,TextureAtlas.Tile tile,Map<TextureAtlas.Tile,RenderLayer> alphaLayers) {
-        if("mcwe:lava".equals(renderType))return RenderLayer.OPAQUE;
-        if("mcwe:fluid".equals(renderType))return com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID;
-        if("minecraft:translucent".equals(renderType))return com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT;
-        if(renderType!=null&&!renderType.equals("minecraft:solid"))return com.mcworldexplorer.voxel.mesh.RenderLayer.CUTOUT;
-        return alphaLayers.computeIfAbsent(tile,ignored->alphaLayer(image));
+    private static boolean isSolidRenderType(String renderType) {
+        return renderType == null || "minecraft:solid".equals(renderType);
+    }
+    private static RenderLayer material(BufferedImage image, BufferedImage overlayImage, String renderType, String overlayRenderType,
+                                        TextureAtlas.Tile tile, TextureAtlas.Tile overlayTile,
+                                        Map<TextureAtlas.Tile, RenderLayer> alphaLayers) {
+        RenderLayer base = singleMaterial(image, renderType, tile, alphaLayers);
+        if (overlayImage == null || overlayTile == null) return base;
+        RenderLayer overlay = singleMaterial(overlayImage, overlayRenderType, overlayTile, alphaLayers);
+        if (base == RenderLayer.FLUID || overlay == RenderLayer.FLUID) return RenderLayer.FLUID;
+        if (base == RenderLayer.OPAQUE || overlay == RenderLayer.OPAQUE) return RenderLayer.OPAQUE;
+        if (base == RenderLayer.TRANSLUCENT || overlay == RenderLayer.TRANSLUCENT) return RenderLayer.TRANSLUCENT;
+        return RenderLayer.CUTOUT;
+    }
+    private static RenderLayer singleMaterial(BufferedImage image, String renderType, TextureAtlas.Tile tile,
+                                              Map<TextureAtlas.Tile, RenderLayer> alphaLayers) {
+        if ("mcwe:lava".equals(renderType)) return RenderLayer.OPAQUE;
+        if ("mcwe:fluid".equals(renderType)) return com.mcworldexplorer.voxel.mesh.RenderLayer.FLUID;
+        if ("minecraft:translucent".equals(renderType)) return com.mcworldexplorer.voxel.mesh.RenderLayer.TRANSLUCENT;
+        if (renderType != null && !renderType.equals("minecraft:solid")) return com.mcworldexplorer.voxel.mesh.RenderLayer.CUTOUT;
+        return alphaLayers.computeIfAbsent(tile, ignored -> alphaLayer(image));
     }
     private static RenderLayer alphaLayer(BufferedImage image){
         boolean cutout=false;

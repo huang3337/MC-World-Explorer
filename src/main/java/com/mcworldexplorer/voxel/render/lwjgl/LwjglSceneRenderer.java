@@ -59,18 +59,15 @@ public final class LwjglSceneRenderer implements AutoCloseable {
         shader.setMvp(viewProjection);
         scene.bindTexture();
         try {
+            shader.setVertexMaterial(true);
             glDepthMask(true);
             for (OpenGlMeshResources mesh : scene.meshes()) {
                 shader.setOffset(mesh.offsetX(), mesh.offsetZ());
-                shader.setColor(mesh.rgb(), mesh.alpha());
-                shader.setTextured(mesh.textured());
-                shader.setShaded(mesh.shaded());
                 glBindVertexArray(mesh.vertexArray());
                 glDrawElements(GL_TRIANGLES, mesh.indexCount(), GL_UNSIGNED_INT, 0L);
             }
             glDepthMask(false);
             shader.setOffset(0, 0);
-            shader.setVertexMaterial(true);
             scene.drawTranslucent(viewProjection);
         } finally {
             shader.setVertexMaterial(false);

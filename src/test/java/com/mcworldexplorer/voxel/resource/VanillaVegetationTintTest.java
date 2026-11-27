@@ -118,9 +118,12 @@ class VanillaVegetationTintTest {
             var grass=chunk.blockState(x&15,y,z&15);
             assertEquals("minecraft:grass_block",grass.name());
             var rendered=prepared.renderState(grass,x,y,z);
-            assertEquals("{0="+(0x1000000|expected)+"}",rendered.properties().get("__mcwe_tint"));
-            assertSprite(prepared,source,rendered,Direction.UP,"grass_block_top",expected);
-            assertSprite(prepared,source,rendered,Direction.DOWN,"dirt",0xffffff);
+            assertFalse(rendered.properties().containsKey("__mcwe_tint"));
+            assertSprite(prepared,source,rendered,x,y,z,Direction.UP,"grass_block_top",expected);
+            assertSprite(prepared,source,rendered,x,y,z,Direction.DOWN,"dirt",0xffffff);
+            var north=prepared.surfaces(rendered).stream().filter(s->s.direction()==Direction.NORTH).findFirst().orElseThrow();
+            assertEquals(0xffffff,prepared.surfaceColor(north,x,y,z));
+            assertEquals(expected,prepared.overlayColor(north,x,y,z));
             var bindings=new ClientBlockColors(source);
             var standard=Map.<String, ClientBlockColors.Kind>ofEntries(
                     Map.entry("leaf_litter",ClientBlockColors.Kind.DRY_FOLIAGE),Map.entry("sugar_cane",ClientBlockColors.Kind.GRASS),
@@ -137,15 +140,15 @@ class VanillaVegetationTintTest {
             if(version.equals("1.21.5")){
                 var leaf=chunk.blockState(10,106,0);
                 assertEquals("minecraft:cherry_leaves",leaf.name());
-                assertSprite(prepared,source,prepared.renderState(leaf,10,106,0),Direction.UP,"cherry_leaves",0xffffff);
+                assertSprite(prepared,source,prepared.renderState(leaf,10,106,0),10,106,0,Direction.UP,"cherry_leaves",0xffffff);
                 var blade=chunk.blockState(0,96,12);
                 assertEquals("minecraft:short_grass",blade.name());
-                assertEquals(rendered.properties().get("__mcwe_tint"),prepared.renderState(blade,0,96,12).properties().get("__mcwe_tint"));
+                assertFalse(prepared.renderState(blade,0,96,12).properties().containsKey("__mcwe_tint"));
                 var flower=chunk.blockState(0,98,11);
                 assertEquals("minecraft:pink_petals",flower.name());
-                assertEquals("{1="+(0x1000000|expected)+"}",prepared.renderState(flower,0,98,11).properties().get("__mcwe_tint"));
                 var resolver=new BlockModelResolver(source);
                 var flowerKey=prepared.renderState(flower,0,98,11);
+                assertFalse(flowerKey.properties().containsKey("__mcwe_tint"));
                 assertModelSprite(prepared,source,resolver,new ModelBlockContext.Position(0,98,11),flower,flowerKey,"pink_petals",-1,0xffffff);
                 assertModelSprite(prepared,source,resolver,new ModelBlockContext.Position(0,98,11),flower,flowerKey,"pink_petals_stem",1,expected);
                 assertModelSprite(prepared,source,resolver,new ModelBlockContext.Position(0,96,12),blade,prepared.renderState(blade,0,96,12),"short_grass3",0,expected);
@@ -154,19 +157,22 @@ class VanillaVegetationTintTest {
         }
     }
     private static void assertSprite(BlockTextureSet prepared,BlockResourceSource source,BlockState state,
-            Direction side,String sprite,int rgb) throws Exception {
-        StandardBlockTintTest.assertTile(prepared,state,side,expectedSprite(source,sprite,rgb));
+            int x,int y,int z,Direction side,String sprite,int rgb) throws Exception {
+        StandardBlockTintTest.assertTile(prepared,state,side,rawSprite(source,sprite));
+        var surface=prepared.surfaces(state).stream().filter(s->s.direction()==side).findFirst().orElseThrow();
+        assertEquals(rgb,prepared.surfaceColor(surface,x,y,z),sprite+" color");
     }
 
     private static void assertModelSprite(BlockTextureSet prepared,BlockResourceSource source,BlockModelResolver resolver,
             ModelBlockContext.Position position,BlockState physical,BlockState painted,String sprite,int index,int rgb) throws Exception {
         var model=resolver.resolveAt(physical,position).model().orElseThrow();
-        var expected=expectedSprite(source,sprite,rgb);
+        var expected=rawSprite(source,sprite);
         for(var part:model.parts()) for(var face:part.faces()) {
             if(!face.texture().path().equals("block/"+sprite) || face.tintIndex()!=index) continue;
             var quad=ModelGeometry.bake(face,part);
             var surface=prepared.surfaces(painted).stream().filter(s->s.positions().equals(quad.positions())
                     && s.normal().equals(quad.normal())).findFirst().orElseThrow();
+            assertEquals(rgb,prepared.surfaceColor(surface,position.x(),position.y(),position.z()),sprite+" color");
             var atlas=prepared.atlas();
             int sx=Math.round(surface.uv().get(0)*atlas.width()-quad.uv().get(0)*expected.getWidth());
             int sy=Math.round(surface.uv().get(1)*atlas.height()-quad.uv().get(1)*expected.getHeight());
@@ -178,15 +184,9 @@ class VanillaVegetationTintTest {
         fail("模型缺少预期纹理或层："+sprite+" / "+index);
     }
 
-    private static java.awt.image.BufferedImage expectedSprite(BlockResourceSource source,String sprite,int rgb) throws Exception {
+    private static java.awt.image.BufferedImage rawSprite(BlockResourceSource source,String sprite) throws Exception {
         var image=TextureAtlas.decode(source.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("minecraft:block/"+sprite)).orElseThrow(),false);
-        var oracle=new java.awt.image.BufferedImage(image.getWidth(),image.getHeight(),java.awt.image.BufferedImage.TYPE_INT_ARGB);
         if (sprite.equals("grass_block_top")) assertEquals(0xff949494,image.getRGB(0,0),"原版 PNG 首像素的灰度样本为 148");
-        for(int y=0;y<image.getHeight();y++)for(int x=0;x<image.getWidth();x++){
-            int original=image.getRGB(x,y),tinted=original&0xff000000;
-            for(int shift=0;shift<=16;shift+=8)tinted|=(((original>>shift)&255)*((rgb>>shift)&255)/255)<<shift;
-            oracle.setRGB(x,y,tinted);
-        }
-        return oracle;
+        return image;
     }
 }

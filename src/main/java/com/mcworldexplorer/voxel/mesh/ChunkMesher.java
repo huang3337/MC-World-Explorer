@@ -163,8 +163,10 @@ public final class ChunkMesher {
                                         }
                                     }
                                 }
-                                builder.addTexturedFace(surface,localX,y,localZ);
-                                bounds.include(surface,localX,y,localZ);
+                                int faceRgb = textures.surfaceColor(surface, worldX, y, worldZ);
+                                int overlayRgb = textures.overlayColor(surface, worldX, y, worldZ);
+                                builder.addTexturedFace(surface, localX, y, localZ, faceRgb, overlayRgb);
+                                bounds.include(surface, localX, y, localZ);
                             }
                             if(primary==null)builders.computeIfAbsent(new MaterialKey(RenderLayer.OPAQUE,0xFFFFFF,1,true,true),BatchBuilder::new).addBlock();
                             continue;
@@ -303,6 +305,9 @@ public final class ChunkMesher {
         private final FloatBuffer normals = new FloatBuffer();
         private final FloatBuffer uv = new FloatBuffer();
         private final IntBuffer indices = new IntBuffer();
+        private IntBuffer vertexRgb;
+        private FloatBuffer overlayUv;
+        private IntBuffer overlayRgb;
         private int blockCount;
 
         private BatchBuilder(MaterialKey material) {
@@ -328,14 +333,40 @@ public final class ChunkMesher {
             }
         }
 
-        private void addTexturedFace(BlockTextureSet.Surface surface, int x, int y, int z) {
+        private void addTexturedFace(BlockTextureSet.Surface surface, int x, int y, int z, int faceRgb, int faceOverlayRgb) {
             int base = positions.size() / 3;
+            if (vertexRgb == null && (faceRgb & 0xFFFFFF) != material.rgb()) {
+                vertexRgb = new IntBuffer();
+                for (int v = 0; v < base; v++) vertexRgb.add(material.rgb());
+            }
+            boolean hasOverlay = surface.hasOverlay() && faceOverlayRgb >= 0;
+            if (overlayUv == null && hasOverlay) {
+                overlayUv = new FloatBuffer();
+                overlayRgb = new IntBuffer();
+                for (int v = 0; v < base; v++) {
+                    overlayUv.add(0.0f);
+                    overlayUv.add(0.0f);
+                    overlayRgb.add(-1);
+                }
+            }
             for (int i = 0; i < 4; i++) {
                 positions.add(x + surface.positions().get(i*3));
                 positions.add(y + surface.positions().get(i*3+1));
                 positions.add(z + surface.positions().get(i*3+2));
                 normals.add(surface.normal().get(0)); normals.add(surface.normal().get(1)); normals.add(surface.normal().get(2));
                 uv.add(surface.uv().get(i*2)); uv.add(surface.uv().get(i*2+1));
+                if (vertexRgb != null) vertexRgb.add(faceRgb & 0xFFFFFF);
+                if (overlayUv != null) {
+                    if (hasOverlay) {
+                        overlayUv.add(surface.overlayUv().get(i*2));
+                        overlayUv.add(surface.overlayUv().get(i*2+1));
+                        overlayRgb.add(faceOverlayRgb & 0xFFFFFF);
+                    } else {
+                        overlayUv.add(0.0f);
+                        overlayUv.add(0.0f);
+                        overlayRgb.add(-1);
+                    }
+                }
             }
             for (int index : FACE_INDICES) indices.add(base + index);
         }
@@ -348,7 +379,12 @@ public final class ChunkMesher {
                     blockCount,
                     positions.toArray(),
                     normals.toArray(),
-                    indices.toArray(), uv.toArray(), material.shaded());
+                    indices.toArray(),
+                    uv.toArray(),
+                    material.shaded(),
+                    vertexRgb == null ? new int[0] : vertexRgb.toArray(),
+                    overlayUv == null ? new float[0] : overlayUv.toArray(),
+                    overlayRgb == null ? new int[0] : overlayRgb.toArray());
         }
     }
 

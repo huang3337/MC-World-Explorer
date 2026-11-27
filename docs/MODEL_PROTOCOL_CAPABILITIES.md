@@ -11,7 +11,7 @@
 | 存档读取 | `SavedSpawn` 识别坐标结构及所属维度，`WorldDimensionDiscovery` 发现命名空间维度与 `DIM<整数>` 传统维度。`BlockPaletteDecoder` 识别 1.13+ 调色板编码，`ChunkNbtDecoder` 同时读取 1.18+ `section.biomes` 调色板与 1.2–1.17.1 `Level.Biomes`（`int[1024]` / `int[256]` / `byte[256]`）数字群系；`LegacyAnvilSectionDecoder` 结合 `SavedLegacyIdMap`（`FML.ItemData` / `FML.Registries`）和原版数字表读取 1.2.1–1.12.2 预扁平化区块，1.6.1–1.12.2 存档可只读加载旧版客户端与实例纹理，未找到客户端或 1.6 之前存档使用三维简化颜色底座。 |
 | 原版状态 | `VanillaBlockDefaults` 用区块自己的 `DataVersion` 查询随程序分发的默认属性，显式属性优先。表格由本地固定提交的原版注册报告摘要生成，来源记录在表头。补充数据版本可复用同一读取器。[生成器](../tools/import-block-defaults.py) · [默认值表](../src/main/resources/vanilla-protocol/block-defaults.tsv) |
 | 模型选择 | `BlockModelResolver` 用有效状态求值 variants 和 multipart。在普通 blockstate 根层附带的 `parent` 不参与分派，模型定义中的 `parent` 才解析父链。缺少注册证据时，仍可使用无条件模型和已写明的属性。条件需要省略值时，诊断包含方块 ID、属性名和区块数据版本。 |
-| 原版世界着色 | 模型选择完成后，按每个面的 `tintindex` 与客户端世界颜色注册取得颜色来源。群系采样读取选区及邻区的保存数据，遵循有效数据包和实例色表。未知层保留诊断。[颜色层声明](../src/main/resources/model-protocols/vanilla-tint-layers.json) |
+| 原版世界着色 | 模型选择完成后，按每个面的 `tintindex` 与客户端世界颜色注册取得颜色来源。群系采样读取选区及邻区的保存数据，遵循有效数据包和实例色表。自 `0.8.0` 起，`TextureAtlas` 仅存单份未染色原图（上限提升至 `2048` 贴图 / `4096×4096`），位置群系色通过 `BlockTintPreparation` 稀疏区段调色板记录并由 `ChunkMesher` 写入顶点属性，草方块侧面等双层共面遮罩在 `voxel.frag` 内按 Porter-Duff `source-over` 单次合成；含 `forge_data`/`neoforge_data` 静态光照烘焙的模型保留 CPU 一次合成语义，未知层保留 `UNBOUND_TINT` 诊断。[颜色层声明](../src/main/resources/model-protocols/vanilla-tint-layers.json) |
 | 共用加载器格式 | `ModelLoaderProtocol` 负责扩展格式的 loader 声明、根变换与 OBJ 的 UV 语义。OBJ 和组合模型分别按声明的加载器 ID 注册，可跨 Mod 复用。只在相应扩展声明出现时核对平台语义。 |
 | 第三方扩展 | 插件可用 `ModelRule` 解析自定义模型，按需声明位置、邻域、实体或群系上下文，也可单独用 `tintLayers()` 登记有依据的方块颜色层。用户可自行编写插件，或把选区诊断交给 Agent 构建。[扩展构建提示词与接口说明](PLUGIN_DEVELOPMENT.md#agent-prompt) |
 

@@ -2,6 +2,8 @@ package com.mcworldexplorer.voxel.render.lwjgl;
 
 import com.mcworldexplorer.voxel.mesh.MeshBatch;
 
+import static org.lwjgl.opengl.GL11.GL_FLOAT;
+import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
 import static org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER;
 import static org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER;
 import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
@@ -14,8 +16,10 @@ import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL30.glDeleteVertexArrays;
 import static org.lwjgl.opengl.GL30.glGenVertexArrays;
+import static org.lwjgl.opengl.GL30.glVertexAttribIPointer;
 
 public final class OpenGlMeshResources implements AutoCloseable {
+    static final int VERTEX_STRIDE = 13;
     private final int rgb;
     private final float alpha;
     private final boolean textured;
@@ -63,14 +67,21 @@ public final class OpenGlMeshResources implements AutoCloseable {
             glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, batch.indices(), GL_STATIC_DRAW);
-            int stride = 8 * Float.BYTES;
-            glVertexAttribPointer(0, 3, org.lwjgl.opengl.GL11.GL_FLOAT, false, stride, 0L);
+            int stride = VERTEX_STRIDE * Float.BYTES;
+            glVertexAttribPointer(0, 3, GL_FLOAT, false, stride, 0L);
             glEnableVertexAttribArray(0);
-            glVertexAttribPointer(
-                    1, 3, org.lwjgl.opengl.GL11.GL_FLOAT, false, stride, 3L * Float.BYTES);
+            glVertexAttribPointer(1, 3, GL_FLOAT, false, stride, 3L * Float.BYTES);
             glEnableVertexAttribArray(1);
-            glVertexAttribPointer(2, 2, org.lwjgl.opengl.GL11.GL_FLOAT, false, stride, 6L * Float.BYTES);
+            glVertexAttribPointer(2, 2, GL_FLOAT, false, stride, 6L * Float.BYTES);
             glEnableVertexAttribArray(2);
+            glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, stride, 8L * Float.BYTES);
+            glEnableVertexAttribArray(3);
+            glVertexAttribPointer(4, 1, GL_FLOAT, false, stride, 9L * Float.BYTES);
+            glEnableVertexAttribArray(4);
+            glVertexAttribPointer(5, 2, GL_FLOAT, false, stride, 10L * Float.BYTES);
+            glEnableVertexAttribArray(5);
+            glVertexAttribIPointer(6, 1, GL_UNSIGNED_INT, stride, 12L * Float.BYTES);
+            glEnableVertexAttribArray(6);
             glBindVertexArray(0);
             return new OpenGlMeshResources(
                     batch, offsetX, offsetZ, vertexArray, vertexBuffer, indexBuffer);
@@ -93,18 +104,37 @@ public final class OpenGlMeshResources implements AutoCloseable {
         float[] positions = batch.positions();
         float[] normals = batch.normals();
         float[] uv = batch.textureCoordinates();
-        float[] vertices = new float[batch.vertexCount() * 8];
-        for (int vertex = 0; vertex < batch.vertexCount(); vertex++) {
+        int[] vertexRgb = batch.vertexRgb();
+        float[] overlayUv = batch.overlayTextureCoordinates();
+        int[] overlayRgb = batch.overlayRgb();
+        boolean textured = batch.textured();
+        boolean shaded = batch.shaded();
+        boolean perVertexColor = vertexRgb.length != 0;
+        boolean hasOverlays = overlayRgb.length != 0;
+        int flags = (textured ? 1 << 24 : 0) | (shaded ? 1 << 25 : 0);
+        float alpha = batch.alpha();
+        int defaultRgb = batch.rgb();
+        int vertexCount = batch.vertexCount();
+        float[] vertices = new float[Math.multiplyExact(vertexCount, VERTEX_STRIDE)];
+        for (int vertex = 0; vertex < vertexCount; vertex++) {
             int source = vertex * 3;
-            int target = vertex * 8;
+            int target = vertex * VERTEX_STRIDE;
             vertices[target] = positions[source];
             vertices[target + 1] = positions[source + 1];
             vertices[target + 2] = positions[source + 2];
             vertices[target + 3] = normals[source];
             vertices[target + 4] = normals[source + 1];
             vertices[target + 5] = normals[source + 2];
-            vertices[target + 6] = batch.textured() ? uv[vertex * 2] : 0;
-            vertices[target + 7] = batch.textured() ? uv[vertex * 2 + 1] : 0;
+            vertices[target + 6] = textured ? uv[vertex * 2] : 0.0f;
+            vertices[target + 7] = textured ? uv[vertex * 2 + 1] : 0.0f;
+            int rgb = perVertexColor ? vertexRgb[vertex] : defaultRgb;
+            boolean overlay = hasOverlays && overlayRgb[vertex] >= 0;
+            int material = (rgb & 0xFFFFFF) | flags | (overlay ? 1 << 26 : 0);
+            vertices[target + 8] = Float.intBitsToFloat(material);
+            vertices[target + 9] = alpha;
+            vertices[target + 10] = overlay ? overlayUv[vertex * 2] : 0.0f;
+            vertices[target + 11] = overlay ? overlayUv[vertex * 2 + 1] : 0.0f;
+            vertices[target + 12] = Float.intBitsToFloat(overlay ? (overlayRgb[vertex] & 0xFFFFFF) : 0);
         }
         return vertices;
     }

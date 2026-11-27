@@ -95,6 +95,6 @@ final class FluidGeometry {
             }
             uv.set(2*i,uMin+u*(uMax-uMin));uv.set(2*i+1,vMin+v*(vMax-vMin));
         }
-        return new Surface(face.direction(),positions,uv,face.normal(),face.cullFace(),face.shade(),face.layer(),face.element(),true);
+        return face.withFluidGeometry(positions, uv);
     }
 }

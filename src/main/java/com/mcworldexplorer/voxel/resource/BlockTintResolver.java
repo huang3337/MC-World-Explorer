@@ -67,13 +67,50 @@ final class BlockTintResolver {
         return protocol.layer(blockIds.computeIfAbsent(state.name(),ResourceLocation::parse),index);
     }
     boolean needsPosition(BlockState state,Model model) throws IOException {
-        for (int index : indices(model)) {
-            var extension=rules.tint(state.name(),index);
-            if(extension!=null){if(extension.biome()!=null)return true;continue;}
-            var layer = kind(state,index);
-            if (layer.isPresent() && contextual(layer.get())) return true;
+        return !dynamicBoundIndices(state, model).isEmpty();
+    }
+    Set<Integer> dynamicBoundIndices(BlockState state, Model model) throws IOException {
+        int[] modelIndices = indices(model);
+        if (modelIndices.length == 0) return Set.of();
+        Set<Integer> bound = new HashSet<>();
+        for (int index : modelIndices) {
+            var extension = rules.tint(state.name(), index);
+            if (extension != null) {
+                if (extension.biome() != null) bound.add(index);
+                continue;
+            }
+            var layer = kind(state, index);
+            if (layer.isPresent() && contextual(layer.get())) bound.add(index);
         }
-        return false;
+        return bound.isEmpty() ? Set.of() : Set.copyOf(bound);
+    }
+    Colors staticColors(BlockState state, Model model) throws IOException {
+        int[] modelIndices = indices(model);
+        if (modelIndices.length == 0) return new Colors(Map.of(), "");
+        var result = new TreeMap<Integer, Integer>();
+        var notes = new LinkedHashSet<String>();
+        boolean usedRegistry = false;
+        for (int index : modelIndices) {
+            var extension = rules.tint(state.name(), index);
+            if (extension != null) {
+                if (extension.rgb() != null) {
+                    result.put(index, 0x1000000 | extension.rgb());
+                    notes.add("插件颜色层：" + state.name() + "[" + index + "]");
+                }
+                continue;
+            }
+            var layer = kind(state, index);
+            if (layer.isEmpty() || contextual(layer.get())) continue;
+            try {
+                int rgb = constantOrState(layer.get(), state);
+                result.put(index, 0x1000000 | (rgb & 0xFFFFFF));
+                usedRegistry |= index != FLUID_WATER;
+            } catch (ModelRule.Failure failure) {
+                notes.add("颜色未解析：" + failure.reason() + "：" + failure.getMessage());
+            }
+        }
+        if (usedRegistry && protocol != null) notes.add(protocol.provenance());
+        return new Colors(result, String.join("；", notes));
     }
     private int[] indices(Model model) {
         if (indicesByModel.size() >= BlockTextureSet.MAX_STATES) indicesByModel.clear();

@@ -71,7 +71,7 @@ class TextureAtlasTest {
         for (int i=1; i<TextureAtlas.MAX_TILES; i++) builder.add("x"+i,image);
         assertThrows(IOException.class, () -> builder.add("overflow",image));
         var large = new TextureAtlas.Builder();
-        BufferedImage big = new BufferedImage(256,256,BufferedImage.TYPE_INT_ARGB);
+        BufferedImage big = new BufferedImage(512,512,BufferedImage.TYPE_INT_ARGB);
         for (int i=0; i<49; i++) large.add("large"+i,big);
         assertThrows(IOException.class, () -> large.add("no-space",big));
     }

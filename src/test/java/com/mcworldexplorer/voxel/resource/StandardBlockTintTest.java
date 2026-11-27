@@ -39,7 +39,9 @@ class StandardBlockTintTest {
                     assertNotNull(prepared.surfaces(state));assertTrue(prepared.notes(state).stream().noneMatch(n->n.contains("颜色未解析")),prepared.notes(state).toString());
                     var raw=TextureAtlas.decode(source.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("minecraft:block/"+leaf)).orElseThrow(),false);
                     int rgb=leaf.startsWith("spruce")?0x619961:0x80A755;
-                    assertTile(prepared,state,BlockModelResolver.Direction.UP,BlockTextureSet.composite(raw,0x1000000|rgb,null,-1));
+                    assertTile(prepared,state,BlockModelResolver.Direction.UP,raw);
+                    var up=prepared.surfaces(state).stream().filter(s->s.direction()==BlockModelResolver.Direction.UP).findFirst().orElseThrow();
+                    assertEquals(rgb,prepared.surfaceColor(up,0,0,0));
                 }
                 var wire=state("minecraft:redstone_wire","power","15","north","side","south","side","east","none","west","none");
                 var ready=BlockTextureSet.load(source,List.of(wire),CancellationSignal.NONE);assertNotNull(ready.surfaces(wire));assertTrue(ready.notes(wire).stream().noneMatch(n->n.contains("颜色未解析")));
@@ -56,27 +58,45 @@ class StandardBlockTintTest {
             var colors=new BlockTintResolver(source);var resolver=new BlockModelResolver(source);
             for(int[] xyz:List.of(new int[]{9,62,0},new int[]{11,64,1})) {
                 var block=area.result(new ChunkCoordinate(0,0)).chunk().blockState(xyz[0],xyz[1],xyz[2]);
-                var key=prepared.renderState(block,xyz[0],xyz[1],xyz[2]);assertEquals(block.name(),key.name());assertTrue(key.properties().containsKey("__mcwe_tint"));
+                var key=prepared.renderState(block,xyz[0],xyz[1],xyz[2]);assertEquals(block.name(),key.name());assertFalse(key.properties().containsKey("__mcwe_tint"));
                 assertEquals(key,again.renderState(block,xyz[0],xyz[1],xyz[2]));
                 assertTrue(prepared.notes(key).stream().noneMatch(n->n.contains("颜色未解析")),prepared.notes(key).toString());
                 var context=new ModelBlockContext(area,new ModelBlockContext.Position(xyz[0],xyz[1],xyz[2]),CancellationSignal.NONE);
                 var tint=colors.colors(block,resolver.resolve(block).model().orElseThrow(),context).values().get(0);
+                int expectedRgb=tint&0xFFFFFF;
                 if(block.name().equals("minecraft:grass_block"))assertEquals(0x179C05A,tint);
                 String texture=block.name().equals("minecraft:grass_block")?"grass_block_top":"oak_leaves";
                 var raw=TextureAtlas.decode(source.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("minecraft:block/"+texture)).orElseThrow(),false);
-                assertTile(prepared,key,BlockModelResolver.Direction.UP,BlockTextureSet.composite(raw,tint,null,-1));
+                assertTile(prepared,key,BlockModelResolver.Direction.UP,raw);
+                var up=prepared.surfaces(key).stream().filter(s->s.direction()==BlockModelResolver.Direction.UP).findFirst().orElseThrow();
+                assertEquals(expectedRgb,prepared.surfaceColor(up,xyz[0],xyz[1],xyz[2]));
                 if(block.name().equals("minecraft:grass_block")) {
+                    assertEquals(6,prepared.surfaces(key).size());
+                    var down=prepared.surfaces(key).stream().filter(s->s.direction()==BlockModelResolver.Direction.DOWN).findFirst().orElseThrow();
+                    assertEquals(0xFFFFFF,prepared.surfaceColor(down,xyz[0],xyz[1],xyz[2]));
+                    assertFalse(down.hasOverlay());
                     assertTile(prepared,key,BlockModelResolver.Direction.DOWN,TextureAtlas.decode(source.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("minecraft:block/dirt")).orElseThrow(),false));
                     var side=TextureAtlas.decode(source.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("minecraft:block/grass_block_side")).orElseThrow(),false);
                     var overlay=TextureAtlas.decode(source.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("minecraft:block/grass_block_side_overlay")).orElseThrow(),false);
-                    assertTile(prepared,key,BlockModelResolver.Direction.NORTH,BlockTextureSet.composite(side,-1,overlay,tint));
+                    var north=prepared.surfaces(key).stream().filter(s->s.direction()==BlockModelResolver.Direction.NORTH).findFirst().orElseThrow();
+                    assertTile(prepared,key,BlockModelResolver.Direction.NORTH,side);
+                    assertOverlayTile(prepared,north,overlay);
+                    assertEquals(0xFFFFFF,prepared.surfaceColor(north,xyz[0],xyz[1],xyz[2]));
+                    assertEquals(expectedRgb,prepared.overlayColor(north,xyz[0],xyz[1],xyz[2]));
                 }
             }
-            System.out.println("two small preparations ms="+(System.nanoTime()-start)/1_000_000+" atlas="+prepared.atlas().width()+"x"+prepared.atlas().height());source.validateAll();
+            System.out.println("two small preparations ms="+(System.nanoTime()-start)/1_000_000+" atlas="+prepared.atlas().width()+"x"+prepared.atlas().height()+" tiles="+prepared.atlas().tileCount());source.validateAll();
         }
     }
     static void assertTile(BlockTextureSet set,BlockState state,BlockModelResolver.Direction direction,java.awt.image.BufferedImage expected) {
-        var face=set.surfaces(state).stream().filter(s->s.direction()==direction).findFirst().orElseThrow();var uv=face.uv();
+        var face=set.surfaces(state).stream().filter(s->s.direction()==direction).findFirst().orElseThrow();
+        assertUvTile(set,face.uv(),expected);
+    }
+    static void assertOverlayTile(BlockTextureSet set,BlockTextureSet.Surface face,java.awt.image.BufferedImage expected) {
+        assertTrue(face.hasOverlay());
+        assertUvTile(set,face.overlayUv(),expected);
+    }
+    static void assertUvTile(BlockTextureSet set,List<Float> uv,java.awt.image.BufferedImage expected) {
         int x=Math.round(Collections.min(List.of(uv.get(0),uv.get(2),uv.get(4),uv.get(6)))*set.atlas().width());
         int y=Math.round(Collections.min(List.of(uv.get(1),uv.get(3),uv.get(5),uv.get(7)))*set.atlas().height());var pixels=set.atlas().pixels();
         for(int dy=0;dy<expected.getHeight();dy++)for(int dx=0;dx<expected.getWidth();dx++)assertEquals(expected.getRGB(dx,dy),pixels[(y+dy)*set.atlas().width()+x+dx],"ARGB "+dx+","+dy);

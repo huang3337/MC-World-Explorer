@@ -10,8 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class VoxelShaderProgramTest {
     @Test
     void loadsPackagedShadersAndRejectsMissingResource() throws Exception {
-        assertTrue(VoxelShaderProgram.read("/v05/shaders/voxel.vert").contains("uOffset"));
-        assertTrue(VoxelShaderProgram.read("/v05/shaders/voxel.frag").contains("vColor"));
+        String vert = VoxelShaderProgram.read("/v05/shaders/voxel.vert");
+        String frag = VoxelShaderProgram.read("/v05/shaders/voxel.frag");
+        assertTrue(vert.contains("uOffset"));
+        assertTrue(vert.contains("aOverlayUv"));
+        assertTrue(vert.contains("aOverlayMaterial"));
+        assertTrue(frag.contains("vColor"));
+        assertTrue(frag.contains("vHasOverlay"));
+        assertTrue(frag.contains("vOverlayColor"));
         assertThrows(IOException.class,
                 () -> VoxelShaderProgram.read("/v05/shaders/missing.frag"));
     }

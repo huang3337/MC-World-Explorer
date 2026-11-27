@@ -51,13 +51,17 @@ class StandardTintBoundaryTest {
                 var key=ready.renderState(grass,x,y,z);keys.add(key);assertNotNull(ready.surfaces(key));
                 assertTrue(ready.notes(key).stream().noneMatch(n->n.contains("颜色未解析")),ready.notes(key).toString());
             }
-            assertEquals(2,keys.size(),"8192个目标位置只保留两种颜色模型");
-            var west=ready.renderState(grass,-10,-8,8);var east=ready.renderState(grass,10,-8,8);assertNotEquals(west,east);
+            assertEquals(1,keys.size(),"8192个目标位置共用单一未克隆几何状态");
+            var west=ready.renderState(grass,-10,-8,8);var east=ready.renderState(grass,10,-8,8);assertEquals(grass,west);assertEquals(grass,east);
+            assertFalse(west.properties().containsKey("__mcwe_tint"));
             assertEquals(grass,ready.renderState(grass,100,-8,8));
             var dirt=state("minecraft:dirt");assertEquals(dirt,ready.renderState(dirt,-10,-8,8),"不能用颜色索引改写原始身份");
             var raw=TextureAtlas.decode(client.read(ResourceLocation.Kind.TEXTURE,ResourceLocation.parse("minecraft:block/grass_block_top")).orElseThrow(),false);
-            assertTile(ready,west,BlockModelResolver.Direction.UP,BlockTextureSet.composite(raw,0x1FF0000,null,-1));
-            assertTile(ready,east,BlockModelResolver.Direction.UP,BlockTextureSet.composite(raw,0x10000FF,null,-1));
+            assertTile(ready,grass,BlockModelResolver.Direction.UP,raw);
+            var up=ready.surfaces(grass).stream().filter(s->s.direction()==BlockModelResolver.Direction.UP).findFirst().orElseThrow();
+            assertEquals(0xFF0000,ready.surfaceColor(up,-10,-8,8));
+            assertEquals(0x0000FF,ready.surfaceColor(up,10,-8,8));
+            assertEquals(0xFFFFFF,ready.surfaceColor(up,100,-8,8));
             assertTrue(ready.atlas().height()<128);
         }
     }

@@ -15,7 +15,7 @@ import static org.lwjgl.opengl.GL33.*;
 final class TranslucentFaces implements AutoCloseable {
     record Part(MeshBatch batch, int offsetX, int offsetZ) {}
 
-    private static final int STRIDE = 10;
+    private static final int STRIDE = OpenGlMeshResources.VERTEX_STRIDE;
     private static final class Face {
         final int first, count, cellX, cellY, cellZ;
         final float x, y, z;
@@ -64,15 +64,11 @@ final class TranslucentFaces implements AutoCloseable {
         for (var part : parts) {
             var batch = part.batch;
             float[] source = OpenGlMeshResources.interleave(batch);
-            // Upload this word verbatim as an integer attribute; alpha keeps its original precision.
-            int material = batch.rgb() | (batch.textured() ? 1 << 24 : 0) | (batch.shaded() ? 1 << 25 : 0);
             for (int i = 0; i < batch.vertexCount(); i++) {
                 int p = (base + i) * STRIDE;
-                System.arraycopy(source, i * 8, vertices, p, 8);
+                System.arraycopy(source, i * STRIDE, vertices, p, STRIDE);
                 vertices[p] += part.offsetX;
                 vertices[p + 2] += part.offsetZ;
-                vertices[p + 8] = Float.intBitsToFloat(material);
-                vertices[p + 9] = batch.alpha();
             }
             int[] local = batch.indices();
             for (int i = 0; i < local.length; i++) indices[first + i] = base + local[i];
@@ -109,6 +105,9 @@ final class TranslucentFaces implements AutoCloseable {
             glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, STRIDE * Float.BYTES, 8L * Float.BYTES);
             glEnableVertexAttribArray(3);
             attribute(4, 1, 9);
+            attribute(5, 2, 10);
+            glVertexAttribIPointer(6, 1, GL_UNSIGNED_INT, STRIDE * Float.BYTES, 12L * Float.BYTES);
+            glEnableVertexAttribArray(6);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, (long) indexCount * Integer.BYTES, GL_DYNAMIC_DRAW);
         } catch (RuntimeException | Error e) {
